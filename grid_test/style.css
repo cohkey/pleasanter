@@ -1,0 +1,33 @@
+.wrapper > section{
+  font-weight: 700;
+  margin: 8px 0 4px;
+}
+
+/* ここが “|1| . |4| . |7|” を作る本体 */
+.group{
+  display: grid;
+
+  /* 3列 */
+  grid-template-columns: 1fr 1fr 1fr;
+
+  /* 3行 */
+  grid-template-rows: auto auto auto;
+
+  /* 見た目の “.” は column-gap で表現（必要なら後述で点線も可能） */
+  column-gap: 24px;
+  row-gap: 8px;
+
+  /* こう並べたい、を宣言で固定できるのが強い */
+  grid-template-areas:
+    "a d g"
+    "b e ."
+    "c f .";
+}
+
+.group > div:nth-child(1){ grid-area: a; }
+.group > div:nth-child(2){ grid-area: b; }
+.group > div:nth-child(3){ grid-area: c; }
+.group > div:nth-child(4){ grid-area: d; }
+.group > div:nth-child(5){ grid-area: e; }
+.group > div:nth-child(6){ grid-area: f; }
+.group > div:nth-child(7){ grid-area: g; }

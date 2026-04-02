@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pleasanter風: 「仮」を「変更日」の右へ移動</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: sans-serif;
+        padding: 24px;
+      }
+
+      .form {
+        display: grid;
+        gap: 12px;
+        max-width: 900px;
+      }
+
+      /*
+      Pleasanter の field 構造をざっくり再現する。
+      左に field-label、右に field-control を置く。
+    */
+      .field-normal {
+        display: grid;
+        grid-template-columns: 160px minmax(0, 1fr);
+        gap: 12px;
+        align-items: center;
+        padding: 8px 0;
+      }
+
+      .field-label {
+        margin: 0;
+        font-weight: bold;
+      }
+
+      /*
+      変更日側の container-normal を横並びにする。
+      ここに date input と「仮」のチェックを並べる。
+    */
+      #Issues_Date044Field .field-control .container-normal {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      /*
+      変更日の入力欄は残り幅を使う。
+      右側に「仮」が追加されても自然に縮むようにする。
+    */
+      #Issues_Date044Field .control-textbox {
+        flex: 1 1 auto;
+        min-width: 0;
+        width: 100%;
+        padding: 8px;
+      }
+
+      /*
+      「仮」の input と label をまとめて保持するラッパー。
+      小さく右側に置くための見た目用。
+    */
+      .inline-kari {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+        flex: 0 0 auto;
+      }
+
+      .control-checkbox {
+        margin: 0;
+      }
+
+      .is-hidden {
+        display: none;
+      }
+
+      .actions {
+        margin-top: 16px;
+      }
+
+      button {
+        padding: 8px 12px;
+        font: inherit;
+      }
+
+      .note {
+        margin-top: 12px;
+        color: #555;
+        line-height: 1.7;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="form">
+      <div
+        id="Issues_Date044Field"
+        class="field-normal dateField"
+        data-mado-fid="12-4"
+      >
+        <p class="field-label">
+          <label for="Issues_Date044">変更日</label>
+        </p>
+        <div class="field-control">
+          <div class="container-normal">
+            <input
+              id="Issues_Date044"
+              name="Issues_Date044"
+              class="control-textbox datepicker applied"
+              type="text"
+              value="2026/03/06"
+              autocomplete="off"
+            />
+            <div
+              class="ui-icon ui-icon-clock current-time"
+              style="display: none"
+            >
+              x
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="Issues_Check1Field" class="field-normal" data-mado-fid="12-5">
+        <div class="field-control">
+          <div class="container-normal">
+            <input
+              id="Issues_Check1"
+              name="Issues_Check1"
+              class="control-checkbox"
+              type="checkbox"
+              checked
+            />
+            <label for="Issues_Check1">仮</label>
+          </div>
+        </div>
+      </div>
+
+      <div id="DummyField" class="field-normal">
+        <p class="field-label">
+          <label for="DummyInput">他項目</label>
+        </p>
+        <div class="field-control">
+          <div class="container-normal">
+            <input
+              id="DummyInput"
+              class="control-textbox"
+              type="text"
+              value="他項目の入力欄"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" id="moveButton">
+        「仮」を「変更日」の右へ移動
+      </button>
+    </div>
+
+    <div class="note">
+      実HTMLに合わせて、<code>Issues_Date044Field</code> と
+      <code>Issues_Check1Field</code> を使っています。<br />
+      「仮」は checkbox 単体ではなく、元の
+      <code>input + label</code> をセットで移動する版です。
+    </div>
+
+    <script>
+      /*
+      「仮」を「変更日」の右へ移動する。
+
+      ここでやっていること:
+      1. 変更日側の .container-normal を取得する
+      2. 仮側の input と label を取得する
+      3. それらを inline-kari にまとめる
+      4. 変更日の右へ追加する
+      5. 元の仮 field を非表示にする
+
+      ポイント:
+      - 新しい checkbox は作らない
+      - 新しい「仮」label も作らない
+      - 元の input と label をそのまま移動する
+      ので、id / for の関係を維持しやすい
+    */
+      function moveKariToHenkouDate() {
+        // 変更日 field 全体
+        const henkouDateField = document.getElementById("Issues_Date044Field");
+
+        // 仮 field 全体
+        const kariField = document.getElementById("Issues_Check1Field");
+
+        if (!henkouDateField || !kariField) {
+          return;
+        }
+
+        // 変更日側の実入力コンテナ
+        const henkouDateContainer = henkouDateField.querySelector(
+          ".field-control .container-normal",
+        );
+
+        if (!henkouDateContainer) {
+          return;
+        }
+
+        // 二重実行防止
+        if (henkouDateContainer.querySelector(".inline-kari")) {
+          return;
+        }
+
+        // 仮の checkbox 本体
+        const kariCheckbox = kariField.querySelector("#Issues_Check1");
+
+        // 仮の label 本体
+        const kariLabel = kariField.querySelector('label[for="Issues_Check1"]');
+
+        if (!kariCheckbox || !kariLabel) {
+          return;
+        }
+
+        /*
+        右側に置くためのラッパーだけ新しく作る。
+        中身の input と label は元要素を移動するだけ。
+      */
+        const kariInline = document.createElement("span");
+        kariInline.className = "inline-kari";
+
+        // 元の checkbox をそのまま移動
+        kariInline.appendChild(kariCheckbox);
+
+        // 元の label もそのまま移動
+        kariInline.appendChild(kariLabel);
+
+        // 変更日の右側へ追加
+        henkouDateContainer.appendChild(kariInline);
+
+        // 元の仮 field は非表示
+        kariField.classList.add("is-hidden");
+      }
+
+      document
+        .getElementById("moveButton")
+        .addEventListener("click", moveKariToHenkouDate);
+    </script>
+  </body>
+</html>
