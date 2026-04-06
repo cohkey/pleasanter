@@ -3,6 +3,12 @@
 
   const isDebug = true;
 
+  /**
+   * ここを編集する
+   * 配列順 = エクスポート項目の並び順
+   * value = ColumnName
+   * label = 表示名
+   */
   const columnSettings = [
     { value: 'Title', label: 'タイトル' },
     { value: 'Owner', label: '担当者' },
@@ -17,6 +23,20 @@
     return new Promise(function (resolve) {
       setTimeout(resolve, ms);
     });
+  }
+
+  function logProgress(stage, message, detail) {
+    if (!isDebug) {
+      return;
+    }
+
+    const time = new Date().toLocaleTimeString();
+
+    if (detail !== undefined) {
+      console.log('[' + time + ']', '[' + stage + ']', message, detail);
+    } else {
+      console.log('[' + time + ']', '[' + stage + ']', message);
+    }
   }
 
   function getExportItems() {
@@ -91,18 +111,24 @@
     });
 
     if (currentIndex === -1) {
-      if (isDebug) {
-        console.warn('[skip move] not found:', columnName);
-      }
+      logProgress('move-skip', '項目が見つからないためスキップ: ' + columnName);
       return false;
     }
+
+    logProgress('move-start', '移動開始: ' + columnName, {
+      currentIndex: currentIndex,
+      targetIndex: targetIndex
+    });
 
     while (currentIndex > targetIndex) {
       items = getExportItems();
       const li = items[currentIndex];
+
       if (!li) {
         break;
       }
+
+      logProgress('move-step', columnName + ' を ' + currentIndex + ' → ' + (currentIndex - 1) + ' へ移動');
 
       selectExportItem(li);
       await clickButtonAndWait('MoveUpExportColumns', 180);
@@ -112,6 +138,10 @@
         return getColumnName(item) === columnName;
       });
     }
+
+    logProgress('move-done', '移動完了: ' + columnName, {
+      finalIndex: currentIndex
+    });
 
     return true;
   }
@@ -135,15 +165,24 @@
       }
     });
 
+    logProgress('phase', '並び替え開始', {
+      desiredOrder: desiredOrder
+    });
+
     for (let i = 0; i < desiredOrder.length; i += 1) {
+      logProgress('phase', '並び替え中 (' + (i + 1) + '/' + desiredOrder.length + '): ' + desiredOrder[i]);
       await moveExportItemToIndex(desiredOrder[i], i);
     }
+
+    logProgress('phase', '並び替え完了');
   }
 
   async function disableUnknownExportItems() {
     const allowedSet = new Set(columnSettings.map(function (item) {
       return item.value;
     }));
+
+    logProgress('phase', '不要項目の無効化を開始');
 
     let items = getExportItems();
     let index = 0;
@@ -153,9 +192,7 @@
       const value = getColumnName(li);
 
       if (!allowedSet.has(value)) {
-        if (isDebug) {
-          console.log('[disable]', value);
-        }
+        logProgress('disable', '無効化中: ' + value);
 
         selectExportItem(li);
         await clickButtonAndWait('ToDisableExportColumns', 220);
@@ -166,6 +203,8 @@
 
       index += 1;
     }
+
+    logProgress('phase', '不要項目の無効化が完了');
   }
 
   function getDialog() {
@@ -226,9 +265,7 @@
     const li = findExportItem(columnName);
 
     if (!li) {
-      if (isDebug) {
-        console.warn('[skip dialog] not found:', columnName);
-      }
+      logProgress('dialog-skip', '項目が見つからないため詳細設定を開けません: ' + columnName);
       return false;
     }
 
@@ -240,6 +277,7 @@
       throw new Error('詳細設定ダイアログが開きませんでした: ' + columnName);
     }
 
+    logProgress('dialog-open', '詳細設定を開きました: ' + columnName);
     return true;
   }
 
@@ -253,6 +291,7 @@
     if (cancelButton) {
       cancelButton.click();
       await waitForDialogClose(2000);
+      logProgress('dialog-close', '詳細設定を閉じました');
     }
   }
 
@@ -271,6 +310,8 @@
   }
 
   async function readCurrentExportLabel(columnName) {
+    logProgress('label-read-start', '表示名取得開始: ' + columnName);
+
     const opened = await openExportColumnDialog(columnName);
     if (!opened) {
       return null;
@@ -282,11 +323,21 @@
     }
 
     const label = input.value;
+
     await closeDialogIfOpen();
+
+    logProgress('label-read-done', '表示名取得完了: ' + columnName, {
+      label: label
+    });
+
     return label;
   }
 
   async function updateExportColumnLabel(columnName, label) {
+    logProgress('rename-start', '表示名変更開始: ' + columnName, {
+      expectedLabel: label
+    });
+
     const opened = await openExportColumnDialog(columnName);
     if (!opened) {
       return {
@@ -313,30 +364,36 @@
 
     const beforeLabel = input.value;
 
+    logProgress('rename-read', '現在の表示名を取得: ' + columnName, {
+      beforeLabel: beforeLabel
+    });
+
     if (beforeLabel !== label) {
       setNativeValue(input, label);
       updateButton.click();
+
+      logProgress('rename-submit', '変更ボタン押下: ' + columnName, {
+        beforeLabel: beforeLabel,
+        expectedLabel: label
+      });
 
       const closed = await waitForDialogClose(2500);
       if (!closed) {
         await sleep(500);
       }
     } else {
+      logProgress('rename-skip', 'すでに期待値のため変更不要: ' + columnName);
       await closeDialogIfOpen();
     }
 
     const afterLabel = await readCurrentExportLabel(columnName);
     const labelOk = afterLabel === label;
 
-    if (isDebug) {
-      console.log('[label check]', {
-        value: columnName,
-        beforeLabel: beforeLabel,
-        expectedLabel: label,
-        afterLabel: afterLabel,
-        labelOk: labelOk
-      });
-    }
+    logProgress('rename-check', '表示名変更結果: ' + columnName, {
+      afterLabel: afterLabel,
+      expectedLabel: label,
+      labelOk: labelOk
+    });
 
     return {
       value: columnName,
@@ -352,12 +409,65 @@
   async function updateExportColumnLabels() {
     const results = [];
 
-    for (const setting of columnSettings) {
+    logProgress('phase', '表示名変更を開始');
+
+    for (let i = 0; i < columnSettings.length; i += 1) {
+      const setting = columnSettings[i];
+      logProgress('phase', '表示名変更中 (' + (i + 1) + '/' + columnSettings.length + '): ' + setting.value);
       const result = await updateExportColumnLabel(setting.value, setting.label);
       results.push(result);
     }
 
+    logProgress('phase', '表示名変更が完了');
     return results;
+  }
+
+  function buildComparison(beforeSnapshot, afterSnapshot) {
+    const beforeMap = new Map(beforeSnapshot.map(function (item) {
+      return [item.value, item];
+    }));
+
+    const afterMap = new Map(afterSnapshot.map(function (item) {
+      return [item.value, item];
+    }));
+
+    const values = Array.from(new Set(
+      beforeSnapshot.map(function (item) { return item.value; })
+        .concat(afterSnapshot.map(function (item) { return item.value; }))
+    ));
+
+    return values.map(function (value) {
+      const before = beforeMap.get(value) || null;
+      const after = afterMap.get(value) || null;
+
+      const indexBefore = before ? before.index : null;
+      const indexAfter = after ? after.index : null;
+      const enabledBefore = Boolean(before);
+      const enabledAfter = Boolean(after);
+
+      let changeType = 'unchanged';
+
+      if (enabledBefore && !enabledAfter) {
+        changeType = 'disabled';
+      } else if (!enabledBefore && enabledAfter) {
+        changeType = 'enabled';
+      } else if (indexBefore !== indexAfter) {
+        changeType = 'moved';
+      }
+
+      return {
+        value: value,
+        itemLabelBefore: before ? before.itemLabel : '',
+        itemLabelAfter: after ? after.itemLabel : '',
+        idBefore: before ? before.id : null,
+        idAfter: after ? after.id : null,
+        indexBefore: indexBefore,
+        indexAfter: indexAfter,
+        enabledBefore: enabledBefore,
+        enabledAfter: enabledAfter,
+        changeType: changeType
+      };
+    });
   }
 
   function buildVerificationResult(beforeSnapshot, afterSnapshot, labelResults) {
@@ -427,6 +537,7 @@
     });
   }
 
+  logProgress('phase', '変更前スナップショットを取得');
   const beforeSnapshot = getExportSnapshot();
 
   if (isDebug) {
@@ -439,7 +550,13 @@
   await disableUnknownExportItems();
   const labelResults = await updateExportColumnLabels();
 
+  logProgress('phase', '変更後スナップショットを取得');
   const afterSnapshot = getExportSnapshot();
+
+  logProgress('phase', '比較結果を作成');
+  const comparison = buildComparison(beforeSnapshot, afterSnapshot);
+
+  logProgress('phase', '最終検証を実行');
   const verification = buildVerificationResult(beforeSnapshot, afterSnapshot, labelResults);
   const failedItems = verification.filter(function (item) {
     return !item.overallOk;
@@ -453,6 +570,10 @@
   console.table(afterSnapshot);
   console.groupEnd();
 
+  console.group('comparison');
+  console.table(comparison);
+  console.groupEnd();
+
   console.group('verification');
   console.table(verification);
   console.groupEnd();
@@ -461,8 +582,15 @@
     console.group('verification failed items');
     console.table(failedItems);
     console.groupEnd();
-    alert('一部の変更に失敗しました。console.table の verification failed items を確認してください。');
+
+    logProgress('done', '一部失敗あり', {
+      failedCount: failedItems.length
+    });
+
+    alert('一部の変更に失敗しました。console の verification failed items を確認してください。');
   } else {
+    logProgress('done', '全項目の検証OK');
+
     alert('全項目の検証OKです。並び順・有効状態・表示名が期待通りです。');
   }
 })();
