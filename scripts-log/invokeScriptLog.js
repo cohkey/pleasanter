@@ -1,51 +1,59 @@
 /*
- * スクリプトログ起動用設定
+ * 業務テーブル側
+ * UserDataにログ依頼を積み、ログテーブルのサイト設定読み込み時SSを起動する。
  */
+
 const SCRIPT_LOG_CONFIG = {
-    logSiteId: 1234, // ← ログテーブルのサイトID
+    logSiteId: 1234,               // ← スクリプトログテーブルのサイトID
     triggerKey: 'run-script-log'
 };
 
-/*
- * ログテーブルへ起動レコードを作成する。
+/**
+ * スクリプトログ処理を起動する。
  *
  * @param {Object} context サーバスクリプトのcontext
  * @param {Object} options ログ引数
- * @param {string} options.action 処理名
+ * @param {string} options.action 処理分類
+ * @param {string} options.processKey 処理識別キー
  * @param {string} options.message 概要メッセージ
  * @param {string} [options.detail] 詳細
  * @param {string} [options.level] info / warn / error / debug
- * @param {string} [options.status] success / error / running
  * @param {number|string} [options.sourceRecordId] 実行元レコードID
  * @param {string} [options.sourceSiteTitle] 実行元サイト名
  * @param {number|string} [options.userId] 実行ユーザーID
- * @param {string} [options.startedAt] 開始日時
+ * @param {string} [options.controlId] 操作元コントロールID
  * @param {Object|string} [options.data] 補足データ
- * @returns {boolean} 作成結果
  */
-function invokeScriptLog(context, options) {
-    const item = items.NewResult();
+function invokeScriptLogBySiteLoad(context, options) {
+    context.UserData.ScriptLogRequest = {
+        triggerKey: SCRIPT_LOG_CONFIG.triggerKey,
+        level: options.level || 'info',
+        action: options.action || '',
+        processKey: options.processKey || '',
+        controlId: options.controlId || context.ControlId || '',
+        message: options.message || '',
+        detail: options.detail || '',
+        sourceSiteId: context.SiteId || '',
+        sourceSiteTitle: options.sourceSiteTitle || context.SiteTitle || '',
+        sourceRecordId: options.sourceRecordId || context.Id || '',
+        userId: options.userId || context.UserId || '',
+        data: formatLogData(options.data)
+    };
 
-    item.Title = 'log-trigger';
-    item.ClassA = SCRIPT_LOG_CONFIG.triggerKey;
-    item.ClassB = options.action || '';
-    item.ClassC = options.level || 'info';
-    item.ClassD = options.status || 'success';
+    items.GetSite(SCRIPT_LOG_CONFIG.logSiteId);
 
-    item.NumA = toNumberOrNull(context.SiteId);
-    item.NumB = toNumberOrNull(options.sourceRecordId);
-    item.NumC = toNumberOrNull(options.userId || context.UserId);
-
-    item.DescriptionA = options.message || '';
-    item.DescriptionB = options.detail || '';
-    item.DescriptionC = formatLogData(options.data);
-    item.DescriptionD = options.sourceSiteTitle || context.SiteTitle || '';
-
-    item.DateA = options.startedAt || getCurrentTimestamp();
-
-    return items.Create(SCRIPT_LOG_CONFIG.logSiteId, item);
+    /*
+     * 残留防止
+     */
+    context.UserData.ScriptLogRequest = null;
 }
 
+/**
+ * 補足データを文字列化する。
+ *
+ * @param {Object|string} data 補足データ
+ * @returns {string} 文字列化後データ
+ */
 function formatLogData(data) {
     if (data == null) {
         return '';
@@ -60,25 +68,4 @@ function formatLogData(data) {
     } catch (e) {
         return '[data stringify failed]';
     }
-}
-
-function getCurrentTimestamp() {
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const MM = ('0' + (now.getMonth() + 1)).slice(-2);
-    const dd = ('0' + now.getDate()).slice(-2);
-    const hh = ('0' + now.getHours()).slice(-2);
-    const mm = ('0' + now.getMinutes()).slice(-2);
-    const ss = ('0' + now.getSeconds()).slice(-2);
-
-    return yyyy + '/' + MM + '/' + dd + ' ' + hh + ':' + mm + ':' + ss;
-}
-
-function toNumberOrNull(value) {
-    if (value == null || value === '') {
-        return null;
-    }
-
-    const num = Number(value);
-    return isNaN(num) ? null : num;
 }
