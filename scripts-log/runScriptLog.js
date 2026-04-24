@@ -1,7 +1,7 @@
 /*
  * スクリプトログテーブル側
  * サイト設定の読み込み時
- * UserDataのログ依頼を受け取り、ログレコードを作成する。
+ * UserData のログ依頼を受け取り、ログレコードを作成する。
  */
 
 const SCRIPT_LOG_TRIGGER_KEY = 'run-script-log';
@@ -24,9 +24,7 @@ function runScriptLogBySiteLoad(context) {
         return;
     }
 
-    /*
-     * 再入対策として先に消す
-     */
+    // 再入防止
     context.UserData.ScriptLogRequest = null;
 
     const item = buildScriptLogItem(request);
@@ -34,7 +32,7 @@ function runScriptLogBySiteLoad(context) {
 }
 
 /**
- * UserDataからログ依頼を取得する。
+ * UserData からログ依頼を取得する。
  *
  * @param {Object} context サーバスクリプトのcontext
  * @returns {Object|null} ログ依頼
@@ -61,19 +59,16 @@ function buildScriptLogItem(request) {
     const item = items.NewResult();
 
     item.Title = buildLogTitle(request);
-    item.ClassA = request.level || 'info';
-    item.ClassB = request.action || '';
-    item.ClassC = request.processKey || '';
-    item.ClassD = request.controlId || '';
+    item.ClassA = request.appName || '';
+    item.ClassB = request.level || 'info';
+    item.ClassC = toNumberOrNull(request.userId);
+    item.ClassD = toNumberOrNull(request.deptId);
+
+    item.DescriptionA = request.processName || '';
+    item.DescriptionB = request.detail || '';
 
     item.NumA = toNumberOrNull(request.sourceSiteId);
     item.NumB = toNumberOrNull(request.sourceRecordId);
-    item.NumC = toNumberOrNull(request.userId);
-
-    item.DescriptionA = request.message || '';
-    item.DescriptionB = request.detail || '';
-    item.DescriptionC = request.data || '';
-    item.DescriptionD = request.sourceSiteTitle || '';
 
     item.DateA = getCurrentTimestamp();
 
@@ -87,9 +82,9 @@ function buildScriptLogItem(request) {
  * @returns {string} タイトル
  */
 function buildLogTitle(request) {
-    return (request.action || 'script') +
+    return (request.appName || 'app') +
         ' / ' +
-        (request.processKey || '') +
+        (request.processName || 'process') +
         ' / ' +
         (request.level || 'info') +
         ' / ' +
@@ -117,7 +112,7 @@ function getCurrentTimestamp() {
  * 数値変換できる場合のみ数値を返す。
  *
  * @param {string|number} value 値
- * @returns {number|null} 数値またはnull
+ * @returns {number|null} 数値または null
  */
 function toNumberOrNull(value) {
     if (value == null || value === '') {
