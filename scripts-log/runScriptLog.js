@@ -4,7 +4,10 @@
  * UserData のログ依頼を受け取り、ログレコードを作成する。
  */
 
-const SCRIPT_LOG_TRIGGER_KEY = 'run-script-log';
+const RUN_SCRIPT_LOG_CONFIG = {
+    logSiteId: 1234,               // ← スクリプトログテーブルのサイトIDに変更
+    triggerKey: 'run-script-log'
+};
 
 runScriptLogBySiteLoad(context);
 
@@ -20,15 +23,14 @@ function runScriptLogBySiteLoad(context) {
         return;
     }
 
-    if (request.triggerKey !== SCRIPT_LOG_TRIGGER_KEY) {
+    if (request.triggerKey !== RUN_SCRIPT_LOG_CONFIG.triggerKey) {
         return;
     }
 
-    // 再入防止
     context.UserData.ScriptLogRequest = null;
 
     const item = buildScriptLogItem(request);
-    items.Create(context.SiteId, item);
+    items.Create(RUN_SCRIPT_LOG_CONFIG.logSiteId, item);
 }
 
 /**
@@ -59,7 +61,7 @@ function buildScriptLogItem(request) {
     const item = items.NewResult();
 
     item.Title = buildLogTitle(request);
-    item.ClassA = request.appName || '';
+    item.ClassA = String(request.sourceApp || '');
     item.ClassB = request.level || 'info';
     item.ClassC = toNumberOrNull(request.userId);
     item.ClassD = toNumberOrNull(request.deptId);
@@ -82,7 +84,7 @@ function buildScriptLogItem(request) {
  * @returns {string} タイトル
  */
 function buildLogTitle(request) {
-    return (request.appName || 'app') +
+    return (request.sourceApp || 'site') +
         ' / ' +
         (request.processName || 'process') +
         ' / ' +

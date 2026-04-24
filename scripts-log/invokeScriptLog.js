@@ -13,7 +13,7 @@ const SCRIPT_LOG_CONFIG = {
  *
  * @param {Object} context サーバスクリプトのcontext
  * @param {Object} options ログ引数
- * @param {string} options.appName アプリ名
+ * @param {string|number} options.sourceApp 実行元アプリID（siteId）
  * @param {string} options.processName 処理名
  * @param {string} options.level ログレベル
  * @param {string} options.detail 詳細ログ
@@ -22,7 +22,7 @@ const SCRIPT_LOG_CONFIG = {
 function invokeScriptLogBySiteLoad(context, options) {
     context.UserData.ScriptLogRequest = {
         triggerKey: SCRIPT_LOG_CONFIG.triggerKey,
-        appName: options.appName || context.SiteTitle || '',
+        sourceApp: options.sourceApp || context.SiteId || '',
         level: options.level || 'info',
         processName: options.processName || '',
         sourceSiteId: context.SiteId || '',
@@ -33,10 +33,11 @@ function invokeScriptLogBySiteLoad(context, options) {
         detail: options.detail || ''
     };
 
-    // 実環境で GetSite によりログテーブル側の「サイト設定の読み込み時」SSを起動する前提
     items.GetSite(SCRIPT_LOG_CONFIG.logSiteId);
 
-    // 後続処理への影響防止
+    /*
+     * 後続処理への影響防止
+     */
     context.UserData.ScriptLogRequest = null;
 }
 
@@ -47,14 +48,14 @@ class ScriptLogger {
     /**
      * @param {Object} context サーバスクリプトのcontext
      * @param {Object} options 共通ログ情報
-     * @param {string} options.appName アプリ名
+     * @param {string|number} [options.sourceApp] 実行元アプリID（siteId）
      * @param {string} options.processName 処理名
      * @param {number|string} [options.sourceRecordId] 実行元レコードID
      * @param {boolean} [options.enableConsoleLog=true] context.Logへ出力するか
      */
     constructor(context, options) {
         this.context = context;
-        this.appName = options.appName || context.SiteTitle || '';
+        this.sourceApp = options.sourceApp || context.SiteId || '';
         this.processName = options.processName || '';
         this.sourceRecordId = options.sourceRecordId || context.Id || '';
         this.enableConsoleLog = options.enableConsoleLog !== false;
@@ -122,7 +123,7 @@ class ScriptLogger {
         this.details.push('総処理時間: ' + totalMs + 'ms');
 
         invokeScriptLogBySiteLoad(this.context, {
-            appName: this.appName,
+            sourceApp: this.sourceApp,
             processName: this.processName,
             level: this.level,
             detail: this.details.join('\n'),
