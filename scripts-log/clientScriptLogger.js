@@ -1,17 +1,17 @@
 /*
  * クライアントスクリプト側
- * ClientScriptLogger でログ内容を蓄積し、最後にログテーブルへ保存する。
+ * ClientScriptLogger でログ内容を蓄積し、最後にSSログと同じログテーブルへ保存する。
  *
  * 方針:
  * - 1イベント処理につき、1ログレコードを作成する
  * - console.group と同じように logger.group() / logger.groupEnd() を使う
  * - CS側では console.log にも出力する
- * - ログテーブル保存は $p.apiCreate を使う
+ * - ログ保存は $p.apiCreate で同じログテーブルに直接作成する
  */
 
 const CLIENT_SCRIPT_LOG_CONFIG = {
-    logSiteId: 1234,               // ← スクリプトログテーブルのサイトIDに変更
-    enableApiSave: true,           // false にすると console 出力のみ
+    logSiteId: 1234,       // ← スクリプトログテーブルのサイトIDに変更
+    enableApiSave: true,   // false にすると console 出力のみ
     enableConsoleLog: true
 };
 
@@ -22,8 +22,11 @@ class ClientScriptLogger {
     /**
      * @param {Object} options 共通ログ情報
      * @param {string|number} [options.sourceApp] 実行元アプリID
+     * @param {string|number} [options.sourceSiteId] 実行元サイトID
      * @param {string} options.processName 処理名
      * @param {number|string} [options.sourceRecordId] 実行元レコードID
+     * @param {string|number} [options.userId] ユーザーID
+     * @param {string|number} [options.deptId] 部署ID
      * @param {boolean} [options.enableConsoleLog=true] consoleへ出力するか
      * @param {boolean} [options.enableApiSave=true] ログテーブルへ保存するか
      */
@@ -31,8 +34,12 @@ class ClientScriptLogger {
         options = options || {};
 
         this.sourceApp = options.sourceApp || getClientSiteId();
+        this.sourceSiteId = options.sourceSiteId || getClientSiteId();
         this.processName = options.processName || '';
         this.sourceRecordId = options.sourceRecordId || getClientRecordId();
+
+        this.userId = options.userId || getClientUserId();
+        this.deptId = options.deptId || getClientDeptId();
 
         this.enableConsoleLog = options.enableConsoleLog !== false;
         this.enableApiSave = options.enableApiSave !== false;
@@ -67,7 +74,7 @@ class ClientScriptLogger {
 
     /**
      * エラーログを追加する。
-     * CS側では error.stack を渡す想定。
+     * 呼び出し側では logger.error(e.stack) を基本にする。
      *
      * @param {string} message ログメッセージ
      */
@@ -141,12 +148,13 @@ class ClientScriptLogger {
         this.addGroupLine(
             'end',
             group.label,
-            '完了 +' + elapsedMs + 'ms'
+            'Done +' + elapsedMs + 'ms'
         );
     }
 
     /**
      * 未終了のグループをすべて異常終了として閉じる。
+     * エラー発生時のログ崩れ防止用。
      */
     closeAllGroups() {
         while (this.groupStack.length > 0) {
@@ -162,7 +170,7 @@ class ClientScriptLogger {
             this.addGroupLine(
                 'abnormalEnd',
                 group.label,
-                '異常終了 +' + elapsedMs + 'ms'
+                'Failed +' + elapsedMs + 'ms'
             );
 
             this.raiseLevel('warn');
@@ -178,7 +186,7 @@ class ClientScriptLogger {
         this.closeAllGroups();
 
         const totalMs = Date.now() - this.startedAtMs;
-        this.details.push('総処理時間: ' + totalMs + 'ms');
+        this.details.push('Total: ' + totalMs + 'ms');
 
         if (!this.enableApiSave || !CLIENT_SCRIPT_LOG_CONFIG.enableApiSave) {
             return Promise.resolve();
@@ -198,6 +206,7 @@ class ClientScriptLogger {
 
     /**
      * グループ行を追加する。
+     * group行は先頭に ▼ / ▲ を置き、通常ログと見分けやすくする。
      *
      * @param {string} type start / end / abnormalEnd
      * @param {string} label グループ名
@@ -338,7 +347,10 @@ class ClientScriptLogger {
  * @param {Array<Object>} steps 実行ステップ一覧
  * @param {Object} [options] ログオプション
  * @param {string|number} [options.sourceApp] 実行元アプリID
+ * @param {string|number} [options.sourceSiteId] 実行元サイトID
  * @param {number|string} [options.sourceRecordId] 実行元レコードID
+ * @param {string|number} [options.userId] ユーザーID
+ * @param {string|number} [options.deptId] 部署ID
  * @param {boolean} [options.enableConsoleLog=true] consoleへ出力するか
  * @param {boolean} [options.enableApiSave=true] ログテーブルへ保存するか
  * @returns {Promise<ClientScriptLogger>}
@@ -348,17 +360,22 @@ async function runClientEvent(eventName, steps, options) {
 
     const logger = new ClientScriptLogger({
         sourceApp: options.sourceApp || getClientSiteId(),
+        sourceSiteId: options.sourceSiteId || getClientSiteId(),
         processName: eventName,
         sourceRecordId: options.sourceRecordId || getClientRecordId(),
+        userId: options.userId || getClientUserId(),
+        deptId: options.deptId || getClientDeptId(),
         enableConsoleLog: options.enableConsoleLog,
         enableApiSave: options.enableApiSave
     });
 
     try {
-        logger.info(eventName + '処理を開始します');
-        logger.info('実行元情報 ' + JSON.stringify({
-            siteId: getClientSiteId(),
-            recordId: getClientRecordId(),
+        logger.info('Start: ' + eventName);
+        logger.info('Source ' + JSON.stringify({
+            siteId: logger.sourceSiteId || '',
+            recordId: logger.sourceRecordId || '',
+            userId: logger.userId || '',
+            deptId: logger.deptId || '',
             url: location.href
         }));
 
@@ -366,7 +383,7 @@ async function runClientEvent(eventName, steps, options) {
             await runClientStep(logger, steps[i]);
         }
 
-        logger.info(eventName + '処理を終了します');
+        logger.info('End: ' + eventName);
 
     } catch (e) {
         logger.error(e.stack);
@@ -374,7 +391,6 @@ async function runClientEvent(eventName, steps, options) {
 
         /*
          * CS側は画面を壊さないことを優先して、ここではthrowしない。
-         * 必要ならここで $p.setMessage 等に置き換える。
          */
         console.error(e);
 
@@ -415,10 +431,6 @@ async function runClientStep(logger, step) {
 /**
  * CSログレコードを作成する。
  *
- * 注意:
- * - ClassHash / NumHash / DescriptionHash の割当はログテーブルの項目構成に合わせて変更する。
- * - $p.apiCreate が使えない環境では enableApiSave:false にする。
- *
  * @param {ClientScriptLogger} logger ロガー
  * @returns {Promise<void>}
  */
@@ -452,47 +464,76 @@ function createClientScriptLogRecord(logger) {
 
 /**
  * ログテーブル登録用データを作成する。
- * ここは実際のログテーブル項目に合わせて調整する。
+ * SSログテーブル側の buildScriptLogItem と同じ項目構成に合わせる。
+ *
+ * 対応:
+ * Title        = buildLogTitle
+ * ClassA       = sourceApp
+ * ClassB       = level
+ * ClassC       = userId
+ * ClassD       = deptId
+ * DescriptionA = processName
+ * DescriptionB = detail
+ * NumA         = sourceSiteId
+ * NumB         = sourceRecordId
+ * DateA        = 現在日時
  *
  * @param {ClientScriptLogger} logger ロガー
  * @returns {Object} apiCreate用data
  */
 function buildClientScriptLogApiData(logger) {
+    const request = {
+        sourceApp: logger.sourceApp || '',
+        level: logger.level || 'info',
+        processName: logger.processName || '',
+        sourceSiteId: logger.sourceSiteId || logger.sourceApp || '',
+        sourceRecordId: logger.sourceRecordId || '',
+        userId: logger.userId || '',
+        deptId: logger.deptId || '',
+        detail: logger.getDetailText()
+    };
+
     return {
-        Title: logger.processName + 'ログ',
+        Title: buildClientLogTitle(request),
 
-        /*
-         * 例:
-         * ClassA: 実行種別
-         * ClassB: ログレベル
-         * ClassC: 処理名
-         */
         ClassHash: {
-            ClassA: 'CS',
-            ClassB: logger.level,
-            ClassC: logger.processName
+            ClassA: String(request.sourceApp || ''),
+            ClassB: request.level || 'info',
+            ClassC: toNumberOrNull(request.userId),
+            ClassD: toNumberOrNull(request.deptId)
         },
 
-        /*
-         * 例:
-         * NumA: 実行元サイトID
-         * NumB: 実行元レコードID
-         */
-        NumHash: {
-            NumA: toNumberOrNull(logger.sourceApp),
-            NumB: toNumberOrNull(logger.sourceRecordId)
-        },
-
-        /*
-         * 例:
-         * DescriptionA: 詳細ログ
-         * DescriptionB: URL
-         */
         DescriptionHash: {
-            DescriptionA: logger.getDetailText(),
-            DescriptionB: location.href
+            DescriptionA: request.processName || '',
+            DescriptionB: request.detail || ''
+        },
+
+        NumHash: {
+            NumA: toNumberOrNull(request.sourceSiteId),
+            NumB: toNumberOrNull(request.sourceRecordId)
+        },
+
+        DateHash: {
+            DateA: getCurrentTimestamp()
         }
     };
+}
+
+/**
+ * CSログタイトルを生成する。
+ * SS側の buildLogTitle と同じ形式にする。
+ *
+ * @param {Object} request ログ依頼
+ * @returns {string} タイトル
+ */
+function buildClientLogTitle(request) {
+    return (request.sourceApp || 'site') +
+        ' / ' +
+        (request.processName || 'process') +
+        ' / ' +
+        (request.level || 'info') +
+        ' / ' +
+        (request.sourceRecordId || '');
 }
 
 /**
@@ -527,6 +568,65 @@ function getClientRecordId() {
     }
 
     return '';
+}
+
+/**
+ * 現在のユーザーIDを取得する。
+ *
+ * @returns {string|number}
+ */
+function getClientUserId() {
+    if (window.$p && typeof $p.userId === 'function') {
+        return $p.userId();
+    }
+
+    if (window.$p && $p.user && $p.user.UserId) {
+        return $p.user.UserId;
+    }
+
+    if (window.context && context.UserId) {
+        return context.UserId;
+    }
+
+    return '';
+}
+
+/**
+ * 現在の部署IDを取得する。
+ *
+ * @returns {string|number}
+ */
+function getClientDeptId() {
+    if (window.$p && typeof $p.deptId === 'function') {
+        return $p.deptId();
+    }
+
+    if (window.$p && $p.user && $p.user.DeptId) {
+        return $p.user.DeptId;
+    }
+
+    if (window.context && context.DeptId) {
+        return context.DeptId;
+    }
+
+    return '';
+}
+
+/**
+ * 現在日時を返す。
+ *
+ * @returns {string} 現在日時
+ */
+function getCurrentTimestamp() {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const MM = ('0' + (now.getMonth() + 1)).slice(-2);
+    const dd = ('0' + now.getDate()).slice(-2);
+    const hh = ('0' + now.getHours()).slice(-2);
+    const mm = ('0' + now.getMinutes()).slice(-2);
+    const ss = ('0' + now.getSeconds()).slice(-2);
+
+    return yyyy + '/' + MM + '/' + dd + ' ' + hh + ':' + mm + ':' + ss;
 }
 
 /**
