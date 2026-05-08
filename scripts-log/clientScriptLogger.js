@@ -1,0 +1,550 @@
+/*
+ * クライアントスクリプト側
+ * ClientScriptLogger でログ内容を蓄積し、最後にログテーブルへ保存する。
+ *
+ * 方針:
+ * - 1イベント処理につき、1ログレコードを作成する
+ * - console.group と同じように logger.group() / logger.groupEnd() を使う
+ * - CS側では console.log にも出力する
+ * - ログテーブル保存は $p.apiCreate を使う
+ */
+
+const CLIENT_SCRIPT_LOG_CONFIG = {
+    logSiteId: 1234,               // ← スクリプトログテーブルのサイトIDに変更
+    enableApiSave: true,           // false にすると console 出力のみ
+    enableConsoleLog: true
+};
+
+/**
+ * クライアントスクリプトログ管理クラス
+ */
+class ClientScriptLogger {
+    /**
+     * @param {Object} options 共通ログ情報
+     * @param {string|number} [options.sourceApp] 実行元アプリID
+     * @param {string} options.processName 処理名
+     * @param {number|string} [options.sourceRecordId] 実行元レコードID
+     * @param {boolean} [options.enableConsoleLog=true] consoleへ出力するか
+     * @param {boolean} [options.enableApiSave=true] ログテーブルへ保存するか
+     */
+    constructor(options) {
+        options = options || {};
+
+        this.sourceApp = options.sourceApp || getClientSiteId();
+        this.processName = options.processName || '';
+        this.sourceRecordId = options.sourceRecordId || getClientRecordId();
+
+        this.enableConsoleLog = options.enableConsoleLog !== false;
+        this.enableApiSave = options.enableApiSave !== false;
+
+        this.details = [];
+        this.level = 'info';
+
+        this.startedAtMs = Date.now();
+        this.lastLogAtMs = this.startedAtMs;
+
+        this.indentLevel = 0;
+        this.groupStack = [];
+    }
+
+    /**
+     * 情報ログを追加する。
+     *
+     * @param {string} message ログメッセージ
+     */
+    info(message) {
+        this.add(message, 'info');
+    }
+
+    /**
+     * 警告ログを追加する。
+     *
+     * @param {string} message ログメッセージ
+     */
+    warn(message) {
+        this.add(message, 'warn');
+    }
+
+    /**
+     * エラーログを追加する。
+     * CS側では error.stack を渡す想定。
+     *
+     * @param {string} message ログメッセージ
+     */
+    error(message) {
+        this.add(message, 'error');
+    }
+
+    /**
+     * ログを追加する。
+     *
+     * @param {string} message ログメッセージ
+     * @param {string} [level] ログレベル
+     */
+    add(message, level) {
+        const logLevel = level || 'info';
+        const prefix =
+            this.getIndentText() +
+            '[' + logLevel + '] ' +
+            this.getLogMetaText() + ' ';
+
+        const detailLine = this.formatPrefixedMultilineMessage(
+            prefix,
+            String(message || '')
+        );
+
+        this.details.push(detailLine);
+
+        if (this.enableConsoleLog) {
+            this.writeConsole(logLevel, detailLine);
+        }
+
+        this.lastLogAtMs = Date.now();
+        this.raiseLevel(logLevel);
+    }
+
+    /**
+     * グループを開始する。
+     * console.group と同じように、
+     * logger.group('処理名') → 処理 → logger.groupEnd() の形で使う。
+     *
+     * @param {string} label グループ名
+     */
+    group(label) {
+        this.groupStack.push({
+            label: label,
+            startedAtMs: Date.now()
+        });
+
+        this.addGroupLine('start', label);
+        this.indentLevel++;
+    }
+
+    /**
+     * グループを終了する。
+     */
+    groupEnd() {
+        if (this.groupStack.length === 0) {
+            this.warn('groupEnd が呼ばれましたが、開始中の group がありません');
+            return;
+        }
+
+        this.indentLevel--;
+
+        if (this.indentLevel < 0) {
+            this.indentLevel = 0;
+        }
+
+        const group = this.groupStack.pop();
+        const elapsedMs = Date.now() - group.startedAtMs;
+
+        this.addGroupLine(
+            'end',
+            group.label,
+            '完了 +' + elapsedMs + 'ms'
+        );
+    }
+
+    /**
+     * 未終了のグループをすべて異常終了として閉じる。
+     */
+    closeAllGroups() {
+        while (this.groupStack.length > 0) {
+            this.indentLevel--;
+
+            if (this.indentLevel < 0) {
+                this.indentLevel = 0;
+            }
+
+            const group = this.groupStack.pop();
+            const elapsedMs = Date.now() - group.startedAtMs;
+
+            this.addGroupLine(
+                'abnormalEnd',
+                group.label,
+                '異常終了 +' + elapsedMs + 'ms'
+            );
+
+            this.raiseLevel('warn');
+        }
+    }
+
+    /**
+     * 現在のログ内容を保存する。
+     *
+     * @returns {Promise<void>}
+     */
+    save() {
+        this.closeAllGroups();
+
+        const totalMs = Date.now() - this.startedAtMs;
+        this.details.push('総処理時間: ' + totalMs + 'ms');
+
+        if (!this.enableApiSave || !CLIENT_SCRIPT_LOG_CONFIG.enableApiSave) {
+            return Promise.resolve();
+        }
+
+        return createClientScriptLogRecord(this);
+    }
+
+    /**
+     * 詳細ログ文字列を返す。
+     *
+     * @returns {string}
+     */
+    getDetailText() {
+        return this.details.join('\n');
+    }
+
+    /**
+     * グループ行を追加する。
+     *
+     * @param {string} type start / end / abnormalEnd
+     * @param {string} label グループ名
+     * @param {string} [suffix] 末尾文言
+     */
+    addGroupLine(type, label, suffix) {
+        let mark = '▼';
+
+        if (type === 'end' || type === 'abnormalEnd') {
+            mark = '▲';
+        }
+
+        const line =
+            this.getIndentText() +
+            mark + ' ' +
+            label +
+            (suffix ? ' ' + suffix : '') +
+            ' ' +
+            this.getLogMetaText();
+
+        this.details.push(line);
+
+        if (this.enableConsoleLog) {
+            this.writeConsole('info', line);
+        }
+
+        this.lastLogAtMs = Date.now();
+    }
+
+    /**
+     * consoleへ出力する。
+     *
+     * @param {string} level ログレベル
+     * @param {string} message メッセージ
+     */
+    writeConsole(level, message) {
+        if (level === 'error') {
+            console.error(message);
+            return;
+        }
+
+        if (level === 'warn') {
+            console.warn(message);
+            return;
+        }
+
+        console.log(message);
+    }
+
+    /**
+     * ログレベルを引き上げる。
+     *
+     * @param {string} level ログレベル
+     */
+    raiseLevel(level) {
+        if (level === 'error') {
+            this.level = 'error';
+            return;
+        }
+
+        if (level === 'warn' && this.level !== 'error') {
+            this.level = 'warn';
+        }
+    }
+
+    /**
+     * 現在のログメタ情報を返す。
+     *
+     * @returns {string}
+     */
+    getLogMetaText() {
+        const nowMs = Date.now();
+        const elapsedMs = nowMs - this.startedAtMs;
+        const deltaMs = nowMs - this.lastLogAtMs;
+
+        return '[' +
+            this.getCurrentTimeText() +
+            ' / ＋' + elapsedMs + 'ms / Δ' + deltaMs + 'ms]';
+    }
+
+    /**
+     * 現在のインデント文字列を返す。
+     *
+     * @returns {string}
+     */
+    getIndentText() {
+        let indent = '';
+
+        for (let i = 0; i < this.indentLevel; i++) {
+            indent += '  ';
+        }
+
+        return indent;
+    }
+
+    /**
+     * 複数行メッセージを整形する。
+     *
+     * @param {string} prefix 接頭辞
+     * @param {string} message メッセージ
+     * @returns {string}
+     */
+    formatPrefixedMultilineMessage(prefix, message) {
+        const lines = message.split('\n');
+
+        if (lines.length <= 1) {
+            return prefix + lines[0];
+        }
+
+        const secondLineIndent = this.getIndentText() + '  ';
+
+        return prefix + lines[0] +
+            '\n' +
+            secondLineIndent +
+            lines.slice(1).join('\n' + secondLineIndent);
+    }
+
+    /**
+     * 現在時刻を HH:mm:ss 形式で返す。
+     *
+     * @returns {string}
+     */
+    getCurrentTimeText() {
+        const now = new Date();
+        const hh = ('0' + now.getHours()).slice(-2);
+        const mm = ('0' + now.getMinutes()).slice(-2);
+        const ss = ('0' + now.getSeconds()).slice(-2);
+
+        return hh + ':' + mm + ':' + ss;
+    }
+}
+
+/**
+ * クライアントイベント処理を実行する。
+ * 1イベント処理につき、1件のログレコードを作成する想定。
+ *
+ * @param {string} eventName イベント名
+ * @param {Array<Object>} steps 実行ステップ一覧
+ * @param {Object} [options] ログオプション
+ * @param {string|number} [options.sourceApp] 実行元アプリID
+ * @param {number|string} [options.sourceRecordId] 実行元レコードID
+ * @param {boolean} [options.enableConsoleLog=true] consoleへ出力するか
+ * @param {boolean} [options.enableApiSave=true] ログテーブルへ保存するか
+ * @returns {Promise<ClientScriptLogger>}
+ */
+async function runClientEvent(eventName, steps, options) {
+    options = options || {};
+
+    const logger = new ClientScriptLogger({
+        sourceApp: options.sourceApp || getClientSiteId(),
+        processName: eventName,
+        sourceRecordId: options.sourceRecordId || getClientRecordId(),
+        enableConsoleLog: options.enableConsoleLog,
+        enableApiSave: options.enableApiSave
+    });
+
+    try {
+        logger.info(eventName + '処理を開始します');
+        logger.info('実行元情報 ' + JSON.stringify({
+            siteId: getClientSiteId(),
+            recordId: getClientRecordId(),
+            url: location.href
+        }));
+
+        for (let i = 0; i < steps.length; i++) {
+            await runClientStep(logger, steps[i]);
+        }
+
+        logger.info(eventName + '処理を終了します');
+
+    } catch (e) {
+        logger.error(e.stack);
+        logger.closeAllGroups();
+
+        /*
+         * CS側は画面を壊さないことを優先して、ここではthrowしない。
+         * 必要ならここで $p.setMessage 等に置き換える。
+         */
+        console.error(e);
+
+    } finally {
+        await logger.save();
+    }
+
+    return logger;
+}
+
+/**
+ * 1ステップを実行する。
+ *
+ * @param {ClientScriptLogger} logger ロガー
+ * @param {Object} step ステップ情報
+ * @param {string} step.name 関数名
+ * @param {string} step.label 日本語説明
+ * @param {Function} step.action 実行関数
+ * @returns {Promise<void>}
+ */
+async function runClientStep(logger, step) {
+    const stepLabel = step.name + ' - ' + step.label;
+
+    logger.group(stepLabel);
+
+    try {
+        const result = step.action(logger);
+
+        if (result && typeof result.then === 'function') {
+            await result;
+        }
+
+    } finally {
+        logger.groupEnd();
+    }
+}
+
+/**
+ * CSログレコードを作成する。
+ *
+ * 注意:
+ * - ClassHash / NumHash / DescriptionHash の割当はログテーブルの項目構成に合わせて変更する。
+ * - $p.apiCreate が使えない環境では enableApiSave:false にする。
+ *
+ * @param {ClientScriptLogger} logger ロガー
+ * @returns {Promise<void>}
+ */
+function createClientScriptLogRecord(logger) {
+    return new Promise(function (resolve) {
+        if (!window.$p || typeof $p.apiCreate !== 'function') {
+            console.warn('CSログ保存をスキップしました。$p.apiCreate が使用できません。');
+            resolve();
+            return;
+        }
+
+        const data = buildClientScriptLogApiData(logger);
+
+        $p.apiCreate({
+            id: CLIENT_SCRIPT_LOG_CONFIG.logSiteId,
+            data: data,
+            done: function () {
+                console.log('CSログレコードを作成しました。');
+                resolve();
+            },
+            fail: function (data) {
+                console.error('CSログレコード作成に失敗しました。', data);
+                resolve();
+            },
+            always: function () {
+                resolve();
+            }
+        });
+    });
+}
+
+/**
+ * ログテーブル登録用データを作成する。
+ * ここは実際のログテーブル項目に合わせて調整する。
+ *
+ * @param {ClientScriptLogger} logger ロガー
+ * @returns {Object} apiCreate用data
+ */
+function buildClientScriptLogApiData(logger) {
+    return {
+        Title: logger.processName + 'ログ',
+
+        /*
+         * 例:
+         * ClassA: 実行種別
+         * ClassB: ログレベル
+         * ClassC: 処理名
+         */
+        ClassHash: {
+            ClassA: 'CS',
+            ClassB: logger.level,
+            ClassC: logger.processName
+        },
+
+        /*
+         * 例:
+         * NumA: 実行元サイトID
+         * NumB: 実行元レコードID
+         */
+        NumHash: {
+            NumA: toNumberOrNull(logger.sourceApp),
+            NumB: toNumberOrNull(logger.sourceRecordId)
+        },
+
+        /*
+         * 例:
+         * DescriptionA: 詳細ログ
+         * DescriptionB: URL
+         */
+        DescriptionHash: {
+            DescriptionA: logger.getDetailText(),
+            DescriptionB: location.href
+        }
+    };
+}
+
+/**
+ * 現在のサイトIDを取得する。
+ *
+ * @returns {string|number}
+ */
+function getClientSiteId() {
+    if (window.$p && typeof $p.siteId === 'function') {
+        return $p.siteId();
+    }
+
+    if (window.context && context.SiteId) {
+        return context.SiteId;
+    }
+
+    return '';
+}
+
+/**
+ * 現在のレコードIDを取得する。
+ *
+ * @returns {string|number}
+ */
+function getClientRecordId() {
+    if (window.$p && typeof $p.id === 'function') {
+        return $p.id();
+    }
+
+    if (window.context && context.Id) {
+        return context.Id;
+    }
+
+    return '';
+}
+
+/**
+ * 数値化できる場合だけ数値化する。
+ *
+ * @param {*} value 値
+ * @returns {number|null}
+ */
+function toNumberOrNull(value) {
+    if (value === null || value === undefined || value === '') {
+        return null;
+    }
+
+    const num = Number(value);
+
+    if (isNaN(num)) {
+        return null;
+    }
+
+    return num;
+}
