@@ -1,5 +1,5 @@
 /*
- * クライアントスクリプト側
+ * common/logger
  * ClientScriptLogger でログ内容を蓄積し、最後にSSログと同じログテーブルへ保存する。
  *
  * 方針:
@@ -102,7 +102,7 @@ class ClientScriptLogger {
 
         this.details.push(detailLine);
 
-        if (this.enableConsoleLog) {
+        if (this.enableConsoleLog && CLIENT_SCRIPT_LOG_CONFIG.enableConsoleLog) {
             this.writeConsole(logLevel, detailLine);
         }
 
@@ -229,7 +229,7 @@ class ClientScriptLogger {
 
         this.details.push(line);
 
-        if (this.enableConsoleLog) {
+        if (this.enableConsoleLog && CLIENT_SCRIPT_LOG_CONFIG.enableConsoleLog) {
             this.writeConsole('info', line);
         }
 
@@ -336,95 +336,6 @@ class ClientScriptLogger {
         const ss = ('0' + now.getSeconds()).slice(-2);
 
         return hh + ':' + mm + ':' + ss;
-    }
-}
-
-/**
- * クライアントイベント処理を実行する。
- * 1イベント処理につき、1件のログレコードを作成する想定。
- *
- * @param {string} eventName イベント名
- * @param {Array<Object>} steps 実行ステップ一覧
- * @param {Object} [options] ログオプション
- * @param {string|number} [options.sourceApp] 実行元アプリID
- * @param {string|number} [options.sourceSiteId] 実行元サイトID
- * @param {number|string} [options.sourceRecordId] 実行元レコードID
- * @param {string|number} [options.userId] ユーザーID
- * @param {string|number} [options.deptId] 部署ID
- * @param {boolean} [options.enableConsoleLog=true] consoleへ出力するか
- * @param {boolean} [options.enableApiSave=true] ログテーブルへ保存するか
- * @returns {Promise<ClientScriptLogger>}
- */
-async function runClientEvent(eventName, steps, options) {
-    options = options || {};
-
-    const logger = new ClientScriptLogger({
-        sourceApp: options.sourceApp || getClientSiteId(),
-        sourceSiteId: options.sourceSiteId || getClientSiteId(),
-        processName: eventName,
-        sourceRecordId: options.sourceRecordId || getClientRecordId(),
-        userId: options.userId || getClientUserId(),
-        deptId: options.deptId || getClientDeptId(),
-        enableConsoleLog: options.enableConsoleLog,
-        enableApiSave: options.enableApiSave
-    });
-
-    try {
-        logger.info('Start: ' + eventName);
-        logger.info('Source ' + JSON.stringify({
-            siteId: logger.sourceSiteId || '',
-            recordId: logger.sourceRecordId || '',
-            userId: logger.userId || '',
-            deptId: logger.deptId || '',
-            url: location.href
-        }));
-
-        for (let i = 0; i < steps.length; i++) {
-            await runClientStep(logger, steps[i]);
-        }
-
-        logger.info('End: ' + eventName);
-
-    } catch (e) {
-        logger.error(e.stack);
-        logger.closeAllGroups();
-
-        /*
-         * CS側は画面を壊さないことを優先して、ここではthrowしない。
-         */
-        console.error(e);
-
-    } finally {
-        await logger.save();
-    }
-
-    return logger;
-}
-
-/**
- * 1ステップを実行する。
- *
- * @param {ClientScriptLogger} logger ロガー
- * @param {Object} step ステップ情報
- * @param {string} step.name 関数名
- * @param {string} step.label 日本語説明
- * @param {Function} step.action 実行関数
- * @returns {Promise<void>}
- */
-async function runClientStep(logger, step) {
-    const stepLabel = step.name + ' - ' + step.label;
-
-    logger.group(stepLabel);
-
-    try {
-        const result = step.action(logger);
-
-        if (result && typeof result.then === 'function') {
-            await result;
-        }
-
-    } finally {
-        logger.groupEnd();
     }
 }
 
