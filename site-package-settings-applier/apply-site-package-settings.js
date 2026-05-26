@@ -9,6 +9,8 @@
 (function attachPleasanterViewPackageApplier(global) {
   const arraySettingKeys = [
     "Views",
+    "EditorColumns",
+    "GridColumns",
     "Scripts",
     "ServerScripts",
     "Styles",
@@ -16,6 +18,8 @@
     "Processes",
     "StatusControls"
   ];
+  const objectSettingKeys = ["EditorColumnHash"];
+  const supportedSettingKeys = [...arraySettingKeys, ...objectSettingKeys];
 
   const volatileKeys = new Set([
     "Id",
@@ -86,6 +90,47 @@
     return applySiteSettings(sitePackage, { ...options, sections: ["Views"] });
   }
 
+  function planEditorColumnsInCurrentPage(sitePackage, options = {}) {
+    return applyEditorColumnsInCurrentPage(sitePackage, { ...options, dryRun: true });
+  }
+
+  function applyEditorColumnsInCurrentPage(sitePackage, options = {}) {
+    const sourceSettings = extractSiteSettings(sitePackage);
+    const desiredColumns = extractEditorColumns(sourceSettings, options);
+    const currentColumns = readSelectableValues("EditorColumns");
+    const operations = diffPrimitiveArray("EditorColumnHash", currentColumns, desiredColumns);
+    const plan = {
+      mode: "replace",
+      sections: ["EditorColumnHash"],
+      summary: summarize(operations),
+      operations,
+      currentColumns,
+      nextColumns: desiredColumns
+    };
+
+    if (options.dryRun !== false) {
+      return {
+        dryRun: true,
+        message: "No settings were changed. Run with dryRun:false on the table management page to apply.",
+        plan
+      };
+    }
+
+    renderEditorColumns(desiredColumns);
+    if (options.save !== false) saveCurrentPageEditorSettings();
+
+    return {
+      dryRun: false,
+      message: options.save === false
+        ? "Editor columns were updated in the current page. Click Update to save."
+        : "Editor columns were sent through the current table management page.",
+      plan,
+      verified: {
+        EditorColumns: readSelectableValues("EditorColumns")
+      }
+    };
+  }
+
   async function pickPackageFile(options = {}) {
     const file = await pickFile(options.accept || ".json,application/json");
     const text = await file.text();
@@ -117,7 +162,7 @@
         }
       : await pickPackageFile();
     const sourceSettings = extractSiteSettings(picked.package);
-    const detectedSections = arraySettingKeys.filter((key) => Array.isArray(sourceSettings[key]));
+    const detectedSections = supportedSettingKeys.filter((key) => hasSupportedSection(sourceSettings, key));
 
     if (detectedSections.length === 0) {
       throw new Error("The selected JSON does not contain supported SiteSettings sections.");
@@ -253,6 +298,25 @@
     return site?.SiteSettings || sitePackage?.SiteSettings || {};
   }
 
+  function extractEditorColumns(sourceSettings, options = {}) {
+    if (Array.isArray(sourceSettings.EditorColumns)) return uniqueStrings(sourceSettings.EditorColumns);
+
+    const hash = sourceSettings.EditorColumnHash;
+    if (!isPlainObject(hash)) throw new Error("SiteSettings.EditorColumnHash or EditorColumns is required.");
+
+    if (options.editorTab && Array.isArray(hash[options.editorTab])) {
+      return uniqueStrings(hash[options.editorTab]);
+    }
+
+    const preferredKeys = ["General", "全般"];
+    const preferredKey = preferredKeys.find((key) => Array.isArray(hash[key]));
+    if (preferredKey && options.flattenEditorColumnHash !== true) {
+      return uniqueStrings(hash[preferredKey]);
+    }
+
+    return uniqueStrings(Object.values(hash).flatMap((items) => (Array.isArray(items) ? items : [])));
+  }
+
   function buildViewPlan(currentSettings, sourceViews, mode) {
     const settingsPlan = buildSettingsPlan(currentSettings, { Views: sourceViews }, { mode, sections: ["Views"] });
     return {
@@ -270,7 +334,7 @@
     const operations = [];
 
     for (const section of sections) {
-      if (!arraySettingKeys.includes(section)) {
+      if (!supportedSettingKeys.includes(section)) {
         operations.push({
           type: "skip",
           section,
@@ -280,15 +344,26 @@
         continue;
       }
 
-      const sectionPlan = buildArraySectionPlan(section, currentSettings[section], sourceSettings[section], ctx.mode);
-      operations.push(...sectionPlan.operations);
-      nextSettings[section] = sectionPlan.nextItems;
+      if (arraySettingKeys.includes(section)) {
+        const sectionPlan = buildArraySectionPlan(section, currentSettings[section], sourceSettings[section], ctx.mode);
+        operations.push(...sectionPlan.operations);
+        nextSettings[section] = sectionPlan.nextItems;
 
-      if (section === "Views") {
-        nextSettings.ViewLatestId = sectionPlan.nextItems.reduce(
-          (max, item) => Math.max(max, Number(item.Id || 0)),
-          0
+        if (section === "Views") {
+          nextSettings.ViewLatestId = sectionPlan.nextItems.reduce(
+            (max, item) => Math.max(max, Number(item.Id || 0)),
+            0
+          );
+        }
+      } else if (objectSettingKeys.includes(section)) {
+        const sectionPlan = buildObjectSectionPlan(
+          section,
+          currentSettings[section],
+          sourceSettings[section],
+          ctx.mode
         );
+        operations.push(...sectionPlan.operations);
+        nextSettings[section] = sectionPlan.nextValue;
       }
     }
 
@@ -310,20 +385,22 @@
     }
 
     const currentItems = Array.isArray(currentValue) ? currentValue : [];
-    const sourceItems = sourceValue.map(normalizeItem);
+    const sourceItems = sourceValue.map((item) => normalizeArrayItem(item, section));
     const currentByKey = new Map(currentItems.map((item) => [stableKey(item, section), item]));
     const usedKeys = new Set();
     const operations = [];
-    const nextItems = mode === "replace" ? [] : currentItems.map((item) => ({ ...item }));
+    const nextItems = mode === "replace" ? [] : currentItems.map((item) => clone(item));
 
     for (const sourceItem of sourceItems) {
       const key = stableKey(sourceItem, section);
       usedKeys.add(key);
       const currentItem = currentByKey.get(key);
-      const normalizedSource = normalizeItem(sourceItem);
+      const normalizedSource = normalizeArrayItem(sourceItem, section);
 
       if (currentItem) {
-        const merged = { ...currentItem, ...normalizedSource, Id: currentItem.Id };
+        const merged = isObjectItem(currentItem) && isObjectItem(normalizedSource)
+          ? { ...currentItem, ...normalizedSource, Id: currentItem.Id }
+          : normalizedSource;
         operations.push({
           type: sameItem(currentItem, merged, section) ? "skip" : "update",
           section,
@@ -333,7 +410,7 @@
         });
         replaceOrAppend(nextItems, merged, section);
       } else {
-        const created = { ...normalizedSource };
+        const created = isObjectItem(normalizedSource) ? { ...normalizedSource } : normalizedSource;
         operations.push({ type: "create", section, key, after: created });
         nextItems.push(created);
       }
@@ -350,13 +427,86 @@
     return { operations, nextItems };
   }
 
+  function diffPrimitiveArray(section, currentItems, sourceItems) {
+    const currentSet = new Set(currentItems);
+    const sourceSet = new Set(sourceItems);
+    const operations = [];
+
+    for (const key of sourceItems) {
+      operations.push({
+        type: currentSet.has(key) ? "skip" : "create",
+        section,
+        key,
+        after: key
+      });
+    }
+
+    for (const key of currentItems) {
+      if (!sourceSet.has(key)) operations.push({ type: "delete", section, key, before: key });
+    }
+
+    if (
+      operations.every((operation) => operation.type === "skip") &&
+      JSON.stringify(currentItems) !== JSON.stringify(sourceItems)
+    ) {
+      operations.push({
+        type: "update",
+        section,
+        key: `${section}:order`,
+        before: currentItems,
+        after: sourceItems
+      });
+    }
+
+    return operations;
+  }
+
+  function buildObjectSectionPlan(section, currentValue = {}, sourceValue = {}, mode) {
+    if (!isPlainObject(sourceValue)) {
+      return {
+        operations: [{ type: "skip", section, key: section, reason: `${section} is not an object.` }],
+        nextValue: isPlainObject(currentValue) ? clone(currentValue) : {}
+      };
+    }
+
+    const currentObject = isPlainObject(currentValue) ? currentValue : {};
+    const sourceObject = clone(sourceValue);
+    const nextValue = mode === "replace" ? {} : clone(currentObject);
+    const operations = [];
+    const sourceKeys = new Set(Object.keys(sourceObject));
+
+    for (const [key, sourceItem] of Object.entries(sourceObject)) {
+      const currentItem = currentObject[key];
+      const exists = Object.prototype.hasOwnProperty.call(currentObject, key);
+      const nextItem = clone(sourceItem);
+      nextValue[key] = nextItem;
+      operations.push({
+        type: exists ? (sameValue(currentItem, nextItem) ? "skip" : "update") : "create",
+        section,
+        key,
+        before: exists ? currentItem : undefined,
+        after: nextItem
+      });
+    }
+
+    if (mode === "replace") {
+      for (const key of Object.keys(currentObject)) {
+        if (!sourceKeys.has(key)) {
+          operations.push({ type: "delete", section, key, before: currentObject[key] });
+        }
+      }
+    }
+
+    return { operations, nextValue };
+  }
+
   async function getSiteSettings(ctx) {
     const response = await request(ctx, `/api/items/${ctx.targetSiteId}/getsite`, {});
     return response?.Response?.Data?.SiteSettings || response?.SiteSettings || response || {};
   }
 
   async function getSite(ctx) {
-    const response = await request(ctx, `/api/items/${ctx.targetSiteId}/get`, {});
+    const response = await request(ctx, `/api/items/${ctx.targetSiteId}/getsite`, {});
     return response?.Response?.Data || response?.Response || response || {};
   }
 
@@ -409,6 +559,10 @@
     return normalized;
   }
 
+  function normalizeArrayItem(item, section) {
+    return isObjectItem(item) ? normalizeItem(item) : item;
+  }
+
   function siteUpdateBase(site) {
     const base = {};
     for (const key of ["Title", "ReferenceType", "ParentId", "InheritPermission"]) {
@@ -418,6 +572,8 @@
   }
 
   function comparableItem(item, section) {
+    if (!isObjectItem(item)) return clone(item);
+
     const comparable = normalizeItem(item);
 
     if (section !== "Views") {
@@ -442,6 +598,7 @@
   }
 
   function stableKey(view, section) {
+    if (!isObjectItem(view)) return String(view ?? "");
     if (section === "Views") {
       return String(view?.Name || view?.Guid || view?.Title || view?.DisplayName || view?.Id || "");
     }
@@ -449,7 +606,7 @@
   }
 
   function sameItem(a, b, section) {
-    return JSON.stringify(comparableItem(a, section)) === JSON.stringify(comparableItem(b, section));
+    return sameValue(comparableItem(a, section), comparableItem(b, section));
   }
 
   function replaceOrAppend(views, view, section) {
@@ -461,8 +618,10 @@
   function assignIds(views) {
     let nextId = 1;
     for (const view of views) {
-      view.Id = nextId;
-      nextId += 1;
+      if (isObjectItem(view)) {
+        view.Id = nextId;
+        nextId += 1;
+      }
     }
   }
 
@@ -478,7 +637,7 @@
 
   function resolveSections(requestedSections, sourceSettings) {
     if (requestedSections.includes("all")) {
-      return arraySettingKeys.filter((key) => Array.isArray(sourceSettings[key]));
+      return supportedSettingKeys.filter((key) => hasSupportedSection(sourceSettings, key));
     }
     return requestedSections;
   }
@@ -487,9 +646,93 @@
     const result = {};
     for (const section of sections) {
       const value = settings[section];
-      result[section] = Array.isArray(value) ? value.map((item) => item.Name || item.Title || item.Id) : null;
+      if (Array.isArray(value)) {
+        result[section] = value.map((item) => isObjectItem(item) ? item.Name || item.Title || item.Id : item);
+      } else if (isPlainObject(value)) {
+        result[section] = Object.fromEntries(
+          Object.entries(value).map(([key, item]) => [key, Array.isArray(item) ? item.length : item])
+        );
+      } else {
+        result[section] = null;
+      }
     }
     return result;
+  }
+
+  function readSelectableValues(id) {
+    const element = document.getElementById(id);
+    if (!element) throw new Error(`#${id} was not found. Open the table management editor page first.`);
+    return Array.from(element.querySelectorAll("li"))
+      .map((item) => item.getAttribute("data-value") || item.textContent.trim())
+      .filter(Boolean);
+  }
+
+  function renderEditorColumns(columnNames) {
+    const editorColumns = document.getElementById("EditorColumns");
+    const sourceColumns = document.getElementById("EditorSourceColumns");
+    if (!editorColumns) throw new Error("#EditorColumns was not found. Open the table management editor page first.");
+
+    const existingItems = new Map(
+      Array.from(document.querySelectorAll("#EditorColumns > li, #EditorSourceColumns > li")).map((item) => [
+        item.getAttribute("data-value") || item.textContent.trim(),
+        item
+      ])
+    );
+
+    editorColumns.replaceChildren(
+      ...columnNames.map((columnName, index) => {
+        const existing = existingItems.get(columnName);
+        const item = existing ? existing.cloneNode(true) : document.createElement("li");
+        item.classList.remove("ui-selected", "ui-selectee", "selected", "is-selected");
+        item.setAttribute("data-value", columnName);
+        item.setAttribute("data-order", String(index));
+        if (!existing) item.textContent = columnName;
+        return item;
+      })
+    );
+
+    if (sourceColumns) {
+      const enabled = new Set(columnNames);
+      Array.from(sourceColumns.querySelectorAll("li")).forEach((item) => {
+        const value = item.getAttribute("data-value") || item.textContent.trim();
+        if (enabled.has(value)) item.remove();
+      });
+    }
+
+    if (global.jQuery && global.$p?.setData) global.$p.setData(global.jQuery(editorColumns));
+  }
+
+  function saveCurrentPageEditorSettings() {
+    if (!global.jQuery || !global.$p?.send) {
+      throw new Error("Pleasanter page helpers were not found. Click Update manually or run on the table management page.");
+    }
+    const updateCommand = global.jQuery("#UpdateCommand");
+    if (updateCommand.length !== 1) throw new Error("#UpdateCommand was not found. Click Update manually.");
+    global.$p.send(updateCommand);
+  }
+
+  function hasSupportedSection(settings, key) {
+    if (arraySettingKeys.includes(key)) return Array.isArray(settings[key]);
+    if (objectSettingKeys.includes(key)) return isPlainObject(settings[key]);
+    return false;
+  }
+
+  function isObjectItem(value) {
+    return value != null && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function isPlainObject(value) {
+    if (!isObjectItem(value)) return false;
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  }
+
+  function sameValue(a, b) {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  function uniqueStrings(items) {
+    return [...new Set(items.map((item) => String(item || "").trim()).filter(Boolean))];
   }
 
   function promptWithDefault(message, defaultValue) {
@@ -562,6 +805,8 @@
     samplePackage,
     planViews,
     applyViews,
+    planEditorColumnsInCurrentPage,
+    applyEditorColumnsInCurrentPage,
     planSiteSettings,
     applySiteSettings,
     pickPackageFile,

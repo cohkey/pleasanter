@@ -1,0 +1,46 @@
+{
+  "PackageName": "Editor column settings sync sample",
+  "Sites": [
+    {
+      "Title": "動作確認テーブル",
+      "SiteId": 1,
+      "ReferenceType": "Results",
+      "SiteSettings": {
+        "EditorColumnHash": {
+          "General": [
+            "ResultId",
+            "Ver",
+            "Title",
+            "Body",
+            "Status",
+            "Manager",
+            "Owner",
+            "Comments",
+            "ClassA",
+            "ClassB",
+            "ClassC",
+            "NumA",
+            "NumB",
+            "NumC",
+            "DateA",
+            "DateB",
+            "DateC",
+            "DescriptionA",
+            "DescriptionB",
+            "DescriptionC",
+            "CheckA",
+            "CheckB",
+            "CheckC",
+            "AttachmentsA",
+            "AttachmentsB",
+            "AttachmentsC",
+            "Creator",
+            "CreatedTime",
+            "Updator",
+            "UpdatedTime"
+          ]
+        }
+      }
+    }
+  ]
+}

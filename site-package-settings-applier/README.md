@@ -6,9 +6,12 @@ Pleasanter のサイトパッケージ JSON から、対象テーブルの `Site
 
 ## 対応状況
 
-対応済みの `SiteSettings` 配列:
+対応済みの `SiteSettings`:
 
 - `Views`
+- `EditorColumnHash`
+- `EditorColumns`
+- `GridColumns`
 - `Scripts`
 - `ServerScripts`
 - `Styles`
@@ -19,8 +22,21 @@ Pleasanter のサイトパッケージ JSON から、対象テーブルの `Site
 実地検証済み:
 
 - `Views`
+- `EditorColumnHash`
 - `Styles`
 - `Scripts`
+
+`EditorColumnHash` はエディタ画面の項目配置です。`General` などのキーがタブ/見出し、値の配列が配置する列名です。基本項目、分類項目、数値項目、日付項目、説明項目、チェック項目、添付項目を同じ仕組みで扱えます。
+
+Pleasanter のバージョンによっては `updatesite` API が `EditorColumnHash` を保存対象にしない場合があります。その場合は対象テーブルの「テーブルの管理」画面を開き、Console で次のように実行してください。現在開いている画面のエディタ項目一覧を更新し、画面の「更新」と同じ経路で保存します。
+
+```js
+const picked = await PleasanterSitePackageApplier.pickPackageFile();
+await PleasanterSitePackageApplier.applyEditorColumnsInCurrentPage(picked.package, {
+  dryRun: false,
+  save: true
+});
+```
 
 通知、リマインダー、インポート/エクスポート、アクセス制御などは、サイトパッケージ JSON の形と API 保存後の形を確認してから adapter を追加してください。
 
@@ -92,6 +108,12 @@ samples/site-package.views.sample.json
 
 ```text
 samples/site-package.multi-settings.sample.json
+```
+
+エディタ項目配置:
+
+```text
+samples/site-package.editor-columns.sample.json
 ```
 
 ## 注意
