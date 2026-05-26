@@ -1,0 +1,65 @@
+{
+  "PackageName": "Multi settings sync sample",
+  "Sites": [
+    {
+      "Title": "動作確認テーブル",
+      "SiteId": 3,
+      "ReferenceType": "Results",
+      "SiteSettings": {
+        "Views": [
+          {
+            "Name": "検証: 一覧 - 更新順",
+            "DefaultMode": "Index",
+            "GridColumns": [
+              "ResultId",
+              "TitleBody",
+              "Status",
+              "Manager",
+              "Owner",
+              "UpdatedTime"
+            ],
+            "ColumnSorterHash": {
+              "UpdatedTime": "desc"
+            },
+            "FiltersDisplayType": 2,
+            "AggregationsDisplayType": 1
+          },
+          {
+            "Name": "検証: カンバン - 状況別",
+            "DefaultMode": "Kamban",
+            "GridColumns": [
+              "ResultId",
+              "TitleBody",
+              "Status",
+              "Manager",
+              "UpdatedTime"
+            ],
+            "ColumnSorterHash": {
+              "UpdatedTime": "desc"
+            },
+            "FiltersDisplayType": 0,
+            "AggregationsDisplayType": 1
+          }
+        ],
+        "Styles": [
+          {
+            "Title": "検証スタイル",
+            "Name": "sample-sync-style",
+            "All": true,
+            "Disabled": false,
+            "Body": ".sample-sync-note { color: #0f766e; font-weight: 600; }"
+          }
+        ],
+        "Scripts": [
+          {
+            "Title": "検証スクリプト",
+            "Name": "sample-sync-script",
+            "All": true,
+            "Disabled": false,
+            "Body": "console.log('[Pleasanter sync sample] script loaded');"
+          }
+        ]
+      }
+    }
+  ]
+}
