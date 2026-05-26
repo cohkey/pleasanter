@@ -92,7 +92,7 @@
     return {
       fileName: file.name,
       size: file.size,
-      package: JSON.parse(text)
+      package: parseJson(text)
     };
   }
 
@@ -552,6 +552,10 @@
 
   function clone(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
+  }
+
+  function parseJson(text) {
+    return JSON.parse(String(text).replace(/^\uFEFF/, ""));
   }
 
   const api = {
