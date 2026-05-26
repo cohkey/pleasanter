@@ -61,7 +61,7 @@
       throw new Error("Loaded script does not expose PleasanterViewPackageApplier.runWizard().");
     }
 
-    const sitePackage = JSON.parse(await packageFile.text());
+    const sitePackage = JSON.parse((await packageFile.text()).replace(/^\uFEFF/, ""));
     const result = await global.PleasanterViewPackageApplier.runWizard({
       ...(options.wizardDefaults || {}),
       sitePackage,
