@@ -25,6 +25,19 @@ Pleasanter のサイトパッケージ JSON から、対象テーブルの `Site
 
 `Views`、`Columns`、`Scripts` などの既知キーは、名前や `ColumnName` を使って差分を出します。未定義のキーは値をそのままコピーします。
 
+安全のため、次の設定はデフォルトでは変更しません。
+
+- `Notifications`
+- `Reminders`
+- `Scripts`
+- `ServerScripts`
+- `Htmls`
+- `Processes`
+- `StatusControls`
+- `Aggregations`
+
+これらは Pleasanter 側の内部 schema や実行タイミングに依存し、推測した値を入れると管理画面のエラーや意図しないスクリプト実行につながります。適用する場合は、実際に Pleasanter からダウンロードした site-package JSON 由来であることを確認したうえで、オプションに `allowUnsafeSections: true` を明示してください。
+
 実地検証済み:
 
 - `Views`
@@ -164,6 +177,18 @@ samples/site-package.multi-settings.sample.json
 ```text
 samples/site-package.editor-columns.sample.json
 ```
+
+広めの `SiteSettings` を含む総合サンプル:
+
+```text
+samples/site-package.comprehensive-settings.sample.json
+```
+
+この総合サンプルには、項目詳細設定、エディタ配置、グリッド列、複数ビュー、スタイルを含めています。ローカル Pleasanter の `updatesite` で実適用し、`getsite` で再取得できた設定だけを残した API-safe なサンプルです。
+
+`Processes`、`StatusControls`、`Aggregations` などは Pleasanter の `updatesite` API が内部 schema に厳しく、推測した項目構造を入れると HTML エラーページへリダイレクトされることがあります。実際の site-package JSON から取得した構造が確認できるまでは、総合サンプルには含めない方針です。
+
+`Views`、`Columns`、`Scripts` などの既知キーは名前や `ColumnName` で差分を出し、それ以外のキーは `SiteSettings` の値をそのままコピーする想定の確認に使います。実環境の Pleasanter バージョンによって保存されない raw キーがある可能性があるため、適用後は「適用元/適用先のサイトパッケージ JSON 比較」で確認してください。
 
 ## 注意
 

@@ -22,6 +22,16 @@
   const objectSettingKeys = ["EditorColumnHash"];
   const supportedSettingKeys = [...arraySettingKeys, ...objectSettingKeys];
   const defaultCompareIgnoreKeys = ["Timestamp"];
+  const unsafeSettingKeys = new Set([
+    "Notifications",
+    "Reminders",
+    "Scripts",
+    "ServerScripts",
+    "Htmls",
+    "Processes",
+    "StatusControls",
+    "Aggregations"
+  ]);
 
   const volatileKeys = new Set([
     "Id",
@@ -321,7 +331,7 @@
       dryRun: false,
       result,
       plan,
-      verified: summarizeVerified(verify, ctx.sections),
+      verified: summarizeVerified(verify, resolveSections(ctx.sections, verify)),
       verifiedViews: Array.isArray(verify.Views) ? verify.Views.map((view) => view.Name || view.Id) : []
     };
   }
@@ -377,14 +387,46 @@
     if (replaceAll) {
       for (const key of Object.keys(currentSettings)) {
         if (!Object.prototype.hasOwnProperty.call(sourceSettings, key)) {
+          if (isUnsafeSection(key, ctx)) {
+            nextSettings[key] = clone(currentSettings[key]);
+            operations.push({
+              type: "skip",
+              section: key,
+              key,
+              reason: `${key} is unsafe and was preserved. Set allowUnsafeSections:true to delete it.`
+            });
+            continue;
+          }
           operations.push({ type: "delete", section: key, key, before: currentSettings[key] });
         }
       }
     }
 
     for (const section of sections) {
+      if (isUnsafeSection(section, ctx)) {
+        if (Object.prototype.hasOwnProperty.call(currentSettings, section)) {
+          nextSettings[section] = clone(currentSettings[section]);
+        }
+        operations.push({
+          type: "skip",
+          section,
+          key: section,
+          reason: `${section} is unsafe and was not changed. Set allowUnsafeSections:true to apply it.`
+        });
+        continue;
+      }
+
       if (!Object.prototype.hasOwnProperty.call(sourceSettings, section)) {
         if (ctx.mode === "replace" && Object.prototype.hasOwnProperty.call(nextSettings, section)) {
+          if (isUnsafeSection(section, ctx)) {
+            operations.push({
+              type: "skip",
+              section,
+              key: section,
+              reason: `${section} is unsafe and was preserved. Set allowUnsafeSections:true to delete it.`
+            });
+            continue;
+          }
           operations.push({ type: "delete", section, key: section, before: nextSettings[section] });
           delete nextSettings[section];
         } else {
@@ -591,11 +633,33 @@
       body: JSON.stringify(body)
     });
     const text = await response.text();
-    const json = text ? JSON.parse(text) : {};
+    const json = parseApiResponseJson(text, response, path);
     if (!response.ok || json.StatusCode >= 400) {
       throw new Error(`Pleasanter API error ${response.status}: ${text}`);
     }
     return json;
+  }
+
+  function parseApiResponseJson(text, response, path) {
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      const preview = text
+        .replace(/<[^>]*>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 240);
+      throw new Error(
+        [
+          `Pleasanter API returned a non-JSON response for ${path}.`,
+          `HTTP ${response.status} ${response.statusText || ""}`.trim(),
+          response.url ? `URL: ${response.url}` : "",
+          preview ? `Preview: ${preview}` : "",
+          "This usually means updatesite rejected one of the SiteSettings values."
+        ].filter(Boolean).join("\n")
+      );
+    }
   }
 
   function normalizeOptions(options = {}) {
@@ -615,8 +679,13 @@
       apiVersion: options.apiVersion || "1.1",
       mode: options.mode || "merge",
       dryRun: options.dryRun !== false,
+      allowUnsafeSections: options.allowUnsafeSections === true,
       sections
     };
+  }
+
+  function isUnsafeSection(section, ctx) {
+    return unsafeSettingKeys.has(section) && ctx.allowUnsafeSections !== true;
   }
 
   function ctxMergeItem(currentItem, normalizedSource, section, mode) {
