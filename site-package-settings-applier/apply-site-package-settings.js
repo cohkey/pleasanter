@@ -9,6 +9,7 @@
 (function attachPleasanterViewPackageApplier(global) {
   const arraySettingKeys = [
     "Views",
+    "Columns",
     "EditorColumns",
     "GridColumns",
     "Scripts",
@@ -423,7 +424,7 @@
       }
     }
 
-    assignIds(nextItems);
+    assignIds(nextItems, section);
     return { operations, nextItems };
   }
 
@@ -602,6 +603,9 @@
     if (section === "Views") {
       return String(view?.Name || view?.Guid || view?.Title || view?.DisplayName || view?.Id || "");
     }
+    if (section === "Columns") {
+      return String(view?.ColumnName || view?.Name || view?.Id || "");
+    }
     return String(view?.Title || view?.Name || view?.Guid || view?.DisplayName || view?.Id || "");
   }
 
@@ -615,7 +619,10 @@
     else views.push(view);
   }
 
-  function assignIds(views) {
+  function assignIds(views, section) {
+    if (!["Views", "Scripts", "ServerScripts", "Styles", "Htmls", "Processes", "StatusControls"].includes(section)) {
+      return;
+    }
     let nextId = 1;
     for (const view of views) {
       if (isObjectItem(view)) {
@@ -647,7 +654,7 @@
     for (const section of sections) {
       const value = settings[section];
       if (Array.isArray(value)) {
-        result[section] = value.map((item) => isObjectItem(item) ? item.Name || item.Title || item.Id : item);
+        result[section] = value.map((item) => isObjectItem(item) ? item.ColumnName || item.Name || item.Title || item.Id : item);
       } else if (isPlainObject(value)) {
         result[section] = Object.fromEntries(
           Object.entries(value).map(([key, item]) => [key, Array.isArray(item) ? item.length : item])
