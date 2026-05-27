@@ -1,11 +1,12 @@
 {
-  "PackageName": "Editor column settings sync sample",
+  "PackageName": "Rich editor and column settings sync sample",
   "Sites": [
     {
       "Title": "動作確認テーブル",
       "SiteId": 1,
       "ReferenceType": "Results",
       "SiteSettings": {
+        "GeneralTabLabelText": "入力",
         "EditorColumnHash": {
           "General": [
             "ResultId",
@@ -15,7 +16,6 @@
             "Status",
             "Manager",
             "Owner",
-            "Comments",
             "ClassA",
             "ClassB",
             "ClassC",
@@ -33,13 +33,216 @@
             "CheckC",
             "AttachmentsA",
             "AttachmentsB",
-            "AttachmentsC",
+            "Comments",
             "Creator",
             "CreatedTime",
             "Updator",
             "UpdatedTime"
           ]
-        }
+        },
+        "GridColumns": [
+          "ResultId",
+          "Title",
+          "ClassA",
+          "ClassB",
+          "NumA",
+          "DateA",
+          "CheckA",
+          "Status",
+          "Manager",
+          "UpdatedTime"
+        ],
+        "Columns": [
+          {
+            "ColumnName": "Title",
+            "LabelText": "件名",
+            "GridLabelText": "件名",
+            "MaxLength": 120,
+            "ValidateRequired": true,
+            "NoDuplication": true,
+            "MessageWhenDuplicated": "同じ件名のレコードが既にあります。",
+            "InputGuide": "案件名や作業名を120文字以内で入力してください。",
+            "TextAlign": 10
+          },
+          {
+            "ColumnName": "ClassA",
+            "LabelText": "優先度",
+            "GridLabelText": "優先",
+            "ControlType": "ChoicesText",
+            "ChoicesControlType": "DropDown",
+            "ChoicesText": "100,高\n200,中\n300,低",
+            "DefaultInput": "200",
+            "ValidateRequired": true,
+            "NotInsertBlankChoice": true,
+            "UseSearch": true,
+            "FieldCss": "field-normal",
+            "InputGuide": "優先度を選択してください。",
+            "TextAlign": 10
+          },
+          {
+            "ColumnName": "ClassB",
+            "LabelText": "対応区分",
+            "ControlType": "ChoicesText",
+            "ChoicesControlType": "Radio",
+            "ChoicesText": "10,調査\n20,実装\n30,レビュー\n40,保留",
+            "DefaultInput": "10",
+            "ValidateRequired": true,
+            "FieldCss": "field-wide",
+            "InputGuide": "現在の作業区分を選択します。"
+          },
+          {
+            "ColumnName": "ClassC",
+            "LabelText": "管理コード",
+            "MaxLength": 20,
+            "ValidateRequired": true,
+            "ClientRegexValidation": "^[A-Z]{3}-[0-9]{4}$",
+            "ServerRegexValidation": "^[A-Z]{3}-[0-9]{4}$",
+            "RegexValidationMessage": "管理コードは ABC-1234 の形式で入力してください。",
+            "NoDuplication": true,
+            "InputGuide": "例: PLS-0001",
+            "TextAlign": 10
+          },
+          {
+            "ColumnName": "NumA",
+            "LabelText": "見積金額",
+            "ControlType": "Normal",
+            "DefaultInput": "0",
+            "ValidateRequired": true,
+            "Nullable": false,
+            "Min": 0,
+            "Max": 99999999,
+            "DecimalPlaces": 0,
+            "Unit": "円",
+            "RoundingType": 10,
+            "TextAlign": 20,
+            "InputGuide": "税抜の見積金額を入力してください。"
+          },
+          {
+            "ColumnName": "NumB",
+            "LabelText": "進捗率",
+            "ControlType": "Spinner",
+            "DefaultInput": "0",
+            "Min": 0,
+            "Max": 100,
+            "Step": 5,
+            "DecimalPlaces": 0,
+            "Unit": "%",
+            "RoundingType": 30,
+            "Nullable": false,
+            "TextAlign": 20
+          },
+          {
+            "ColumnName": "NumC",
+            "LabelText": "工数",
+            "ControlType": "Normal",
+            "Min": 0,
+            "Max": 999.99,
+            "Step": 0.25,
+            "DecimalPlaces": 2,
+            "Unit": "h",
+            "RoundingType": 50,
+            "Nullable": true,
+            "TextAlign": 20
+          },
+          {
+            "ColumnName": "DateA",
+            "LabelText": "期限日",
+            "EditorFormat": "Ymd",
+            "ValidateRequired": true,
+            "DefaultInput": "7",
+            "InputGuide": "今日から何日後を初期値にするか指定します。"
+          },
+          {
+            "ColumnName": "DateB",
+            "LabelText": "開始日時",
+            "EditorFormat": "Ymdhm",
+            "DateTimeStep": 15,
+            "ValidateRequired": true,
+            "InputGuide": "15分単位で開始日時を指定します。"
+          },
+          {
+            "ColumnName": "DateC",
+            "LabelText": "完了日時",
+            "EditorFormat": "Ymdhms",
+            "DateTimeStep": 10,
+            "EditorReadOnly": false,
+            "InputGuide": "完了した時点の日時を記録します。"
+          },
+          {
+            "ColumnName": "DescriptionA",
+            "LabelText": "詳細メモ Markdown",
+            "ControlType": "MarkDown",
+            "FieldCss": "field-markdown",
+            "ViewerSwitchingType": 2,
+            "AllowImage": true,
+            "ThumbnailLimitSize": 600,
+            "MaxLength": 4000,
+            "ValidateRequired": true,
+            "DefaultInput": "## 背景\n\n- \n\n## 対応方針\n\n- ",
+            "InputGuide": "Markdownで背景、判断、作業ログを残します。"
+          },
+          {
+            "ColumnName": "DescriptionB",
+            "LabelText": "顧客向け説明",
+            "FieldCss": "field-wide",
+            "MaxLength": 1000,
+            "ValidateRequired": false,
+            "ClientRegexValidation": "^[^<>]*$",
+            "ServerRegexValidation": "^[^<>]*$",
+            "RegexValidationMessage": "HTMLタグのような < > は入力しないでください。",
+            "InputGuide": "外部共有できる表現で入力してください。"
+          },
+          {
+            "ColumnName": "DescriptionC",
+            "LabelText": "リッチテキスト備考",
+            "FieldCss": "field-rte",
+            "MaxLength": 3000,
+            "ViewerSwitchingType": 1,
+            "DefaultInput": "初期メモを入力してください。",
+            "InputGuide": "装飾付きの補足説明に使います。"
+          },
+          {
+            "ColumnName": "CheckA",
+            "LabelText": "承認済み",
+            "DefaultInput": false,
+            "ValidateRequired": false,
+            "InputGuide": "承認完了後にチェックします。"
+          },
+          {
+            "ColumnName": "CheckB",
+            "LabelText": "顧客確認要",
+            "DefaultInput": true,
+            "EditorReadOnly": false
+          },
+          {
+            "ColumnName": "CheckC",
+            "LabelText": "内部限定",
+            "DefaultInput": false,
+            "EditorReadOnly": true,
+            "Description": "自動判定または管理者のみが更新する想定の項目です。"
+          },
+          {
+            "ColumnName": "AttachmentsA",
+            "LabelText": "添付資料",
+            "ValidateRequired": false,
+            "AllowDeleteAttachments": true,
+            "LimitQuantity": 5,
+            "LimitSize": 20,
+            "TotalLimitSize": 80,
+            "ThumbnailLimitSize": 400,
+            "InputGuide": "見積書、設計資料、確認用画像を添付します。"
+          },
+          {
+            "ColumnName": "AttachmentsB",
+            "LabelText": "証跡ファイル",
+            "ValidateRequired": true,
+            "AllowDeleteAttachments": false,
+            "LimitQuantity": 3,
+            "LimitSize": 10,
+            "TotalLimitSize": 30,
+            "InputGuide": "承認メールや検収証跡など、削除させたくないファイル用です。"
+          }
+        ]
       }
     }
   ]

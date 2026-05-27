@@ -9,6 +9,7 @@ Pleasanter のサイトパッケージ JSON から、対象テーブルの `Site
 対応済みの `SiteSettings`:
 
 - `Views`
+- `Columns`
 - `EditorColumnHash`
 - `EditorColumns`
 - `GridColumns`
@@ -22,9 +23,12 @@ Pleasanter のサイトパッケージ JSON から、対象テーブルの `Site
 実地検証済み:
 
 - `Views`
+- `Columns`
 - `EditorColumnHash`
 - `Styles`
 - `Scripts`
+
+`Columns` は各項目の詳細設定です。表示名、選択肢、必須、最大文字数、入力検証、数値範囲、日付形式、Markdown/RTE、添付ファイル制限などを `ColumnName` 単位でマージします。
 
 `EditorColumnHash` はエディタ画面の項目配置です。`General` などのキーがタブ/見出し、値の配列が配置する列名です。基本項目、分類項目、数値項目、日付項目、説明項目、チェック項目、添付項目を同じ仕組みで扱えます。
 
@@ -110,7 +114,7 @@ samples/site-package.views.sample.json
 samples/site-package.multi-settings.sample.json
 ```
 
-エディタ項目配置:
+エディタ項目配置と項目詳細設定:
 
 ```text
 samples/site-package.editor-columns.sample.json
