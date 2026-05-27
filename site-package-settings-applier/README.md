@@ -8,6 +8,9 @@ Pleasanter のサイトパッケージ JSON から、対象テーブルの `Site
 
 対応済みの `SiteSettings`:
 
+- `all`
+- サイトパッケージ JSON に含まれる任意の `SiteSettings` キー
+
 - `Views`
 - `Columns`
 - `EditorColumnHash`
@@ -19,6 +22,8 @@ Pleasanter のサイトパッケージ JSON から、対象テーブルの `Site
 - `Htmls`
 - `Processes`
 - `StatusControls`
+
+`Views`、`Columns`、`Scripts` などの既知キーは、名前や `ColumnName` を使って差分を出します。未定義のキーは値をそのままコピーします。
 
 実地検証済み:
 
@@ -42,7 +47,7 @@ await PleasanterSitePackageApplier.applyEditorColumnsInCurrentPage(picked.packag
 });
 ```
 
-通知、リマインダー、インポート/エクスポート、アクセス制御などは、サイトパッケージ JSON の形と API 保存後の形を確認してから adapter を追加してください。
+通知、リマインダー、インポート/エクスポートなども、サイトパッケージ JSON の `SiteSettings` に含まれていれば `all` で適用対象になります。ただし、レコードデータ、権限、添付ファイル本体など、`SiteSettings` の外側にあるサイトパッケージ要素はこのツールの対象外です。
 
 ## 使い方
 
@@ -83,10 +88,50 @@ await PleasanterSitePackageApplier.runWizard();
 
 ## mode
 
-最初は `merge` を使ってください。
+最初は `merge` で dry-run し、完全同期したい場合は `replace` を使ってください。
 
 - `merge`: 同じ名前の設定を更新し、存在しない設定を追加します。対象テーブルにしかない設定は残します。
 - `replace`: 対象テーブルの設定を JSON 側に合わせます。対象テーブルにしかない設定は削除対象になります。
+
+完全にサイトパッケージへ合わせる例:
+
+```js
+const picked = await PleasanterSitePackageApplier.pickPackageFile();
+await PleasanterSitePackageApplier.applySiteSettings(picked.package, {
+  apiKey: "YOUR_API_KEY",
+  tenantId: 1,
+  targetSiteId: 3,
+  sections: "all",
+  mode: "replace",
+  dryRun: true
+});
+```
+
+dry-run の内容に問題がなければ `dryRun:false` に変更して適用します。
+
+## 適用後の確認
+
+一番確実なのは、適用元テーブルと適用先テーブルのサイトパッケージ JSON をダウンロードして比較する方法です。
+
+1. 適用元テーブルのサイトパッケージ JSON をダウンロードします。
+2. 適用先テーブルのサイトパッケージ JSON をダウンロードします。
+3. DevTools Console で `apply-site-package-settings.js` を読み込みます。
+4. 2つの JSON を読み込んで次を実行します。
+
+```js
+const source = await PleasanterSitePackageApplier.pickPackageFile();
+const target = await PleasanterSitePackageApplier.pickPackageFile();
+const diff = PleasanterSitePackageApplier.compareSitePackages(source.package, target.package, {
+  sections: "all"
+});
+console.log(diff.equal);
+console.table(diff.differences.map(x => ({
+  type: x.type,
+  section: x.section
+})));
+```
+
+`diff.equal` が `true` なら、比較対象の `SiteSettings` は一致しています。`false` の場合は `differences` の `section` を見て、どの設定が違うか確認してください。
 
 ## API
 

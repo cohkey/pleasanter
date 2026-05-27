@@ -21,6 +21,7 @@
   ];
   const objectSettingKeys = ["EditorColumnHash"];
   const supportedSettingKeys = [...arraySettingKeys, ...objectSettingKeys];
+  const defaultCompareIgnoreKeys = ["Timestamp"];
 
   const volatileKeys = new Set([
     "Id",
@@ -163,10 +164,10 @@
         }
       : await pickPackageFile();
     const sourceSettings = extractSiteSettings(picked.package);
-    const detectedSections = supportedSettingKeys.filter((key) => hasSupportedSection(sourceSettings, key));
+    const detectedSections = Object.keys(sourceSettings);
 
     if (detectedSections.length === 0) {
-      throw new Error("The selected JSON does not contain supported SiteSettings sections.");
+      throw new Error("The selected JSON does not contain SiteSettings sections.");
     }
 
     const tenantId = Number(
@@ -190,8 +191,8 @@
     const sectionsText = promptWithDefault(
       [
         "対象設定をカンマ区切りで入力してください。",
-        `JSON内の対応済み設定: ${detectedSections.join(", ")}`,
-        "例: Views または Views,Styles,Scripts または all"
+        `JSON内の設定: ${detectedSections.join(", ")}`,
+        "例: Views または Columns,EditorColumnHash,GridColumns または all"
       ].join("\n"),
       defaults.sections || detectedSections.join(",")
     );
@@ -255,6 +256,44 @@
     const currentSettings = await getSiteSettings(ctx);
     const sourceSettings = extractSiteSettings(sitePackage);
     return buildSettingsPlan(currentSettings, sourceSettings, ctx);
+  }
+
+  function compareSitePackages(sourcePackage, targetPackage, options = {}) {
+    const sourceSettings = extractSiteSettings(sourcePackage);
+    const targetSettings = extractSiteSettings(targetPackage);
+    return compareSiteSettings(sourceSettings, targetSettings, options);
+  }
+
+  function compareSiteSettings(sourceSettings, targetSettings, options = {}) {
+    const sections = resolveCompareSections(options.sections || "all", sourceSettings, targetSettings);
+    const ignoreKeys = new Set(options.ignoreKeys || defaultCompareIgnoreKeys);
+    const differences = [];
+
+    for (const section of sections) {
+      if (ignoreKeys.has(section)) continue;
+      const sourceHas = Object.prototype.hasOwnProperty.call(sourceSettings, section);
+      const targetHas = Object.prototype.hasOwnProperty.call(targetSettings, section);
+
+      if (!sourceHas && targetHas) {
+        differences.push({ type: "extra", section, target: clone(targetSettings[section]) });
+      } else if (sourceHas && !targetHas) {
+        differences.push({ type: "missing", section, source: clone(sourceSettings[section]) });
+      } else if (!sameValue(sourceSettings[section], targetSettings[section])) {
+        differences.push({
+          type: "different",
+          section,
+          source: clone(sourceSettings[section]),
+          target: clone(targetSettings[section])
+        });
+      }
+    }
+
+    return {
+      equal: differences.length === 0,
+      summary: summarize(differences),
+      sections,
+      differences
+    };
   }
 
   async function applySiteSettings(sitePackage, options) {
@@ -331,17 +370,26 @@
 
   function buildSettingsPlan(currentSettings, sourceSettings, ctx) {
     const sections = resolveSections(ctx.sections, sourceSettings);
-    const nextSettings = { ...currentSettings };
+    const replaceAll = ctx.mode === "replace" && ctx.sections.includes("all");
+    const nextSettings = replaceAll ? {} : { ...currentSettings };
     const operations = [];
 
+    if (replaceAll) {
+      for (const key of Object.keys(currentSettings)) {
+        if (!Object.prototype.hasOwnProperty.call(sourceSettings, key)) {
+          operations.push({ type: "delete", section: key, key, before: currentSettings[key] });
+        }
+      }
+    }
+
     for (const section of sections) {
-      if (!supportedSettingKeys.includes(section)) {
-        operations.push({
-          type: "skip",
-          section,
-          key: section,
-          reason: "Unsupported section for this pure-JS applier."
-        });
+      if (!Object.prototype.hasOwnProperty.call(sourceSettings, section)) {
+        if (ctx.mode === "replace" && Object.prototype.hasOwnProperty.call(nextSettings, section)) {
+          operations.push({ type: "delete", section, key: section, before: nextSettings[section] });
+          delete nextSettings[section];
+        } else {
+          operations.push({ type: "skip", section, key: section, reason: `${section} is not in source settings.` });
+        }
         continue;
       }
 
@@ -363,6 +411,10 @@
           sourceSettings[section],
           ctx.mode
         );
+        operations.push(...sectionPlan.operations);
+        nextSettings[section] = sectionPlan.nextValue;
+      } else {
+        const sectionPlan = buildRawSectionPlan(section, currentSettings[section], sourceSettings[section]);
         operations.push(...sectionPlan.operations);
         nextSettings[section] = sectionPlan.nextValue;
       }
@@ -399,9 +451,7 @@
       const normalizedSource = normalizeArrayItem(sourceItem, section);
 
       if (currentItem) {
-        const merged = isObjectItem(currentItem) && isObjectItem(normalizedSource)
-          ? { ...currentItem, ...normalizedSource, Id: currentItem.Id }
-          : normalizedSource;
+        const merged = ctxMergeItem(currentItem, normalizedSource, section, mode);
         operations.push({
           type: sameItem(currentItem, merged, section) ? "skip" : "update",
           section,
@@ -501,6 +551,23 @@
     return { operations, nextValue };
   }
 
+  function buildRawSectionPlan(section, currentValue, sourceValue) {
+    const nextValue = clone(sourceValue);
+    const exists = currentValue !== undefined;
+    return {
+      operations: [
+        {
+          type: exists ? (sameValue(currentValue, nextValue) ? "skip" : "update") : "create",
+          section,
+          key: section,
+          before: exists ? currentValue : undefined,
+          after: nextValue
+        }
+      ],
+      nextValue
+    };
+  }
+
   async function getSiteSettings(ctx) {
     const response = await request(ctx, `/api/items/${ctx.targetSiteId}/getsite`, {});
     return response?.Response?.Data?.SiteSettings || response?.SiteSettings || response || {};
@@ -550,6 +617,16 @@
       dryRun: options.dryRun !== false,
       sections
     };
+  }
+
+  function ctxMergeItem(currentItem, normalizedSource, section, mode) {
+    if (mode === "replace") return clone(normalizedSource);
+    if (isObjectItem(currentItem) && isObjectItem(normalizedSource)) {
+      const merged = { ...currentItem, ...normalizedSource };
+      if (section !== "Columns" && currentItem.Id != null) merged.Id = currentItem.Id;
+      return merged;
+    }
+    return normalizedSource;
   }
 
   function normalizeItem(view) {
@@ -644,9 +721,17 @@
 
   function resolveSections(requestedSections, sourceSettings) {
     if (requestedSections.includes("all")) {
-      return supportedSettingKeys.filter((key) => hasSupportedSection(sourceSettings, key));
+      return Object.keys(sourceSettings);
     }
     return requestedSections;
+  }
+
+  function resolveCompareSections(requestedSections, sourceSettings, targetSettings) {
+    const parsed = Array.isArray(requestedSections) ? requestedSections : parseSections(requestedSections);
+    if (parsed.includes("all")) {
+      return [...new Set([...Object.keys(sourceSettings), ...Object.keys(targetSettings)])].sort();
+    }
+    return parsed;
   }
 
   function summarizeVerified(settings, sections) {
@@ -735,7 +820,19 @@
   }
 
   function sameValue(a, b) {
-    return JSON.stringify(a) === JSON.stringify(b);
+    return JSON.stringify(canonicalize(a)) === JSON.stringify(canonicalize(b));
+  }
+
+  function canonicalize(value) {
+    if (Array.isArray(value)) return value.map(canonicalize);
+    if (isPlainObject(value)) {
+      return Object.fromEntries(
+        Object.keys(value)
+          .sort()
+          .map((key) => [key, canonicalize(value[key])])
+      );
+    }
+    return value;
   }
 
   function uniqueStrings(items) {
@@ -814,6 +911,8 @@
     applyViews,
     planEditorColumnsInCurrentPage,
     applyEditorColumnsInCurrentPage,
+    compareSitePackages,
+    compareSiteSettings,
     planSiteSettings,
     applySiteSettings,
     pickPackageFile,
