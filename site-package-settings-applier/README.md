@@ -106,6 +106,7 @@ await PleasanterSitePackageApplier.runWizard();
 9. 適用してよいか確認
 10. OK なら API で適用
 11. 再取得して反映結果を確認
+12. 適用予定の `SiteSettings` と再取得した `SiteSettings` を比較し、差分があれば `Post-apply compare` に表示
 
 `Notifications`、`Reminders` などの安全確認が必要な設定が対象に含まれる場合は、dry-run 前に追加確認が出ます。Pleasanter 標準 UI からエクスポートした JSON であることを確認できている場合だけ OK を選んでください。
 
@@ -205,6 +206,8 @@ console.table(diff.differences.map(x => ({
 ```
 
 `diff.equal` が `true` なら、比較対象の `SiteSettings` は一致しています。`false` の場合は `differences` の `section` を見て、どの設定が違うか確認してください。
+
+適用直後の戻り値にも `postApplyCompare` が入ります。`postApplyCompare.equal` が `false` の場合は、API が保存時に値を正規化したか、適用対象に含まれていない設定が残っています。エディタ項目の並び順も配列として比較するため、同じ項目でも順番が違えば差分になります。
 
 ## ブラウザE2E確認メモ
 

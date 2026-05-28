@@ -146,3 +146,37 @@ test("dry-run rejects invalid field CSS, default choices, and missing columns", 
   assert.deepEqual(result.plan.nextSettings.EditorColumnHash.General, ["Title"]);
   assert.deepEqual(result.plan.nextSettings.Exports[0].Columns, []);
 });
+
+test("site package comparison reports editor column order differences", () => {
+  const applier = loadApplier({});
+  const source = {
+    SiteSettings: {
+      EditorColumnHash: {
+        General: ["Title", "ClassA", "ClassB"]
+      }
+    }
+  };
+  const target = {
+    SiteSettings: {
+      EditorColumnHash: {
+        General: ["Title", "ClassB", "ClassA"]
+      }
+    }
+  };
+
+  const result = applier.compareSitePackages(source, target, {
+    sections: ["EditorColumnHash"]
+  });
+
+  assert.equal(result.equal, false);
+  assert.deepEqual(result.summary, {
+    create: 0,
+    update: 0,
+    delete: 0,
+    skip: 0,
+    different: 1
+  });
+  assert.equal(result.differences[0].section, "EditorColumnHash");
+  assert.deepEqual(result.differences[0].source.General, ["Title", "ClassA", "ClassB"]);
+  assert.deepEqual(result.differences[0].target.General, ["Title", "ClassB", "ClassA"]);
+});
