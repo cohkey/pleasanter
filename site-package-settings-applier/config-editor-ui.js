@@ -7,10 +7,18 @@
  * - No Node.js, build step, or external library is required.
  */
 (function attachPleasanterConfigEditor(global) {
-  const VERSION = "0.1.0";
+  const VERSION = "0.2.0";
   const rootId = "pleasanter-config-editor-root";
   const applierGlobalName = "PleasanterSitePackageApplier";
   const sections = ["Summary", "Views", "Editor Layout", "Columns", "Raw JSON", "Diff"];
+  const sectionLabels = {
+    Summary: "概要",
+    Views: "ビュー",
+    "Editor Layout": "エディタ配置",
+    Columns: "項目設定",
+    "Raw JSON": "JSON",
+    Diff: "差分確認"
+  };
   const unsafeSections = new Set([
     "Notifications",
     "Reminders",
@@ -101,7 +109,7 @@
           inset: 14px;
           z-index: 2147483000;
           display: grid;
-          grid-template-rows: auto 1fr 132px;
+          grid-template-rows: auto auto 1fr 132px;
           min-width: 880px;
           min-height: 600px;
           background: #f7f8f9;
@@ -116,6 +124,44 @@
           padding: 10px 12px;
           background: #ffffff;
           border-bottom: 1px solid #d6dbe1;
+        }
+        .pcu-workflow {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 1px;
+          background: #d6dbe1;
+          border-bottom: 1px solid #d6dbe1;
+        }
+        .pcu-step {
+          display: grid;
+          grid-template-columns: auto 1fr;
+          gap: 8px;
+          align-items: center;
+          min-height: 42px;
+          padding: 8px 12px;
+          background: #ffffff;
+        }
+        .pcu-step-number {
+          display: inline-grid;
+          place-items: center;
+          width: 24px;
+          height: 24px;
+          border: 1px solid #8aa2a8;
+          background: #eef7f5;
+          color: #0f766e;
+          font-weight: 700;
+        }
+        .pcu-step strong {
+          display: block;
+          font-size: 12px;
+        }
+        .pcu-step-detail {
+          display: block;
+          color: #5b6470;
+          font-size: 11px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
         .pcu-title {
           display: flex;
@@ -221,6 +267,16 @@
           text-align: left;
           background: transparent;
           border-color: transparent;
+        }
+        .pcu-nav .pcu-nav-title {
+          display: block;
+          font-weight: 700;
+        }
+        .pcu-nav .pcu-nav-subtitle {
+          display: block;
+          margin-top: 2px;
+          color: #6b7280;
+          font-size: 11px;
         }
         .pcu-nav button[aria-current="true"] {
           background: #ffffff;
@@ -369,6 +425,49 @@
           background: #ffffff;
           padding: 8px;
         }
+        .pcu-section-head {
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 10px;
+          align-items: start;
+          margin-bottom: 12px;
+        }
+        .pcu-section-head h2 {
+          margin-bottom: 3px;
+        }
+        .pcu-section-head p {
+          margin: 0;
+          color: #5b6470;
+          font-size: 12px;
+        }
+        .pcu-field-stack {
+          display: grid;
+          gap: 4px;
+        }
+        .pcu-field-stack span {
+          color: #4b5563;
+          font-size: 11px;
+          font-weight: 700;
+        }
+        .pcu-chip-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+        }
+        .pcu-chip {
+          display: inline-flex;
+          align-items: center;
+          max-width: 180px;
+          padding: 2px 7px;
+          border: 1px solid #cfd6dd;
+          background: #ffffff;
+          color: #374151;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 11px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
         .pcu-message.error {
           border-color: #fca5a5;
           background: #fff1f2;
@@ -381,39 +480,40 @@
           display: none !important;
         }
       </style>
-      <div class="pcu-shell" role="dialog" aria-label="Pleasanter Site Package Config Editor">
+      <div class="pcu-shell" role="dialog" aria-label="プリザンター設定エディタ">
         <div class="pcu-toolbar">
           <div class="pcu-topline">
             <div class="pcu-title">
-              <strong>Site Package Config Editor</strong>
+              <strong>プリザンター設定エディタ</strong>
               <span id="pcu-package-title"></span>
             </div>
             <div class="pcu-actions">
-              <button data-action="load-json">Load JSON</button>
-              <button data-action="fetch-source">Fetch Source</button>
-              <button data-action="load-applier">Load Applier JS</button>
-              <button data-action="import-tsv">Import TSV</button>
-              <button data-action="export-tsv">Export TSV</button>
-              <button data-action="export-json">Export JSON</button>
+              <button data-action="load-json">JSONを開く</button>
+              <button data-action="fetch-source">元テーブル取得</button>
+              <button data-action="load-applier">適用JSを読込</button>
+              <button data-action="import-tsv">TSV取込</button>
+              <button data-action="export-tsv">TSV書出</button>
+              <button data-action="export-json">JSON保存</button>
             </div>
           </div>
           <div class="pcu-fields">
-            <label>Tenant <input id="pcu-tenant-id" data-field="tenantId" size="4"></label>
-            <label>Source <input id="pcu-source-site-id" data-field="sourceSiteId" size="5"></label>
-            <label>Target <input id="pcu-target-site-id" data-field="targetSiteId" size="5"></label>
-            <label>API Key <input id="pcu-api-key" data-field="apiKey" type="password" size="18"></label>
-            <label>Mode
+            <label>テナント <input id="pcu-tenant-id" data-field="tenantId" size="4"></label>
+            <label>元SiteId <input id="pcu-source-site-id" data-field="sourceSiteId" size="5"></label>
+            <label>適用先SiteId <input id="pcu-target-site-id" data-field="targetSiteId" size="5"></label>
+            <label>APIキー <input id="pcu-api-key" data-field="apiKey" type="password" size="18"></label>
+            <label>モード
               <select id="pcu-mode" data-field="mode">
-                <option value="replace">replace</option>
-                <option value="merge">merge</option>
+                <option value="replace">完全同期</option>
+                <option value="merge">追加更新</option>
               </select>
             </label>
-            <label><input id="pcu-unsafe" data-field="allowUnsafeSections" type="checkbox"> unsafe</label>
-            <button data-action="dry-run">Dry-run</button>
-            <button class="pcu-primary" data-action="apply">Apply</button>
-            <button data-action="close">Close</button>
+            <label><input id="pcu-unsafe" data-field="allowUnsafeSections" type="checkbox"> 危険設定も含める</label>
+            <button data-action="dry-run">差分確認</button>
+            <button class="pcu-primary" data-action="apply">適用</button>
+            <button data-action="close">閉じる</button>
           </div>
         </div>
+        <div class="pcu-workflow" id="pcu-workflow"></div>
         <div class="pcu-main">
           <nav class="pcu-nav" id="pcu-nav"></nav>
           <main class="pcu-panel" id="pcu-panel"></main>
@@ -504,6 +604,7 @@
     if (!shadow) return;
     state.validation = validateSettings(state.workingSettings);
     renderHeaderOnly();
+    renderWorkflow();
     renderNav();
     renderPanel();
     renderLog();
@@ -522,12 +623,29 @@
     const title = shadow.getElementById("pcu-package-title");
     if (title) {
       const bits = [
-        state.packageFileName || "No package loaded",
-        state.siteTitle ? `site: ${state.siteTitle}` : "",
-        hasApplier() ? "applier: loaded" : "applier: not loaded"
+        state.packageFileName || "JSON未読込",
+        state.siteTitle ? `テーブル: ${state.siteTitle}` : "",
+        hasApplier() ? "適用JS: 読込済み" : "適用JS: 未読込"
       ].filter(Boolean);
       title.textContent = bits.join(" / ");
     }
+  }
+
+  function renderWorkflow() {
+    const workflow = shadow.getElementById("pcu-workflow");
+    if (!workflow) return;
+    const steps = [
+      ["読込", state.packageFileName ? state.packageFileName : "JSONを開くか元テーブル取得"],
+      ["編集", `${state.workingSettings.Views?.length || 0} ビュー / ${state.workingSettings.Columns?.length || 0} 項目`],
+      ["確認", state.dryRun ? summarizeOperations(state.dryRun.plan?.summary) : "差分確認待ち"],
+      ["適用", state.applyResult ? `完了: ${state.applyResult.postApplyCompare?.equal ? "一致" : "差分あり"}` : "未適用"]
+    ];
+    workflow.innerHTML = steps.map(([title, detail], index) => `
+      <div class="pcu-step">
+        <span class="pcu-step-number">${index + 1}</span>
+        <span><strong>${escapeHtml(title)}</strong><span class="pcu-step-detail">${escapeHtml(detail)}</span></span>
+      </div>
+    `).join("");
   }
 
   function renderNav() {
@@ -536,11 +654,29 @@
       const badge = sectionBadge(section);
       return `
         <button data-action="section" data-section="${escapeHtml(section)}" aria-current="${state.activeSection === section}">
-          <span>${escapeHtml(section)}</span>
+          <span>
+            <span class="pcu-nav-title">${escapeHtml(sectionLabel(section))}</span>
+            <span class="pcu-nav-subtitle">${escapeHtml(sectionSubtitle(section))}</span>
+          </span>
           ${badge ? `<span class="pcu-badge ${badge.kind}">${escapeHtml(badge.text)}</span>` : ""}
         </button>
       `;
     }).join("");
+  }
+
+  function sectionLabel(section) {
+    return sectionLabels[section] || section;
+  }
+
+  function sectionSubtitle(section) {
+    return {
+      Summary: "読込状態とエラー",
+      Views: "一覧・カンバン・条件",
+      "Editor Layout": "入力画面の並び",
+      Columns: "項目名・必須・選択肢",
+      "Raw JSON": "直接編集",
+      Diff: "変更内容と適用結果"
+    }[section] || "";
   }
 
   function sectionBadge(section) {
@@ -578,19 +714,21 @@
     const settings = state.workingSettings || {};
     const unsafeInPackage = Object.keys(settings).filter((key) => unsafeSections.has(key));
     const metrics = [
-      ["Sections", Object.keys(settings).length],
-      ["Views", settings.Views?.length || 0],
-      ["Editor groups", Object.keys(settings.EditorColumnHash || {}).length],
-      ["Columns", settings.Columns?.length || 0],
-      ["Errors", state.validation.errors.length],
-      ["Warnings", state.validation.warnings.length],
-      ["Unsafe sections", unsafeInPackage.length],
-      ["Dirty", state.dirty ? "Yes" : "No"]
+      ["設定セクション", Object.keys(settings).length],
+      ["ビュー", settings.Views?.length || 0],
+      ["エディタ枠", Object.keys(settings.EditorColumnHash || {}).length],
+      ["項目", settings.Columns?.length || 0],
+      ["エラー", state.validation.errors.length],
+      ["警告", state.validation.warnings.length],
+      ["危険設定", unsafeInPackage.length],
+      ["変更", state.dirty ? "あり" : "なし"]
     ];
     return `
-      <h2>Summary</h2>
-      <div class="pcu-grid four">
-        <div class="pcu-grid four"></div>
+      <div class="pcu-section-head">
+        <div>
+          <h2>概要</h2>
+          <p>読み込んだ設定、検証結果、適用前後の状態を確認します。</p>
+        </div>
       </div>
       <div class="pcu-grid" style="grid-template-columns: repeat(4, minmax(120px, 1fr)); margin-bottom: 12px;">
         ${metrics.map(([label, value]) => `
@@ -600,12 +738,12 @@
           </div>
         `).join("")}
       </div>
-      <h3>Validation</h3>
+      <h3>検証結果</h3>
       ${renderMessages()}
-      <h3>SiteSettings keys</h3>
+      <h3>SiteSettings</h3>
       <div class="pcu-table-wrap">
         <table>
-          <thead><tr><th>Key</th><th>Type</th><th>Summary</th><th>Safety</th></tr></thead>
+          <thead><tr><th>キー</th><th>種類</th><th>内容</th><th>安全</th></tr></thead>
           <tbody>
             ${Object.keys(settings).sort().map((key) => `
               <tr>
@@ -614,7 +752,7 @@
                 <td>${escapeHtml(valueSummary(settings[key]))}</td>
                 <td>${unsafeSections.has(key) ? '<span class="pcu-badge warn">unsafe</span>' : ''}</td>
               </tr>
-            `).join("") || '<tr><td colspan="4">No settings loaded.</td></tr>'}
+            `).join("") || '<tr><td colspan="4">設定は未読込です。</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -626,7 +764,7 @@
       ...state.validation.errors.map((message) => ({ kind: "error", message })),
       ...state.validation.warnings.map((message) => ({ kind: "warn", message }))
     ];
-    if (messages.length === 0) return '<div class="pcu-empty">No validation messages.</div>';
+    if (messages.length === 0) return '<div class="pcu-empty">エラーはありません。</div>';
     return `<div class="pcu-errors">${messages.map((item) => `
       <div class="pcu-message ${item.kind}">${escapeHtml(item.message)}</div>
     `).join("")}</div>`;
@@ -635,20 +773,23 @@
   function renderViews() {
     const views = ensureArray("Views");
     return `
-      <div class="pcu-subbar">
-        <h2>Views</h2>
-        <button data-action="add-view">Add View</button>
+      <div class="pcu-section-head">
+        <div>
+          <h2>ビュー</h2>
+          <p>一覧、カンバン、カレンダーごとの表示列、絞り込み、並び替えを編集します。</p>
+        </div>
+        <button data-action="add-view">ビュー追加</button>
       </div>
       <div class="pcu-table-wrap">
         <table>
           <thead>
             <tr>
-              <th style="width: 150px;">Name</th>
-              <th style="width: 110px;">DefaultMode</th>
-              <th>GridColumns</th>
-              <th>ColumnFilterHash</th>
-              <th>ColumnSorterHash</th>
-              <th style="width: 105px;">Actions</th>
+              <th style="width: 170px;">ビュー名</th>
+              <th style="width: 120px;">表示形式</th>
+              <th>表示列</th>
+              <th>絞り込み</th>
+              <th>並び替え</th>
+              <th style="width: 120px;">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -657,23 +798,27 @@
                 <td><input data-index="${index}" data-view-field="Name" value="${escapeAttr(view.Name || "")}"></td>
                 <td>
                   <select data-index="${index}" data-view-field="DefaultMode">
-                    ${["Index", "Kamban", "Calendar"].map((mode) => `
-                      <option value="${mode}" ${view.DefaultMode === mode ? "selected" : ""}>${mode}</option>
+                    ${[
+                      ["Index", "一覧"],
+                      ["Kamban", "カンバン"],
+                      ["Calendar", "カレンダー"]
+                    ].map(([mode, label]) => `
+                      <option value="${mode}" ${view.DefaultMode === mode ? "selected" : ""}>${label}</option>
                     `).join("")}
                   </select>
                 </td>
-                <td><textarea data-index="${index}" data-view-field="GridColumns">${escapeHtml(arrayToLines(view.GridColumns))}</textarea></td>
-                <td><textarea data-index="${index}" data-view-json-field="ColumnFilterHash">${escapeHtml(formatInlineJson(view.ColumnFilterHash || {}))}</textarea></td>
-                <td><textarea data-index="${index}" data-view-json-field="ColumnSorterHash">${escapeHtml(formatInlineJson(view.ColumnSorterHash || {}))}</textarea></td>
+                <td><textarea placeholder="列名を1行ずつ入力" data-index="${index}" data-view-field="GridColumns">${escapeHtml(arrayToLines(view.GridColumns))}</textarea></td>
+                <td><textarea placeholder='例: {"Status":"[\"300\"]"}' data-index="${index}" data-view-json-field="ColumnFilterHash">${escapeHtml(formatInlineJson(view.ColumnFilterHash || {}))}</textarea></td>
+                <td><textarea placeholder='例: {"UpdatedTime":"desc"}' data-index="${index}" data-view-json-field="ColumnSorterHash">${escapeHtml(formatInlineJson(view.ColumnSorterHash || {}))}</textarea></td>
                 <td>
                   <div class="pcu-row-actions">
-                    <button data-action="move-view" data-index="${index}" data-delta="-1" ${index === 0 ? "disabled" : ""}>Up</button>
-                    <button data-action="move-view" data-index="${index}" data-delta="1" ${index === views.length - 1 ? "disabled" : ""}>Down</button>
-                    <button class="pcu-danger" data-action="delete-view" data-index="${index}">Delete</button>
+                    <button data-action="move-view" data-index="${index}" data-delta="-1" ${index === 0 ? "disabled" : ""}>上へ</button>
+                    <button data-action="move-view" data-index="${index}" data-delta="1" ${index === views.length - 1 ? "disabled" : ""}>下へ</button>
+                    <button class="pcu-danger" data-action="delete-view" data-index="${index}">削除</button>
                   </div>
                 </td>
               </tr>
-            `).join("") || '<tr><td colspan="6">No views.</td></tr>'}
+            `).join("") || '<tr><td colspan="6">ビューはありません。</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -683,21 +828,34 @@
   function renderEditorLayout() {
     const hash = ensureObject("EditorColumnHash");
     const entries = Object.entries(hash);
+    const availableColumns = displayColumnNames(state.workingSettings);
     return `
-      <div class="pcu-subbar">
-        <h2>Editor Layout</h2>
-        <button data-action="add-editor-group">Add Group</button>
+      <div class="pcu-section-head">
+        <div>
+          <h2>エディタ配置</h2>
+          <p>入力画面の見出しごとに、表示する項目と順番を編集します。</p>
+        </div>
+        <button data-action="add-editor-group">見出し追加</button>
+      </div>
+      <div class="pcu-message" style="margin-bottom: 10px;">
+        <strong>利用できる項目</strong>
+        <div class="pcu-chip-list" style="margin-top: 8px;">
+          ${[...availableColumns].slice(0, 120).map((name) => `<span class="pcu-chip">${escapeHtml(name)}</span>`).join("")}
+        </div>
       </div>
       <div class="pcu-grid">
         ${entries.map(([group, items]) => `
           <div class="pcu-message">
             <div class="pcu-subbar">
-              <label>Group <input data-editor-group-name="${escapeAttr(group)}" value="${escapeAttr(group)}"></label>
-              <button class="pcu-danger" data-action="delete-editor-group" data-group="${escapeAttr(group)}">Delete</button>
+              <label>見出し <input data-editor-group-name="${escapeAttr(group)}" value="${escapeAttr(group)}"></label>
+              <button class="pcu-danger" data-action="delete-editor-group" data-group="${escapeAttr(group)}">削除</button>
             </div>
-            <textarea data-editor-group-items="${escapeAttr(group)}">${escapeHtml(arrayToLines(items))}</textarea>
+            <div class="pcu-chip-list" style="margin-bottom: 6px;">
+              ${(items || []).map((name) => `<span class="pcu-chip">${escapeHtml(name)}</span>`).join("")}
+            </div>
+            <textarea placeholder="この見出しに置く列名を1行ずつ入力" data-editor-group-items="${escapeAttr(group)}">${escapeHtml(arrayToLines(items))}</textarea>
           </div>
-        `).join("") || '<div class="pcu-empty">No editor groups.</div>'}
+        `).join("") || '<div class="pcu-empty">エディタ配置はありません。</div>'}
       </div>
     `;
   }
@@ -705,23 +863,26 @@
   function renderColumns() {
     const columns = ensureArray("Columns");
     return `
-      <div class="pcu-subbar">
-        <h2>Columns</h2>
-        <button data-action="add-column">Add Column</button>
+      <div class="pcu-section-head">
+        <div>
+          <h2>項目設定</h2>
+          <p>表示名、必須、選択肢、既定値、入力形式を項目ごとに編集します。</p>
+        </div>
+        <button data-action="add-column">項目追加</button>
       </div>
       <div class="pcu-table-wrap">
         <table>
           <thead>
             <tr>
-              <th style="width: 120px;">ColumnName</th>
-              <th style="width: 150px;">LabelText</th>
-              <th style="width: 70px;">Required</th>
-              <th style="width: 105px;">ControlType</th>
-              <th>ChoicesText</th>
-              <th style="width: 110px;">DefaultInput</th>
-              <th style="width: 105px;">FieldCss</th>
-              <th style="width: 92px;">TextAlign</th>
-              <th style="width: 72px;">Actions</th>
+              <th style="width: 120px;">項目コード</th>
+              <th style="width: 150px;">表示名</th>
+              <th style="width: 70px;">必須</th>
+              <th style="width: 105px;">入力形式</th>
+              <th>選択肢</th>
+              <th style="width: 110px;">既定値</th>
+              <th style="width: 105px;">表示幅</th>
+              <th style="width: 92px;">文字揃え</th>
+              <th style="width: 72px;">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -737,7 +898,7 @@
                     `).join("")}
                   </select>
                 </td>
-                <td><textarea data-index="${index}" data-column-field="ChoicesText">${escapeHtml(column.ChoicesText || "")}</textarea></td>
+                <td><textarea placeholder="10,選択肢A&#10;20,選択肢B" data-index="${index}" data-column-field="ChoicesText">${escapeHtml(column.ChoicesText || "")}</textarea></td>
                 <td><input data-index="${index}" data-column-field="DefaultInput" value="${escapeAttr(column.DefaultInput ?? "")}"></td>
                 <td>
                   <select data-index="${index}" data-column-field="FieldCss">
@@ -747,9 +908,9 @@
                   </select>
                 </td>
                 <td><input data-index="${index}" data-column-field="TextAlign" value="${escapeAttr(column.TextAlign ?? "")}"></td>
-                <td><button class="pcu-danger" data-action="delete-column" data-index="${index}">Delete</button></td>
+                <td><button class="pcu-danger" data-action="delete-column" data-index="${index}">削除</button></td>
               </tr>
-            `).join("") || '<tr><td colspan="9">No columns.</td></tr>'}
+            `).join("") || '<tr><td colspan="9">項目設定はありません。</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -758,12 +919,15 @@
 
   function renderRawJson() {
     return `
-      <div class="pcu-subbar">
-        <h2>Raw JSON</h2>
+      <div class="pcu-section-head">
+        <div>
+          <h2>JSON</h2>
+          <p>フォーム化していない設定を直接確認・編集します。</p>
+        </div>
         <div class="pcu-row-actions">
-          <button data-action="format-raw">Format</button>
-          <button data-action="apply-raw">Apply Raw</button>
-          <button data-action="copy-json">Copy Package JSON</button>
+          <button data-action="format-raw">整形</button>
+          <button data-action="apply-raw">JSONを反映</button>
+          <button data-action="copy-json">コピー</button>
         </div>
       </div>
       <textarea id="pcu-raw-json" class="pcu-code">${escapeHtml(JSON.stringify(state.workingSettings || {}, null, 2))}</textarea>
@@ -775,27 +939,32 @@
     const dryOps = state.dryRun?.plan?.operations || [];
     const post = state.applyResult?.postApplyCompare;
     return `
-      <h2>Diff</h2>
-      <div class="pcu-grid three" style="margin-bottom: 12px;">
-        <div class="pcu-metric"><div class="label">Local diff sections</div><div class="value">${localDiff.length}</div></div>
-        <div class="pcu-metric"><div class="label">Dry-run operations</div><div class="value">${dryOps.length}</div></div>
-        <div class="pcu-metric"><div class="label">Post-apply equal</div><div class="value">${post ? String(post.equal) : "-"}</div></div>
+      <div class="pcu-section-head">
+        <div>
+          <h2>差分確認</h2>
+          <p>編集前との差分、dry-run の操作、適用後の一致確認を見ます。</p>
+        </div>
       </div>
-      <h3>Source JSON vs Working JSON</h3>
+      <div class="pcu-grid three" style="margin-bottom: 12px;">
+        <div class="pcu-metric"><div class="label">編集中の差分</div><div class="value">${localDiff.length}</div></div>
+        <div class="pcu-metric"><div class="label">適用予定の操作</div><div class="value">${dryOps.length}</div></div>
+        <div class="pcu-metric"><div class="label">適用後一致</div><div class="value">${post ? (post.equal ? "一致" : "差分あり") : "-"}</div></div>
+      </div>
+      <h3>元JSON と編集中JSON</h3>
       ${renderSimpleDiffTable(localDiff)}
-      <h3>Dry-run operations</h3>
+      <h3>dry-run 操作</h3>
       ${renderOperationsTable(dryOps)}
-      <h3>Post-apply compare</h3>
-      ${post ? renderSimpleDiffTable(post.differences || []) : '<div class="pcu-empty">No apply result yet.</div>'}
+      <h3>適用後比較</h3>
+      ${post ? renderSimpleDiffTable(post.differences || []) : '<div class="pcu-empty">まだ適用していません。</div>'}
     `;
   }
 
   function renderSimpleDiffTable(items) {
-    if (!items.length) return '<div class="pcu-empty">No differences.</div>';
+    if (!items.length) return '<div class="pcu-empty">差分はありません。</div>';
     return `
       <div class="pcu-table-wrap">
         <table>
-          <thead><tr><th>Type</th><th>Section</th><th>Source</th><th>Target</th></tr></thead>
+          <thead><tr><th>種類</th><th>セクション</th><th>元</th><th>変更後</th></tr></thead>
           <tbody>
             ${items.map((item) => `
               <tr>
@@ -812,11 +981,11 @@
   }
 
   function renderOperationsTable(operations) {
-    if (!operations.length) return '<div class="pcu-empty">No dry-run operations.</div>';
+    if (!operations.length) return '<div class="pcu-empty">dry-run の操作はありません。</div>';
     return `
       <div class="pcu-table-wrap">
         <table>
-          <thead><tr><th style="width: 80px;">Type</th><th style="width: 140px;">Section</th><th>Key</th><th>Reason</th></tr></thead>
+          <thead><tr><th style="width: 80px;">種類</th><th style="width: 140px;">セクション</th><th>対象</th><th>理由</th></tr></thead>
           <tbody>
             ${operations.map((operation) => `
               <tr>
@@ -1200,6 +1369,12 @@
       if (column?.ColumnName) names.add(String(column.ColumnName));
     }
     return names;
+  }
+
+  function displayColumnNames(settings) {
+    const configured = (settings.Columns || []).map((column) => column?.ColumnName).filter(Boolean);
+    const system = ["ResultId", "Ver", "Title", "Body", "Status", "Manager", "Owner", "Comments", "UpdatedTime"];
+    return [...new Set([...system, ...configured])];
   }
 
   function columnsToTsv(columns) {
