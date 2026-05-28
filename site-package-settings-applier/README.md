@@ -45,6 +45,14 @@ Pleasanter のサイトパッケージ JSON から、対象テーブルの `Site
 - `EditorColumnHash`
 - `Styles`
 - `Scripts`
+- `Notifications`
+- `Reminders`
+- `Exports`
+- `Processes`
+- `Htmls`
+- `ServerScripts`
+
+`Notifications` と `Reminders` は、Pleasanter の画面操作で作成し、標準の「サイトパッケージのエクスポート」から出力した JSON を使う条件で検証しています。手書き JSON や別バージョン由来の JSON は壊れやすいため、通常は dry-run とサイトパッケージ比較を必ず挟んでください。
 
 `Columns` は各項目の詳細設定です。表示名、選択肢、必須、最大文字数、入力検証、数値範囲、日付形式、Markdown/RTE、添付ファイル制限などを `ColumnName` 単位でマージします。
 
@@ -99,6 +107,8 @@ await PleasanterSitePackageApplier.runWizard();
 10. OK なら API で適用
 11. 再取得して反映結果を確認
 
+`Notifications`、`Reminders` などの安全確認が必要な設定が対象に含まれる場合は、dry-run 前に追加確認が出ます。Pleasanter 標準 UI からエクスポートした JSON であることを確認できている場合だけ OK を選んでください。
+
 ## mode
 
 最初は `merge` で dry-run し、完全同期したい場合は `replace` を使ってください。
@@ -121,6 +131,56 @@ await PleasanterSitePackageApplier.applySiteSettings(picked.package, {
 ```
 
 dry-run の内容に問題がなければ `dryRun:false` に変更して適用します。
+
+Pleasanter からダウンロードした site-package JSON の `Notifications` / `Reminders` も含めて完全同期する例:
+
+```js
+const picked = await PleasanterSitePackageApplier.pickPackageFile();
+const dryRun = await PleasanterSitePackageApplier.applySiteSettings(picked.package, {
+  apiKey: "YOUR_API_KEY",
+  tenantId: 1,
+  targetSiteId: 3,
+  sections: "all",
+  mode: "replace",
+  dryRun: true,
+  allowUnsafeSections: true
+});
+
+console.table(dryRun.plan.operations.map((x) => ({
+  type: x.type,
+  section: x.section,
+  key: x.key,
+  reason: x.reason || ""
+})));
+```
+
+dry-run の削除・更新内容を確認して問題なければ、同じオプションで `dryRun:false` に変更して適用します。`allowUnsafeSections:true` は、Pleasanter から実際にエクスポートした JSON に限定して使ってください。
+
+## 参照値の検証
+
+デフォルトでは、適用前に列参照と一部の選択肢値を検証します。
+
+- `GridColumns`、`EditorColumnHash`、`Views`、`Exports.Columns` などに対象テーブルへ存在しない列名がある場合は、その参照を適用しません。
+- `Columns` に対象テーブルへ存在しない `ColumnName` がある場合は、その項目設定を適用しません。
+- 分類項目の `ChoicesText` に存在しない値が `DefaultInput` に指定されている場合は、`DefaultInput` だけ適用しません。
+- UI の既知プルダウンに存在しない値は適用しません。
+- エディタ項目の `FieldCss` は列種別ごとに検証します。Pleasanter の画面で `? field-title` のように表示される値は、`select` の値として存在して見えても不正値として扱います。
+- `ControlType:"RTEditor"` の説明項目で `FieldCss` が空、または不正な場合は、画面で `? field-markdown` にならないよう `field-wide` に正規化します。
+
+除外した値は dry-run の `plan.operations` に `type: "skip"` と `reason` 付きで出力します。特殊な列を使う環境では `extraValidColumns` で明示的に許可できます。
+
+```js
+await PleasanterSitePackageApplier.applySiteSettings(picked.package, {
+  apiKey: "YOUR_API_KEY",
+  tenantId: 1,
+  targetSiteId: 3,
+  sections: "all",
+  mode: "replace",
+  dryRun: true,
+  allowUnsafeSections: true,
+  extraValidColumns: ["CustomColumn1"]
+});
+```
 
 ## 適用後の確認
 
@@ -145,6 +205,27 @@ console.table(diff.differences.map(x => ({
 ```
 
 `diff.equal` が `true` なら、比較対象の `SiteSettings` は一致しています。`false` の場合は `differences` の `section` を見て、どの設定が違うか確認してください。
+
+## ブラウザE2E確認メモ
+
+2026-05-28 に次の流れで確認しています。
+
+1. SiteId 1 の管理画面で、エディタ、フィルター、ビュー、通知、リマインダー、プロセス、エクスポート、スクリプト、HTML、サーバスクリプトをブラウザ操作で設定します。
+2. Pleasanter 標準 UI の「サイトパッケージのエクスポート」から、通知とリマインダーを含めて JSON をダウンロードします。
+3. このツールを DevTools Console で読み込み、SiteId 3 に `mode:"replace"`、`sections:"all"`、`allowUnsafeSections:true` で適用します。
+4. SiteId 3 の管理画面で、エディタ、フィルター、ビュー、通知、リマインダー、プロセス、エクスポート、スクリプト、HTML、サーバスクリプトの各タブがアプリケーションエラーなしで開けることを確認します。
+5. SiteId 3 もサイトパッケージとして再ダウンロードし、SiteId 1 の `SiteSettings` と比較します。
+
+確認結果は `Views`、`EditorColumnHash`、フィルター系設定、`Notifications`、`Reminders`、`Processes`、`Exports`、`Scripts`、`Htmls`、`ServerScripts` が一致し、差分はありませんでした。SiteId 3 の全エディタ項目詳細ダイアログも開き、存在しない選択肢や `?` 表示がないことを確認しています。
+
+エディタ項目の不正なプルダウン値は、管理画面の全エディタ項目詳細ダイアログを順番に開き、各 `select` の選択済み表示を確認します。選択肢テキストが `?`、`? value`、または `？` を含む場合は、Pleasanter が未知の保存値を表示している状態なので不正です。適用元と適用先の両方でこの確認を行います。
+
+自動テストでは、少なくとも次を実行します。
+
+```text
+node --check site-package-settings-applier/apply-site-package-settings.js
+node --test site-package-settings-applier/tests/reference-validation.test.mjs
+```
 
 ## API
 
