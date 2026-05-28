@@ -1,0 +1,348 @@
+{
+  "PackageName": "Comprehensive SiteSettings sync sample",
+  "Sites": [
+    {
+      "Title": "動作確認テーブル - 全設定サンプル",
+      "SiteId": 1,
+      "ReferenceType": "Results",
+      "SiteSettings": {
+        "Version": 1.017,
+        "ReferenceType": "Results",
+        "GridColumns": [
+          "ResultId",
+          "Title",
+          "ClassA",
+          "ClassB",
+          "ClassC",
+          "NumA",
+          "NumB",
+          "DateA",
+          "DateB",
+          "CheckA",
+          "Status",
+          "Manager",
+          "UpdatedTime"
+        ],
+        "EditorColumnHash": {
+          "General": [
+            "ResultId",
+            "Ver",
+            "Title",
+            "Body",
+            "Status",
+            "Manager",
+            "Owner",
+            "ClassA",
+            "ClassB",
+            "ClassC",
+            "NumA",
+            "NumB",
+            "NumC",
+            "DateA",
+            "DateB",
+            "DateC",
+            "DescriptionA",
+            "DescriptionB",
+            "DescriptionC",
+            "CheckA",
+            "CheckB",
+            "CheckC",
+            "AttachmentsA",
+            "AttachmentsB",
+            "Comments"
+          ]
+        },
+        "GeneralTabLabelText": "基本入力",
+        "Columns": [
+          {
+            "ColumnName": "Title",
+            "LabelText": "件名",
+            "InputGuide": "案件名や作業名を160文字以内で入力してください。",
+            "MaxLength": 160,
+            "NoDuplication": true,
+            "MessageWhenDuplicated": "同じ件名のレコードが既にあります。",
+            "FieldCss": "field-title"
+          },
+          {
+            "ColumnName": "Body",
+            "LabelText": "概要",
+            "InputGuide": "目的、背景、完了条件を短く書きます。",
+            "ValidateRequired": true,
+            "MaxLength": 1200,
+            "ClientRegexValidation": "^[\\s\\S]{20,1200}$",
+            "ServerRegexValidation": "^[\\s\\S]{20,1200}$",
+            "RegexValidationMessage": "概要は20文字以上1200文字以内で入力してください。",
+            "FieldCss": "field-wide"
+          },
+          {
+            "ColumnName": "ClassA",
+            "LabelText": "優先度",
+            "GridLabelText": "優先",
+            "InputGuide": "優先度を選択してください。",
+            "ChoicesText": "100,高\n200,中\n300,低",
+            "UseSearch": true,
+            "NotInsertBlankChoice": true,
+            "DefaultInput": "200",
+            "ValidateRequired": true
+          },
+          {
+            "ColumnName": "ClassB",
+            "LabelText": "対応区分",
+            "InputGuide": "現在の作業区分を選択します。",
+            "ChoicesText": "10,調査\n20,実装\n30,レビュー\n40,保留",
+            "DefaultInput": "10",
+            "ChoicesControlType": "Radio",
+            "ValidateRequired": true,
+            "FieldCss": "field-radio"
+          },
+          {
+            "ColumnName": "ClassC",
+            "LabelText": "管理コード",
+            "InputGuide": "例: PLS-0001",
+            "ValidateRequired": true,
+            "MaxLength": 20,
+            "ClientRegexValidation": "^[A-Z]{3}-[0-9]{4}$",
+            "ServerRegexValidation": "^[A-Z]{3}-[0-9]{4}$",
+            "RegexValidationMessage": "管理コードは ABC-1234 の形式で入力してください。",
+            "NoDuplication": true
+          },
+          {
+            "ColumnName": "NumA",
+            "LabelText": "見積金額",
+            "InputGuide": "税抜の見積金額を入力してください。",
+            "DefaultInput": "0",
+            "ControlType": "Normal",
+            "ValidateRequired": true,
+            "Unit": "円",
+            "Min": 0,
+            "Max": 99999999,
+            "TextAlign": 20
+          },
+          {
+            "ColumnName": "NumB",
+            "LabelText": "進捗率",
+            "DefaultInput": "0",
+            "ControlType": "Spinner",
+            "Unit": "%",
+            "RoundingType": 30,
+            "Min": 0,
+            "Max": 100,
+            "Step": 5,
+            "TextAlign": 20
+          },
+          {
+            "ColumnName": "NumC",
+            "LabelText": "工数",
+            "ControlType": "Normal",
+            "DecimalPlaces": 2,
+            "Nullable": true,
+            "Unit": "h",
+            "RoundingType": 50,
+            "Min": 0,
+            "Max": 999.99,
+            "Step": 0.25,
+            "TextAlign": 20
+          },
+          {
+            "ColumnName": "DateA",
+            "LabelText": "期限日",
+            "InputGuide": "今日から何日後を初期値にするか指定します。",
+            "DefaultInput": "7",
+            "ValidateRequired": true
+          },
+          {
+            "ColumnName": "DateB",
+            "LabelText": "開始日時",
+            "InputGuide": "15分単位で開始日時を指定します。",
+            "EditorFormat": "Ymdhm",
+            "ValidateRequired": true,
+            "DateTimeStep": 15
+          },
+          {
+            "ColumnName": "DateC",
+            "LabelText": "完了日時",
+            "InputGuide": "完了した時点の日時を記録します。",
+            "EditorFormat": "Ymdhms"
+          },
+          {
+            "ColumnName": "DescriptionA",
+            "LabelText": "詳細メモ Markdown",
+            "InputGuide": "Markdownで背景、判断、作業ログを残します。",
+            "DefaultInput": "## 背景\n\n- \n\n## 対応方針\n\n- ",
+            "ValidateRequired": true,
+            "MaxLength": 4000,
+            "ViewerSwitchingType": 2,
+            "ThumbnailLimitSize": 600
+          },
+          {
+            "ColumnName": "DescriptionB",
+            "LabelText": "顧客向け説明",
+            "InputGuide": "外部共有できる表現で入力してください。",
+            "ControlType": "Normal",
+            "MaxLength": 1000,
+            "ClientRegexValidation": "^[^<>]*$",
+            "ServerRegexValidation": "^[^<>]*$",
+            "RegexValidationMessage": "HTMLタグのような < > は入力しないでください。",
+            "FieldCss": "field-wide"
+          },
+          {
+            "ColumnName": "DescriptionC",
+            "LabelText": "リッチテキスト備考",
+            "InputGuide": "装飾付きの補足説明に使います。",
+            "DefaultInput": "初期メモを入力してください。",
+            "ControlType": "RTEditor",
+            "MaxLength": 3000,
+            "FieldCss": "field-rte"
+          },
+          {
+            "ColumnName": "CheckA",
+            "LabelText": "承認済み",
+            "InputGuide": "承認完了後にチェックします。",
+            "DefaultInput": "false"
+          },
+          {
+            "ColumnName": "CheckB",
+            "LabelText": "顧客確認要",
+            "DefaultInput": "true"
+          },
+          {
+            "ColumnName": "CheckC",
+            "LabelText": "内部限定",
+            "Description": "自動判定または管理者のみが更新する想定の項目です。",
+            "DefaultInput": "false",
+            "EditorReadOnly": true
+          },
+          {
+            "ColumnName": "AttachmentsA",
+            "LabelText": "添付資料",
+            "InputGuide": "見積書、設計資料、確認用画像を添付します。",
+            "LimitQuantity": 5,
+            "LimitSize": 20,
+            "TotalLimitSize": 80,
+            "ThumbnailLimitSize": 400
+          },
+          {
+            "ColumnName": "AttachmentsB",
+            "LabelText": "証跡ファイル",
+            "InputGuide": "承認メールや検収証跡など、削除させたくないファイル用です。",
+            "ValidateRequired": true,
+            "AllowDeleteAttachments": false,
+            "LimitQuantity": 3,
+            "LimitSize": 10,
+            "TotalLimitSize": 30
+          }
+        ],
+        "ViewLatestId": 4,
+        "Views": [
+          {
+            "Id": 1,
+            "Name": "総合: 進行中一覧",
+            "DefaultMode": "Index",
+            "GridColumns": [
+              "ResultId",
+              "TitleBody",
+              "ClassA",
+              "ClassB",
+              "NumB",
+              "DateA",
+              "Status",
+              "Manager",
+              "UpdatedTime"
+            ],
+            "FiltersDisplayType": 2,
+            "AggregationsDisplayType": 1,
+            "ColumnFilterHash": {
+              "Status": "[\"100\",\"200\",\"300\"]",
+              "CheckC": "false"
+            },
+            "ColumnSorterHash": {
+              "ClassA": "asc",
+              "DateA": "asc"
+            },
+            "ApiColumnKeyDisplayType": 0,
+            "ApiColumnValueDisplayType": 0,
+            "CalendarSiteId": 0,
+            "ApiDataType": 0
+          },
+          {
+            "Id": 2,
+            "Name": "総合: レビュー待ち",
+            "DefaultMode": "Index",
+            "GridColumns": [
+              "ResultId",
+              "Title",
+              "ClassB",
+              "Manager",
+              "DateB",
+              "UpdatedTime"
+            ],
+            "FiltersDisplayType": 2,
+            "ColumnFilterHash": {
+              "ClassB": "[\"30\"]",
+              "CheckA": "false"
+            },
+            "ColumnSorterHash": {
+              "UpdatedTime": "desc"
+            },
+            "ApiColumnKeyDisplayType": 0,
+            "ApiColumnValueDisplayType": 0,
+            "CalendarSiteId": 0,
+            "ApiDataType": 0
+          },
+          {
+            "Id": 3,
+            "Name": "総合: カンバン",
+            "DefaultMode": "Kamban",
+            "GridColumns": [
+              "ResultId",
+              "TitleBody",
+              "ClassA",
+              "Status",
+              "Manager",
+              "UpdatedTime"
+            ],
+            "AggregationsDisplayType": 1,
+            "ColumnSorterHash": {
+              "ClassA": "asc",
+              "UpdatedTime": "desc"
+            },
+            "ApiColumnKeyDisplayType": 0,
+            "ApiColumnValueDisplayType": 0,
+            "CalendarSiteId": 0,
+            "ApiDataType": 0
+          },
+          {
+            "Id": 4,
+            "Name": "総合: カレンダー",
+            "DefaultMode": "Calendar",
+            "GridColumns": [
+              "ResultId",
+              "Title",
+              "DateA",
+              "Manager",
+              "Status"
+            ],
+            "FiltersDisplayType": 1,
+            "ColumnSorterHash": {
+              "DateA": "asc"
+            },
+            "ApiColumnKeyDisplayType": 0,
+            "ApiColumnValueDisplayType": 0,
+            "CalendarSiteId": 0,
+            "ApiDataType": 0
+          }
+        ],
+        "Styles": [
+          {
+            "Title": "総合サンプルスタイル",
+            "All": true,
+            "Body": ".field-title input { font-weight: 600; }\n.field-markdown textarea { min-height: 320px; }\n.sample-warning { color: #b91c1c; }",
+            "Id": 1
+          }
+        ],
+        "NoDisplayIfReadOnly": true,
+        "NotInheritPermissionsWhenCreatingSite": true
+      }
+    }
+  ]
+}

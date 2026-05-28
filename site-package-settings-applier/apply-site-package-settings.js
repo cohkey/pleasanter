@@ -17,11 +17,88 @@
     "Styles",
     "Htmls",
     "Processes",
-    "StatusControls"
+    "StatusControls",
+    "Exports"
   ];
   const objectSettingKeys = ["EditorColumnHash"];
   const supportedSettingKeys = [...arraySettingKeys, ...objectSettingKeys];
   const defaultCompareIgnoreKeys = ["Timestamp"];
+  const pseudoColumnNames = new Set(["TitleBody", "SiteTitle"]);
+  const systemColumnNames = new Set([
+    "ResultId",
+    "Ver",
+    "Title",
+    "Body",
+    "Status",
+    "Manager",
+    "Owner",
+    "Locked",
+    "Comments",
+    "Creator",
+    "CreatedTime",
+    "Updator",
+    "UpdatedTime"
+  ]);
+  const columnArrayKeys = new Set([
+    "GridColumns",
+    "EditorColumns",
+    "FilterColumns",
+    "LinkColumns",
+    "HistoryColumns",
+    "MoveTargets",
+    "BulkUpdateColumns",
+    "ExportColumns",
+    "Columns"
+  ]);
+  const columnHashKeys = new Set([
+    "ColumnFilterHash",
+    "ColumnSorterHash",
+    "ColumnStyles",
+    "ColumnAccessControls",
+    "ColumnAggregationHash",
+    "ColumnWidthHash"
+  ]);
+  const columnReferenceKeys = new Set([
+    "Column",
+    "ColumnName",
+    "ColumnName1",
+    "ColumnName2",
+    "DateColumn",
+    "GroupBy",
+    "KambanGroupBy",
+    "CalendarColumn",
+    "StartDateColumn",
+    "EndDateColumn",
+    "CompletionColumn",
+    "ValueColumn",
+    "TargetColumn",
+    "SourceColumn",
+    "DestinationColumn"
+  ]);
+  const enumValueSets = {
+    ChoicesControlType: ["", "DropDown", "Radio", "Checkbox"],
+    ControlType: ["", "Normal", "MarkDown", "RTEditor", "Spinner"],
+    HtmlPositionType: ["1000", "1010", "9000", "9010"],
+    ExportType: ["0", "1", 0, 1],
+    DelimiterType: ["0", "1", 0, 1],
+    ExecutionType: ["0", "1", 0, 1],
+    ProcessScreenType: ["10", "20", 10, 20],
+    ProcessExecutionType: ["0", "10", "20", 0, 10, 20],
+    ProcessActionType: ["0", "10", "90", 0, 10, 90],
+    ProcessValidationType: ["0", "10", "90", 0, 10, 90],
+    TextAlign: ["", "0", "10", "15", "20", "30", 0, 10, 15, 20, 30],
+    ViewerSwitchingType: ["", "0", "1", "2", 0, 1, 2]
+  };
+  const unsafeSettingKeys = new Set([
+    "Notifications",
+    "Reminders",
+    "Scripts",
+    "ServerScripts",
+    "Htmls",
+    "Processes",
+    "StatusControls",
+    "Aggregations"
+  ]);
 
   const volatileKeys = new Set([
     "Id",
@@ -209,6 +286,20 @@
       ].join("\n")
     );
     const mode = defaults.mode || (replace ? "replace" : "merge");
+    const unsafeSections = resolveSections(sections, sourceSettings)
+      .filter((section) => unsafeSettingKeys.has(section));
+    const allowUnsafeSections = defaults.allowUnsafeSections === true || (
+      unsafeSections.length > 0 && confirm(
+        [
+          "安全確認が必要な設定が含まれています。",
+          "",
+          `対象: ${unsafeSections.join(", ")}`,
+          "",
+          "OK: Pleasanter からエクスポートした JSON と確認済みなので適用対象に含める",
+          "キャンセル: これらの設定は変更しない"
+        ].join("\n")
+      )
+    );
 
     const dryRunResult = await applySiteSettings(picked.package, {
       baseUrl: defaults.baseUrl,
@@ -217,7 +308,8 @@
       targetSiteId,
       sections,
       mode,
-      dryRun: true
+      dryRun: true,
+      allowUnsafeSections
     });
 
     logPlan("Dry-run result", picked.fileName, dryRunResult.plan);
@@ -237,7 +329,8 @@
       targetSiteId,
       sections,
       mode,
-      dryRun: false
+      dryRun: false,
+      allowUnsafeSections
     });
 
     console.log("Applied:", applyResult);
@@ -321,7 +414,7 @@
       dryRun: false,
       result,
       plan,
-      verified: summarizeVerified(verify, ctx.sections),
+      verified: summarizeVerified(verify, resolveSections(ctx.sections, verify)),
       verifiedViews: Array.isArray(verify.Views) ? verify.Views.map((view) => view.Name || view.Id) : []
     };
   }
@@ -369,22 +462,56 @@
   }
 
   function buildSettingsPlan(currentSettings, sourceSettings, ctx) {
+    const sanitizeResult = sanitizeSourceSettings(sourceSettings, currentSettings, ctx);
+    sourceSettings = sanitizeResult.sourceSettings;
     const sections = resolveSections(ctx.sections, sourceSettings);
     const replaceAll = ctx.mode === "replace" && ctx.sections.includes("all");
     const nextSettings = replaceAll ? {} : { ...currentSettings };
-    const operations = [];
+    const operations = [...sanitizeResult.operations];
 
     if (replaceAll) {
       for (const key of Object.keys(currentSettings)) {
         if (!Object.prototype.hasOwnProperty.call(sourceSettings, key)) {
+          if (isUnsafeSection(key, ctx)) {
+            nextSettings[key] = clone(currentSettings[key]);
+            operations.push({
+              type: "skip",
+              section: key,
+              key,
+              reason: `${key} is unsafe and was preserved. Set allowUnsafeSections:true to delete it.`
+            });
+            continue;
+          }
           operations.push({ type: "delete", section: key, key, before: currentSettings[key] });
         }
       }
     }
 
     for (const section of sections) {
+      if (isUnsafeSection(section, ctx)) {
+        if (Object.prototype.hasOwnProperty.call(currentSettings, section)) {
+          nextSettings[section] = clone(currentSettings[section]);
+        }
+        operations.push({
+          type: "skip",
+          section,
+          key: section,
+          reason: `${section} is unsafe and was not changed. Set allowUnsafeSections:true to apply it.`
+        });
+        continue;
+      }
+
       if (!Object.prototype.hasOwnProperty.call(sourceSettings, section)) {
         if (ctx.mode === "replace" && Object.prototype.hasOwnProperty.call(nextSettings, section)) {
+          if (isUnsafeSection(section, ctx)) {
+            operations.push({
+              type: "skip",
+              section,
+              key: section,
+              reason: `${section} is unsafe and was preserved. Set allowUnsafeSections:true to delete it.`
+            });
+            continue;
+          }
           operations.push({ type: "delete", section, key: section, before: nextSettings[section] });
           delete nextSettings[section];
         } else {
@@ -568,6 +695,273 @@
     };
   }
 
+  function sanitizeSourceSettings(sourceSettings, currentSettings, ctx) {
+    if (ctx.validateReferences === false) {
+      return {
+        sourceSettings: clone(sourceSettings),
+        operations: []
+      };
+    }
+
+    const validColumns = collectValidColumnNames(currentSettings, ctx);
+    const operations = [];
+    const sanitized = {};
+
+    for (const [section, value] of Object.entries(sourceSettings || {})) {
+      sanitized[section] = sanitizeSettingValue(value, {
+        section,
+        path: section,
+        validColumns,
+        operations
+      });
+    }
+
+    return {
+      sourceSettings: sanitized,
+      operations
+    };
+  }
+
+  function sanitizeSettingValue(value, ctx) {
+    if (Array.isArray(value)) {
+      if (ctx.section === "Columns") {
+        return value.flatMap((item) => sanitizeColumnDefinition(item, ctx));
+      }
+      if (isColumnArrayPath(ctx.path)) {
+        return sanitizeColumnArray(value, ctx);
+      }
+      return value
+        .map((item, index) => sanitizeSettingValue(item, { ...ctx, path: `${ctx.path}[${index}]` }))
+        .filter((item) => item !== undefined);
+    }
+
+    if (!isPlainObject(value)) return clone(value);
+
+    if (ctx.section === "EditorColumnHash" || ctx.path.endsWith(".EditorColumnHash")) {
+      return sanitizeEditorColumnHash(value, ctx);
+    }
+
+    const sanitized = {};
+    for (const [key, item] of Object.entries(value)) {
+      const itemPath = `${ctx.path}.${key}`;
+
+      if (columnHashKeys.has(key) && isPlainObject(item)) {
+        sanitized[key] = sanitizeColumnHash(item, { ...ctx, path: itemPath });
+        continue;
+      }
+
+      if (isColumnReferenceKey(key) && typeof item === "string") {
+        if (isBlankColumnReference(item) || isValidColumnReference(item, ctx.validColumns)) {
+          sanitized[key] = item;
+        } else {
+          addSanitizeSkip(ctx, itemPath, item, "column reference does not exist in the target table");
+        }
+        continue;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(enumValueSets, key) && !enumValueSets[key].includes(item)) {
+        addSanitizeSkip(ctx, itemPath, item, "value is not available in the target UI options");
+        continue;
+      }
+
+      sanitized[key] = sanitizeSettingValue(item, { ...ctx, path: itemPath });
+    }
+
+    return sanitized;
+  }
+
+  function sanitizeColumnDefinition(item, ctx) {
+    if (!isObjectItem(item)) return [clone(item)];
+    const columnName = item.ColumnName;
+    if (!isValidColumnReference(columnName, ctx.validColumns)) {
+      addSanitizeSkip(ctx, `${ctx.path}.${columnName || "(blank)"}`, columnName, "column does not exist in the target table");
+      return [];
+    }
+
+    const sanitized = sanitizeSettingValue(item, { ...ctx, path: `${ctx.path}.${columnName}` });
+    normalizeFieldCss(sanitized, ctx, columnName);
+    const choices = parseChoiceValues(sanitized.ChoicesText);
+    if (choices.size > 0 && sanitized.DefaultInput != null && sanitized.DefaultInput !== "") {
+      const values = String(sanitized.DefaultInput)
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const invalidValues = values.filter((value) => !choices.has(value));
+      if (invalidValues.length > 0) {
+        addSanitizeSkip(
+          ctx,
+          `${ctx.path}.${columnName}.DefaultInput`,
+          sanitized.DefaultInput,
+          `default value is not in ChoicesText: ${invalidValues.join(", ")}`
+        );
+        delete sanitized.DefaultInput;
+      }
+    }
+
+    return [sanitized];
+  }
+
+  function normalizeFieldCss(column, ctx, columnName) {
+    const value = column.FieldCss;
+    if (value != null && value !== "" && !allowedFieldCssValues(columnName, column).has(value)) {
+      addSanitizeSkip(
+        ctx,
+        `${ctx.path}.${columnName}.FieldCss`,
+        value,
+        "value is not available in the target UI options"
+      );
+      delete column.FieldCss;
+    }
+
+    if (column.ControlType === "RTEditor" && !column.FieldCss) {
+      column.FieldCss = "field-wide";
+      ctx.operations.push({
+        type: "update",
+        section: ctx.section,
+        key: `${ctx.path}.${columnName}.FieldCss`,
+        after: "field-wide",
+        reason: "RTEditor requires a valid FieldCss; normalized to field-wide"
+      });
+    }
+  }
+
+  function allowedFieldCssValues(columnName, column) {
+    const values = new Set(["", "field-normal", "field-wide"]);
+    if (String(columnName || "").startsWith("Description") && column?.ControlType !== "RTEditor") {
+      values.add("field-markdown");
+      values.add("field-rte");
+    }
+    return values;
+  }
+
+  function sanitizeEditorColumnHash(value, ctx) {
+    const sanitized = {};
+    for (const [key, items] of Object.entries(value)) {
+      if (Array.isArray(items)) {
+        sanitized[key] = sanitizeColumnArray(items, { ...ctx, path: `${ctx.path}.${key}` });
+      } else {
+        sanitized[key] = clone(items);
+      }
+    }
+    return sanitized;
+  }
+
+  function sanitizeColumnArray(items, ctx) {
+    const sanitized = [];
+    for (const item of items) {
+      if (typeof item === "string") {
+        if (isValidColumnReference(item, ctx.validColumns)) {
+          sanitized.push(item);
+        } else {
+          addSanitizeSkip(ctx, ctx.path, item, "column reference does not exist in the target table");
+        }
+      } else if (isObjectItem(item) && typeof item.ColumnName === "string") {
+        const columnName = item.ColumnName;
+        if (isValidColumnReference(columnName, ctx.validColumns)) {
+          sanitized.push(sanitizeSettingValue(item, { ...ctx, path: `${ctx.path}.${columnName}` }));
+        } else {
+          addSanitizeSkip(ctx, `${ctx.path}.${columnName}`, columnName, "column reference does not exist in the target table");
+        }
+      } else {
+        sanitized.push(sanitizeSettingValue(item, ctx));
+      }
+    }
+    return uniqueByJson(sanitized);
+  }
+
+  function sanitizeColumnHash(hash, ctx) {
+    const sanitized = {};
+    for (const [key, value] of Object.entries(hash)) {
+      if (isValidColumnReference(key, ctx.validColumns)) {
+        sanitized[key] = sanitizeSettingValue(value, { ...ctx, path: `${ctx.path}.${key}` });
+      } else {
+        addSanitizeSkip(ctx, `${ctx.path}.${key}`, key, "column hash key does not exist in the target table");
+      }
+    }
+    return sanitized;
+  }
+
+  function addSanitizeSkip(ctx, key, value, reason) {
+    ctx.operations.push({
+      type: "skip",
+      section: ctx.section,
+      key,
+      before: value,
+      reason
+    });
+  }
+
+  function collectValidColumnNames(currentSettings, ctx) {
+    const names = new Set([...systemColumnNames, ...pseudoColumnNames]);
+    for (const prefix of ["Class", "Num", "Date", "Description", "Check", "Attachments"]) {
+      for (let code = 65; code <= 90; code += 1) {
+        names.add(`${prefix}${String.fromCharCode(code)}`);
+      }
+    }
+
+    collectColumnNamesFromSettings(currentSettings, names);
+    for (const name of ctx.extraValidColumns || []) {
+      if (name) names.add(String(name));
+    }
+    return names;
+  }
+
+  function collectColumnNamesFromSettings(settings, names) {
+    for (const item of settings?.Columns || []) {
+      if (item?.ColumnName) names.add(item.ColumnName);
+    }
+    for (const item of settings?.GridColumns || []) {
+      if (typeof item === "string") names.add(item);
+      else if (item?.ColumnName) names.add(item.ColumnName);
+    }
+    if (isPlainObject(settings?.EditorColumnHash)) {
+      for (const items of Object.values(settings.EditorColumnHash)) {
+        for (const item of Array.isArray(items) ? items : []) {
+          if (typeof item === "string") names.add(item);
+          else if (item?.ColumnName) names.add(item.ColumnName);
+        }
+      }
+    }
+  }
+
+  function isColumnArrayPath(path) {
+    const key = String(path || "").split(".").pop().replace(/\[\d+\]$/, "");
+    return columnArrayKeys.has(key);
+  }
+
+  function isColumnReferenceKey(key) {
+    return columnReferenceKeys.has(key) || /ColumnName$/.test(key);
+  }
+
+  function isBlankColumnReference(value) {
+    return value == null || value === "" || value === "*";
+  }
+
+  function isValidColumnReference(value, validColumns) {
+    if (isBlankColumnReference(value)) return true;
+    return validColumns.has(String(value));
+  }
+
+  function parseChoiceValues(choicesText) {
+    const values = new Set();
+    for (const line of String(choicesText || "").split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      values.add(trimmed.split(",")[0].trim());
+    }
+    return values;
+  }
+
+  function uniqueByJson(items) {
+    const seen = new Set();
+    return items.filter((item) => {
+      const key = JSON.stringify(item);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
   async function getSiteSettings(ctx) {
     const response = await request(ctx, `/api/items/${ctx.targetSiteId}/getsite`, {});
     return response?.Response?.Data?.SiteSettings || response?.SiteSettings || response || {};
@@ -591,11 +985,33 @@
       body: JSON.stringify(body)
     });
     const text = await response.text();
-    const json = text ? JSON.parse(text) : {};
+    const json = parseApiResponseJson(text, response, path);
     if (!response.ok || json.StatusCode >= 400) {
       throw new Error(`Pleasanter API error ${response.status}: ${text}`);
     }
     return json;
+  }
+
+  function parseApiResponseJson(text, response, path) {
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      const preview = text
+        .replace(/<[^>]*>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 240);
+      throw new Error(
+        [
+          `Pleasanter API returned a non-JSON response for ${path}.`,
+          `HTTP ${response.status} ${response.statusText || ""}`.trim(),
+          response.url ? `URL: ${response.url}` : "",
+          preview ? `Preview: ${preview}` : "",
+          "This usually means updatesite rejected one of the SiteSettings values."
+        ].filter(Boolean).join("\n")
+      );
+    }
   }
 
   function normalizeOptions(options = {}) {
@@ -615,8 +1031,15 @@
       apiVersion: options.apiVersion || "1.1",
       mode: options.mode || "merge",
       dryRun: options.dryRun !== false,
+      allowUnsafeSections: options.allowUnsafeSections === true,
+      validateReferences: options.validateReferences !== false,
+      extraValidColumns: Array.isArray(options.extraValidColumns) ? options.extraValidColumns : [],
       sections
     };
+  }
+
+  function isUnsafeSection(section, ctx) {
+    return unsafeSettingKeys.has(section) && ctx.allowUnsafeSections !== true;
   }
 
   function ctxMergeItem(currentItem, normalizedSource, section, mode) {
@@ -697,7 +1120,7 @@
   }
 
   function assignIds(views, section) {
-    if (!["Views", "Scripts", "ServerScripts", "Styles", "Htmls", "Processes", "StatusControls"].includes(section)) {
+    if (!["Views", "Scripts", "ServerScripts", "Styles", "Htmls", "Processes", "StatusControls", "Exports"].includes(section)) {
       return;
     }
     let nextId = 1;
