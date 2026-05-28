@@ -4,6 +4,8 @@ Pleasanter のサイトパッケージ JSON から、対象テーブルの `Site
 
 本番利用で Node.js や外部フレームワークを使わない前提のため、DevTools Console に小さなローダーを貼り付け、ローカルファイル選択ダイアログから JS と JSON を読み込んで実行します。
 
+専用 UI 化の設計は [docs/config-editor-ui-design.md](docs/config-editor-ui-design.md) にまとめています。
+
 ## 対応状況
 
 対応済みの `SiteSettings`:
