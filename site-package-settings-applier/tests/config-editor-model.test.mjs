@@ -111,6 +111,21 @@ test("editor layout helpers pair column keys with display names", () => {
   assert.ok(editor.model.displayColumnNames(settings).includes("ClassB"));
 });
 
+test("column detail fields include all keys from loaded columns", () => {
+  const editor = loadEditor();
+  const settings = {
+    Columns: [
+      { ColumnName: "NumA", LabelText: "金額", DecimalPlaces: 2 },
+      { ColumnName: "ClassA", LabelText: "区分", NoDisplay: true }
+    ]
+  };
+
+  const fields = editor.model.columnDetailFields(settings);
+  assert.ok(fields.includes("ColumnName"));
+  assert.ok(fields.includes("DecimalPlaces"));
+  assert.ok(fields.includes("NoDisplay"));
+});
+
 test("config editor comparison reports order-only changes", () => {
   const editor = loadEditor();
   const differences = editor.model.compareSettings(

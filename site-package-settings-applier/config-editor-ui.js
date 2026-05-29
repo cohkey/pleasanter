@@ -7,18 +7,58 @@
  * - No Node.js, build step, or external library is required.
  */
 (function attachPleasanterConfigEditor(global) {
-  const VERSION = "0.4.0";
+  const VERSION = "0.5.0";
   const rootId = "pleasanter-config-editor-root";
   const applierGlobalName = "PleasanterSitePackageApplier";
-  const sections = ["Summary", "Views", "Editor Layout", "Columns", "Raw JSON", "Diff"];
+  const sections = ["Summary", "Views", "Editor", "Raw JSON", "Diff"];
   const sectionLabels = {
     Summary: "概要",
     Views: "ビュー",
-    "Editor Layout": "エディタ配置",
+    Editor: "エディタ",
+    EditorColumnHash: "エディタ配置",
     Columns: "項目設定",
     "Raw JSON": "JSON",
     Diff: "差分確認"
   };
+  const preferredColumnFields = [
+    "ColumnName",
+    "LabelText",
+    "GridLabelText",
+    "Required",
+    "ControlType",
+    "ChoicesText",
+    "DefaultInput",
+    "FieldCss",
+    "TextAlign",
+    "EditorReadOnly",
+    "EditorFormat",
+    "MaxLength",
+    "Min",
+    "Max",
+    "Regex",
+    "Description"
+  ];
+  const booleanColumnFields = new Set([
+    "Required",
+    "EditorReadOnly",
+    "NoDisplay",
+    "Hidden",
+    "AllowSearch",
+    "AllowBulkUpdate",
+    "ReadOnly",
+    "Nullable",
+    "MultipleSelections"
+  ]);
+  const numberColumnFields = new Set([
+    "MaxLength",
+    "Min",
+    "Max",
+    "DecimalPlaces",
+    "LinkedSiteId",
+    "Width",
+    "Height",
+    "Rows"
+  ]);
   const unsafeSections = new Set([
     "Notifications",
     "Reminders",
@@ -82,6 +122,7 @@
     dirtyAfterDryRun: false,
     dryRun: null,
     applyResult: null,
+    extraColumnFields: [],
     log: []
   };
 
@@ -603,6 +644,32 @@
           min-height: 160px;
           margin-top: 6px;
         }
+        .pcu-section-block {
+          margin-top: 12px;
+          padding-top: 12px;
+          border-top: 1px solid #d9dde3;
+        }
+        .pcu-section-block:first-of-type {
+          margin-top: 0;
+          padding-top: 0;
+          border-top: 0;
+        }
+        .pcu-section-block h3 {
+          margin-top: 0;
+        }
+        .pcu-wide-table {
+          min-width: 2600px;
+          table-layout: fixed;
+        }
+        .pcu-wide-table textarea {
+          min-height: 48px;
+        }
+        .pcu-wide-table .pcu-narrow {
+          text-align: center;
+        }
+        .pcu-wide-table .pcu-narrow input[type="checkbox"] {
+          width: auto;
+        }
         .pcu-diff-table td:first-child {
           border-left: 5px solid transparent;
         }
@@ -757,7 +824,7 @@
       else if (action === "delete-editor-item") deleteEditorItem(target.dataset.group, Number(target.dataset.index));
       else if (action === "move-editor-item") moveEditorItem(target.dataset.group, Number(target.dataset.index), Number(target.dataset.delta));
       else if (action === "ensure-editor-column") ensureEditorColumnSetting(target.dataset.columnName);
-      else if (action === "apply-editor-column-json") applyEditorColumnJson(target.dataset.jsonKey);
+      else if (action === "add-column-field") addColumnField();
       else if (action === "add-column") addColumn();
       else if (action === "delete-column") deleteColumn(Number(target.dataset.index));
       else if (action === "format-raw") formatRawJson();
@@ -886,8 +953,7 @@
     return {
       Summary: "読込状態とエラー",
       Views: "一覧・カンバン・条件",
-      "Editor Layout": "入力画面の並び",
-      Columns: "項目名・必須・選択肢",
+      Editor: "配置と項目詳細",
       "Raw JSON": "直接編集",
       Diff: "変更内容と適用結果"
     }[section] || "";
@@ -903,8 +969,11 @@
       return { text: String(state.dryRun.plan.operations.length), kind: "" };
     }
     if (section === "Views") return countBadge(state.workingSettings.Views);
-    if (section === "Editor Layout") return countBadge(Object.keys(state.workingSettings.EditorColumnHash || {}));
-    if (section === "Columns") return countBadge(state.workingSettings.Columns);
+    if (section === "Editor") {
+      const groupCount = Object.keys(state.workingSettings.EditorColumnHash || {}).length;
+      const columnCount = state.workingSettings.Columns?.length || 0;
+      return groupCount || columnCount ? { text: `${groupCount}/${columnCount}`, kind: "" } : null;
+    }
     if (section === "Raw JSON") return { text: String(Object.keys(state.workingSettings || {}).length), kind: "" };
     return null;
   }
@@ -918,8 +987,7 @@
     const panel = shadow.getElementById("pcu-panel");
     if (state.activeSection === "Summary") panel.innerHTML = renderSummary();
     else if (state.activeSection === "Views") panel.innerHTML = renderViews();
-    else if (state.activeSection === "Editor Layout") panel.innerHTML = renderEditorLayout();
-    else if (state.activeSection === "Columns") panel.innerHTML = renderColumns();
+    else if (state.activeSection === "Editor") panel.innerHTML = renderEditor();
     else if (state.activeSection === "Raw JSON") panel.innerHTML = renderRawJson();
     else if (state.activeSection === "Diff") panel.innerHTML = renderDiff();
   }
@@ -1088,6 +1156,72 @@
     `;
   }
 
+  function renderEditor() {
+    return `
+      <div class="pcu-section-head">
+        <div>
+          <h2>エディタ</h2>
+          <p>入力画面の配置と項目詳細を同じ画面で編集します。</p>
+        </div>
+        <div class="pcu-row-actions">
+          <button data-action="add-editor-group">見出し追加</button>
+          <button data-action="add-column">項目追加</button>
+          <button data-action="add-column-field">詳細列追加</button>
+        </div>
+      </div>
+      <div class="pcu-section-block">
+        <h3>配置</h3>
+        ${renderEditorLayoutBody()}
+      </div>
+      <div class="pcu-section-block">
+        <h3>項目詳細</h3>
+        ${renderColumnsBody()}
+      </div>
+    `;
+  }
+
+  function renderEditorLayoutBody() {
+    const hash = ensureObject("EditorColumnHash");
+    const entries = Object.entries(hash);
+    const validColumns = collectValidColumnNames(state.workingSettings);
+    const totalItems = entries.reduce((total, [, items]) => total + (Array.isArray(items) ? items.length : 0), 0);
+    const missingItems = entries.flatMap(([, items]) => items || []).filter((name) => !validColumns.has(String(name)));
+    return `
+      <div class="pcu-editor-summary">
+        <div class="pcu-editor-summary-item">
+          <span>見出し数</span>
+          <strong>${entries.length}</strong>
+        </div>
+        <div class="pcu-editor-summary-item">
+          <span>配置済み項目</span>
+          <strong>${totalItems}</strong>
+        </div>
+        <div class="pcu-editor-summary-item">
+          <span>未定義参照</span>
+          <strong>${missingItems.length}</strong>
+        </div>
+      </div>
+      <div class="pcu-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 54px;">順</th>
+              <th style="width: 260px;">表示名 / 項目キー</th>
+              <th style="width: 110px;">種類</th>
+              <th style="width: 82px;">必須</th>
+              <th style="width: 128px;">入力形式</th>
+              <th>設定メモ</th>
+              <th style="width: 170px;">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${entries.map(([group, items]) => renderEditorGroupRows(group, Array.isArray(items) ? items : [])).join("") || '<tr><td colspan="7">エディタ配置はありません。</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
   function renderEditorGroupRows(group, items) {
     return `
       <tr class="pcu-editor-group-row">
@@ -1116,7 +1250,6 @@
   function renderEditorItemRow(group, columnName, index, groupLength) {
     const column = findColumn(state.workingSettings, columnName);
     const missing = !collectValidColumnNames(state.workingSettings).has(String(columnName));
-    const jsonKey = editorColumnJsonKey(group, index);
     return `
       <tr>
         <td>${index + 1}</td>
@@ -1134,7 +1267,7 @@
         <td>${escapeHtml(controlTypeLabel(column?.ControlType))}</td>
         <td>
           <div class="pcu-editor-note">${renderColumnNote(columnName, column)}</div>
-          ${renderEditorColumnJsonEditor(columnName, column, jsonKey)}
+          ${column ? "" : `<div style="margin-top: 6px;"><button data-action="ensure-editor-column" data-column-name="${escapeAttr(columnName)}">項目設定を追加</button></div>`}
         </td>
         <td>
           <div class="pcu-row-actions">
@@ -1147,80 +1280,120 @@
     `;
   }
 
-  function renderEditorColumnJsonEditor(columnName, column, jsonKey) {
-    if (!column) {
-      return `
-        <div style="margin-top: 6px;">
-          <button data-action="ensure-editor-column" data-column-name="${escapeAttr(columnName)}">項目設定を追加</button>
-        </div>
-      `;
-    }
-    return `
-      <details class="pcu-inline-details">
-        <summary>全設定JSON</summary>
-        <textarea data-editor-column-json-key="${escapeAttr(jsonKey)}">${escapeHtml(JSON.stringify(column, null, 2))}</textarea>
-        <div class="pcu-row-actions" style="margin-top: 6px;">
-          <button data-action="apply-editor-column-json" data-json-key="${escapeAttr(jsonKey)}">JSONを反映</button>
-        </div>
-      </details>
-    `;
-  }
-
   function renderColumns() {
-    const columns = ensureArray("Columns");
     return `
       <div class="pcu-section-head">
         <div>
           <h2>項目設定</h2>
-          <p>表示名、必須、選択肢、既定値、入力形式を項目ごとに編集します。</p>
+          <p>表示名、必須、選択肢、既定値、入力形式などを項目ごとに編集します。</p>
         </div>
-        <button data-action="add-column">項目追加</button>
+        <div class="pcu-row-actions">
+          <button data-action="add-column">項目追加</button>
+          <button data-action="add-column-field">詳細列追加</button>
+        </div>
+      </div>
+      ${renderColumnsBody()}
+    `;
+  }
+
+  function renderColumnsBody() {
+    const columns = ensureArray("Columns");
+    const fields = columnDetailFields(state.workingSettings);
+    return `
+      <div class="pcu-message" style="margin-bottom: 10px;">
+        <strong>横スクロールで全項目を編集できます。</strong>
+        <span class="pcu-muted">サイトパッケージ内の Columns に存在するキーはすべて列として表示します。足りないキーは「詳細列追加」から追加できます。</span>
       </div>
       <div class="pcu-table-wrap">
-        <table>
+        <table class="pcu-wide-table">
           <thead>
             <tr>
-              <th style="width: 120px;">項目コード</th>
-              <th style="width: 150px;">表示名</th>
-              <th style="width: 70px;">必須</th>
-              <th style="width: 105px;">入力形式</th>
-              <th>選択肢</th>
-              <th style="width: 110px;">既定値</th>
-              <th style="width: 105px;">表示幅</th>
-              <th style="width: 92px;">文字揃え</th>
+              ${fields.map((field) => `<th style="width: ${columnFieldWidth(field)}px;">${escapeHtml(columnFieldLabel(field))}<br><span class="pcu-key">${escapeHtml(field)}</span></th>`).join("")}
               <th style="width: 72px;">操作</th>
             </tr>
           </thead>
           <tbody>
             ${columns.map((column, index) => `
               <tr>
-                <td><input data-index="${index}" data-column-field="ColumnName" value="${escapeAttr(column.ColumnName || "")}"></td>
-                <td><input data-index="${index}" data-column-field="LabelText" value="${escapeAttr(column.LabelText || "")}"></td>
-                <td><input type="checkbox" data-index="${index}" data-column-field="Required" ${column.Required ? "checked" : ""}></td>
-                <td>
-                  <select data-index="${index}" data-column-field="ControlType">
-                    ${["", "Normal", "MarkDown", "RTEditor", "Spinner"].map((value) => `
-                      <option value="${value}" ${String(column.ControlType || "") === value ? "selected" : ""}>${value || "(default)"}</option>
-                    `).join("")}
-                  </select>
-                </td>
-                <td><textarea placeholder="10,選択肢A&#10;20,選択肢B" data-index="${index}" data-column-field="ChoicesText">${escapeHtml(column.ChoicesText || "")}</textarea></td>
-                <td><input data-index="${index}" data-column-field="DefaultInput" value="${escapeAttr(column.DefaultInput ?? "")}"></td>
-                <td>
-                  <select data-index="${index}" data-column-field="FieldCss">
-                    ${allowedFieldCssValues(column.ColumnName, column).map((value) => `
-                      <option value="${value}" ${String(column.FieldCss || "") === value ? "selected" : ""}>${value || "(default)"}</option>
-                    `).join("")}
-                  </select>
-                </td>
-                <td><input data-index="${index}" data-column-field="TextAlign" value="${escapeAttr(column.TextAlign ?? "")}"></td>
+                ${fields.map((field) => renderColumnFieldCell(column, index, field)).join("")}
                 <td><button class="pcu-danger" data-action="delete-column" data-index="${index}">削除</button></td>
               </tr>
-            `).join("") || '<tr><td colspan="9">項目設定はありません。</td></tr>'}
+            `).join("") || `<tr><td colspan="${fields.length + 1}">項目設定はありません。</td></tr>`}
           </tbody>
         </table>
       </div>
     `;
+  }
+
+  function columnDetailFields(settings) {
+    const fields = new Set(preferredColumnFields);
+    for (const field of state.extraColumnFields || []) fields.add(field);
+    for (const column of settings.Columns || []) {
+      for (const key of Object.keys(column || {})) fields.add(key);
+    }
+    return [...fields].filter(Boolean);
+  }
+
+  function renderColumnFieldCell(column, index, field) {
+    const value = column?.[field];
+    const common = `data-index="${index}" data-column-field="${escapeAttr(field)}"`;
+    if (booleanColumnFields.has(field)) {
+      return `<td class="pcu-narrow"><input type="checkbox" ${common} ${value ? "checked" : ""}></td>`;
+    }
+    if (field === "ControlType") {
+      return `<td>${renderSelect(common, value, ["", "Normal", "MarkDown", "RTEditor", "Spinner"])}</td>`;
+    }
+    if (field === "FieldCss") {
+      return `<td>${renderSelect(common, value, allowedFieldCssValues(column.ColumnName, column))}</td>`;
+    }
+    if (field === "TextAlign") {
+      return `<td>${renderSelect(common, value, ["", "left", "center", "right"])}</td>`;
+    }
+    if (field === "EditorFormat") {
+      return `<td>${renderSelect(common, value, ["", "Ymd", "Ymdhm", "Ymdhms"])}</td>`;
+    }
+    if (field === "ChoicesText" || field === "Description" || String(value || "").includes("\n") || isPlainObject(value) || Array.isArray(value)) {
+      return `<td><textarea ${common} placeholder="${escapeAttr(columnFieldPlaceholder(field, value))}">${escapeHtml(columnFieldInputValue(value))}</textarea></td>`;
+    }
+    if (numberColumnFields.has(field) || typeof value === "number") {
+      return `<td><input type="number" ${common} value="${escapeAttr(value ?? "")}"></td>`;
+    }
+    return `<td><input ${common} value="${escapeAttr(value ?? "")}"></td>`;
+  }
+
+  function renderSelect(commonAttributes, value, options) {
+    return `
+      <select ${commonAttributes}>
+        ${options.map((option) => `
+          <option value="${escapeAttr(option)}" ${String(value ?? "") === String(option) ? "selected" : ""}>${escapeHtml(option || "(default)")}</option>
+        `).join("")}
+      </select>
+    `;
+  }
+
+  function columnFieldInputValue(value) {
+    if (isPlainObject(value) || Array.isArray(value)) return JSON.stringify(value, null, 2);
+    return value ?? "";
+  }
+
+  function columnFieldPlaceholder(field, value) {
+    if (field === "ChoicesText") return "10,選択肢A\n20,選択肢B";
+    if (isPlainObject(value) || Array.isArray(value)) return "JSON";
+    return "";
+  }
+
+  function columnFieldWidth(field) {
+    if (field === "ColumnName") return 130;
+    if (field === "LabelText" || field === "GridLabelText" || field === "Description") return 180;
+    if (booleanColumnFields.has(field)) return 82;
+    if (field === "ChoicesText") return 250;
+    if (field === "DefaultInput") return 130;
+    if (field === "ControlType" || field === "FieldCss" || field === "EditorFormat") return 135;
+    return 145;
+  }
+
+  function columnFieldLabel(field) {
+    return settingPropertyLabel(field);
   }
 
   function renderRawJson() {
@@ -1500,7 +1673,7 @@
   async function importTsvFile() {
     const file = await pickFile(".tsv,.txt,.csv,text/tab-separated-values,text/plain");
     const text = await file.text();
-    const mode = prompt("取り込み先を入力してください: Columns または EditorColumnHash", state.activeSection === "Editor Layout" ? "EditorColumnHash" : "Columns");
+    const mode = prompt("取り込み先を入力してください: Columns または EditorColumnHash", state.activeSection === "Editor" ? "Columns" : "Columns");
     if (mode === "Columns") {
       state.workingSettings.Columns = mergeColumnsFromTsv(state.workingSettings.Columns || [], text);
     } else if (mode === "EditorColumnHash") {
@@ -1514,12 +1687,19 @@
   }
 
   function exportTsvForActiveSection() {
-    if (state.activeSection === "Columns") {
+    if (state.activeSection === "Editor") {
+      const mode = prompt("書き出し対象を入力してください: Columns または EditorColumnHash", "Columns");
+      if (mode === "Columns") {
+        downloadText("columns.tsv", columnsToTsv(state.workingSettings.Columns || []), "text/tab-separated-values");
+      } else if (mode === "EditorColumnHash") {
+        downloadText("editor-column-hash.tsv", editorColumnHashToTsv(state.workingSettings.EditorColumnHash || {}), "text/tab-separated-values");
+      } else {
+        throw new Error("Columns or EditorColumnHash must be selected.");
+      }
+    } else if (state.activeSection === "Columns") {
       downloadText("columns.tsv", columnsToTsv(state.workingSettings.Columns || []), "text/tab-separated-values");
-    } else if (state.activeSection === "Editor Layout") {
-      downloadText("editor-column-hash.tsv", editorColumnHashToTsv(state.workingSettings.EditorColumnHash || {}), "text/tab-separated-values");
     } else {
-      throw new Error("TSV export is available for Columns or Editor Layout.");
+      throw new Error("TSV export is available for Editor.");
     }
   }
 
@@ -1696,50 +1876,17 @@
     render();
   }
 
-  function applyEditorColumnJson(jsonKey) {
-    const textarea = [...shadow.querySelectorAll("[data-editor-column-json-key]")]
-      .find((element) => element.dataset.editorColumnJsonKey === jsonKey);
-    if (!textarea) throw new Error("Column JSON editor was not found.");
-
-    const { group, index } = parseEditorColumnJsonKey(jsonKey);
-    const hash = ensureObject("EditorColumnHash");
-    const currentColumnName = Array.isArray(hash[group]) ? hash[group][index] : "";
-    const nextColumn = parseJson(textarea.value);
-    if (!isPlainObject(nextColumn)) throw new Error("Column JSON must be an object.");
-    if (!nextColumn.ColumnName) nextColumn.ColumnName = currentColumnName;
-    if (!nextColumn.ColumnName) throw new Error("Column JSON must include ColumnName.");
-
-    upsertColumnSetting(currentColumnName || nextColumn.ColumnName, nextColumn);
-    if (Array.isArray(hash[group]) && index >= 0 && index < hash[group].length) {
-      hash[group][index] = nextColumn.ColumnName;
-    }
-    markDirty();
-    logInfo(`${nextColumn.ColumnName} の全設定JSONを反映しました。`);
-    render();
-  }
-
-  function editorColumnJsonKey(group, index) {
-    return `${encodeURIComponent(group)}::${index}`;
-  }
-
-  function parseEditorColumnJsonKey(jsonKey) {
-    const [encodedGroup, indexText] = String(jsonKey || "").split("::");
-    return {
-      group: decodeURIComponent(encodedGroup || ""),
-      index: Number(indexText)
-    };
-  }
-
-  function upsertColumnSetting(oldColumnName, nextColumn) {
-    const columns = ensureArray("Columns");
-    const index = columns.findIndex((column) => String(column?.ColumnName || "") === String(oldColumnName || nextColumn.ColumnName));
-    if (index >= 0) columns[index] = nextColumn;
-    else columns.push(nextColumn);
-  }
-
   function addColumn() {
     ensureArray("Columns").push({ ColumnName: "ClassA", LabelText: "", FieldCss: "field-normal" });
     markDirty();
+    render();
+  }
+
+  function addColumnField() {
+    const field = prompt("追加する項目設定キーを入力してください。例: NoDisplay, Regex, DecimalPlaces", "");
+    const normalized = String(field || "").trim();
+    if (!normalized) return;
+    if (!state.extraColumnFields.includes(normalized)) state.extraColumnFields.push(normalized);
     render();
   }
 
@@ -1752,9 +1899,25 @@
   function updateColumnField(index, field, value) {
     const column = ensureArray("Columns")[index];
     if (!column) return;
-    if (field === "Required") column[field] = Boolean(value);
-    else if (value === "" && ["TextAlign", "DefaultInput", "FieldCss", "ControlType"].includes(field)) delete column[field];
-    else column[field] = value;
+    if (booleanColumnFields.has(field)) {
+      column[field] = Boolean(value);
+    } else if (field === "ColumnName") {
+      column[field] = String(value || "").trim();
+    } else if (value === "" && field !== "LabelText" && field !== "GridLabelText") {
+      delete column[field];
+    } else if (numberColumnFields.has(field)) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) column[field] = numeric;
+      else delete column[field];
+    } else if (isPlainObject(column[field]) || Array.isArray(column[field])) {
+      try {
+        column[field] = JSON.parse(value);
+      } catch {
+        logWarn(`${field} is not valid JSON yet.`);
+      }
+    } else {
+      column[field] = value;
+    }
     markDirty();
   }
 
@@ -2433,6 +2596,7 @@
       displayColumnNames,
       columnDisplayName,
       columnKindLabel,
+      columnDetailFields,
       buildWorkingPackage
     }
   };
