@@ -96,6 +96,36 @@ test("editor column hash TSV preserves group order", () => {
   assert.deepEqual(parsed, hash);
 });
 
+test("editor layout helpers pair column keys with display names", () => {
+  const editor = loadEditor();
+  const settings = {
+    Columns: [
+      { ColumnName: "ClassB", LabelText: "対応区分" },
+      { ColumnName: "DescriptionA", LabelText: "作業メモ" }
+    ]
+  };
+
+  assert.equal(editor.model.columnDisplayName("ClassB", settings), "対応区分");
+  assert.equal(editor.model.columnDisplayName("Title", settings), "タイトル");
+  assert.equal(editor.model.columnKindLabel("DescriptionA"), "説明");
+  assert.ok(editor.model.displayColumnNames(settings).includes("ClassB"));
+});
+
+test("column detail fields include all keys from loaded columns", () => {
+  const editor = loadEditor();
+  const settings = {
+    Columns: [
+      { ColumnName: "NumA", LabelText: "金額", DecimalPlaces: 2 },
+      { ColumnName: "ClassA", LabelText: "区分", NoDisplay: true }
+    ]
+  };
+
+  const fields = editor.model.columnDetailFields(settings);
+  assert.ok(fields.includes("ColumnName"));
+  assert.ok(fields.includes("DecimalPlaces"));
+  assert.ok(fields.includes("NoDisplay"));
+});
+
 test("config editor comparison reports order-only changes", () => {
   const editor = loadEditor();
   const differences = editor.model.compareSettings(
@@ -105,4 +135,25 @@ test("config editor comparison reports order-only changes", () => {
 
   assert.equal(differences.length, 1);
   assert.equal(differences[0].section, "EditorColumnHash");
+});
+
+test("detailed comparison reports changed property paths", () => {
+  const editor = loadEditor();
+  const differences = editor.model.compareSettingsDetailed(
+    {
+      Columns: [{ ColumnName: "ClassB", LabelText: "対応区分", Required: false }],
+      Views: [{ Name: "一覧", GridColumns: ["Title"] }]
+    },
+    {
+      Columns: [{ ColumnName: "ClassB", LabelText: "対応区分", Required: true }],
+      Views: [{ Name: "一覧", GridColumns: ["Title", "ClassB"] }]
+    }
+  );
+
+  assert.deepEqual(
+    differences.map((difference) => difference.path),
+    ["Columns[ClassB].Required", "Views[一覧].GridColumns[2]"]
+  );
+  assert.equal(differences[0].label, "項目設定 / ClassB / 入力必須");
+  assert.equal(differences[0].type, "update");
 });
