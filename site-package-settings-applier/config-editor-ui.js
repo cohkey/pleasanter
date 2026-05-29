@@ -7,7 +7,7 @@
  * - No Node.js, build step, or external library is required.
  */
 (function attachPleasanterConfigEditor(global) {
-  const VERSION = "0.2.0";
+  const VERSION = "0.3.0";
   const rootId = "pleasanter-config-editor-root";
   const applierGlobalName = "PleasanterSitePackageApplier";
   const sections = ["Summary", "Views", "Editor Layout", "Columns", "Raw JSON", "Diff"];
@@ -46,6 +46,23 @@
     "TitleBody",
     "SiteTitle"
   ]);
+  const systemColumnLabels = {
+    ResultId: "ID",
+    Ver: "バージョン",
+    Title: "タイトル",
+    Body: "内容",
+    Status: "状況",
+    Manager: "管理者",
+    Owner: "担当者",
+    Locked: "ロック",
+    Comments: "コメント",
+    Creator: "作成者",
+    CreatedTime: "作成日時",
+    Updator: "更新者",
+    UpdatedTime: "更新日時",
+    TitleBody: "タイトル/内容",
+    SiteTitle: "サイト名"
+  };
 
   const state = {
     activeSection: "Summary",
@@ -112,9 +129,11 @@
           grid-template-rows: auto auto 1fr 132px;
           min-width: 880px;
           min-height: 600px;
-          background: #f7f8f9;
-          border: 1px solid #b8c0c8;
-          box-shadow: 0 18px 60px rgba(16, 24, 40, .28);
+          background: #f5f5f7;
+          border: 1px solid rgba(60, 64, 67, .28);
+          border-radius: 8px;
+          box-shadow: 0 22px 70px rgba(16, 24, 40, .28);
+          overflow: hidden;
         }
         .pcu-toolbar {
           display: grid;
@@ -122,8 +141,8 @@
           gap: 10px;
           align-items: center;
           padding: 10px 12px;
-          background: #ffffff;
-          border-bottom: 1px solid #d6dbe1;
+          background: rgba(255, 255, 255, .9);
+          border-bottom: 1px solid #d9dde3;
         }
         .pcu-workflow {
           display: grid;
@@ -146,9 +165,10 @@
           place-items: center;
           width: 24px;
           height: 24px;
-          border: 1px solid #8aa2a8;
-          background: #eef7f5;
-          color: #0f766e;
+          border: 1px solid #9bbbe8;
+          border-radius: 999px;
+          background: #eef6ff;
+          color: #0a5db7;
           font-weight: 700;
         }
         .pcu-step strong {
@@ -203,7 +223,8 @@
           min-height: 30px;
           padding: 5px 10px;
           border: 1px solid #aeb7c2;
-          background: #ffffff;
+          border-radius: 6px;
+          background: linear-gradient(#ffffff, #f4f5f6);
           color: #20242a;
           cursor: pointer;
         }
@@ -214,8 +235,8 @@
           cursor: not-allowed;
         }
         button.pcu-primary {
-          background: #0f766e;
-          border-color: #0f766e;
+          background: #0a84ff;
+          border-color: #0a84ff;
           color: #ffffff;
         }
         button.pcu-danger {
@@ -226,6 +247,7 @@
         select,
         textarea {
           border: 1px solid #b9c1cb;
+          border-radius: 6px;
           background: #ffffff;
           color: #20242a;
           min-height: 30px;
@@ -254,7 +276,7 @@
         .pcu-nav {
           overflow: auto;
           padding: 10px;
-          background: #edf1f3;
+          background: #e9ebef;
           border-right: 1px solid #d0d7de;
         }
         .pcu-nav button {
@@ -267,6 +289,7 @@
           text-align: left;
           background: transparent;
           border-color: transparent;
+          border-radius: 8px;
         }
         .pcu-nav .pcu-nav-title {
           display: block;
@@ -280,13 +303,15 @@
         }
         .pcu-nav button[aria-current="true"] {
           background: #ffffff;
-          border-color: #b9c1cb;
+          border-color: #c9d4e1;
+          box-shadow: 0 1px 2px rgba(16, 24, 40, .08);
         }
         .pcu-badge {
           display: inline-block;
           min-width: 20px;
           padding: 1px 6px;
           border: 1px solid #ccd3da;
+          border-radius: 999px;
           background: #ffffff;
           color: #4b5563;
           text-align: center;
@@ -344,6 +369,7 @@
         .pcu-table-wrap {
           overflow: auto;
           border: 1px solid #d6dbe1;
+          border-radius: 8px;
           background: #ffffff;
         }
         table {
@@ -358,11 +384,14 @@
           padding: 6px;
           vertical-align: top;
         }
+        tr:hover td {
+          background: #fbfcfd;
+        }
         th {
           position: sticky;
           top: 0;
           z-index: 1;
-          background: #f1f4f6;
+          background: #f6f7f9;
           color: #374151;
           font-weight: 700;
           text-align: left;
@@ -422,6 +451,7 @@
         }
         .pcu-message {
           border: 1px solid #d6dbe1;
+          border-radius: 8px;
           background: #ffffff;
           padding: 8px;
         }
@@ -460,6 +490,7 @@
           max-width: 180px;
           padding: 2px 7px;
           border: 1px solid #cfd6dd;
+          border-radius: 999px;
           background: #ffffff;
           color: #374151;
           font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -467,6 +498,96 @@
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+        .pcu-editor-summary {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+        .pcu-editor-summary-item {
+          min-height: 58px;
+          padding: 9px 10px;
+          border: 1px solid #d9dde3;
+          border-radius: 8px;
+          background: #ffffff;
+        }
+        .pcu-editor-summary-item span {
+          display: block;
+          color: #606975;
+          font-size: 11px;
+        }
+        .pcu-editor-summary-item strong {
+          display: block;
+          margin-top: 3px;
+          font-size: 17px;
+        }
+        .pcu-editor-group-row td {
+          background: #eef2f7;
+          border-right: 0;
+          padding: 8px;
+        }
+        .pcu-editor-group-row:hover td {
+          background: #eef2f7;
+        }
+        .pcu-editor-group-bar {
+          display: grid;
+          grid-template-columns: minmax(230px, 1fr) auto;
+          gap: 8px;
+          align-items: center;
+        }
+        .pcu-editor-group-title {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+        }
+        .pcu-editor-group-title input {
+          min-width: 180px;
+          max-width: 360px;
+        }
+        .pcu-editor-item-name {
+          display: grid;
+          gap: 4px;
+        }
+        .pcu-editor-item-name strong {
+          font-size: 13px;
+        }
+        .pcu-key {
+          color: #6b7280;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 11px;
+        }
+        .pcu-muted {
+          color: #6b7280;
+          font-size: 11px;
+        }
+        .pcu-pill {
+          display: inline-flex;
+          align-items: center;
+          min-height: 22px;
+          padding: 1px 7px;
+          border: 1px solid #d2d8df;
+          border-radius: 999px;
+          background: #f8fafc;
+          color: #374151;
+          font-size: 11px;
+          white-space: nowrap;
+        }
+        .pcu-pill.warn {
+          border-color: #f59e0b;
+          background: #fff7ed;
+          color: #92400e;
+        }
+        .pcu-pill.error {
+          border-color: #fca5a5;
+          background: #fff1f2;
+          color: #991b1b;
+        }
+        .pcu-editor-note {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
         }
         .pcu-message.error {
           border-color: #fca5a5;
@@ -549,6 +670,9 @@
       else if (action === "move-view") moveView(Number(target.dataset.index), Number(target.dataset.delta));
       else if (action === "add-editor-group") addEditorGroup();
       else if (action === "delete-editor-group") deleteEditorGroup(target.dataset.group);
+      else if (action === "add-editor-item") addEditorItem(target.dataset.group);
+      else if (action === "delete-editor-item") deleteEditorItem(target.dataset.group, Number(target.dataset.index));
+      else if (action === "move-editor-item") moveEditorItem(target.dataset.group, Number(target.dataset.index), Number(target.dataset.delta));
       else if (action === "add-column") addColumn();
       else if (action === "delete-column") deleteColumn(Number(target.dataset.index));
       else if (action === "format-raw") formatRawJson();
@@ -588,6 +712,11 @@
 
     if (element.dataset.editorGroupItems) {
       setEditorGroupItems(element.dataset.editorGroupItems, element.value);
+      return;
+    }
+
+    if (element.dataset.editorItemGroup) {
+      setEditorItemColumn(element.dataset.editorItemGroup, Number(element.dataset.index), element.value);
       return;
     }
 
@@ -828,35 +957,104 @@
   function renderEditorLayout() {
     const hash = ensureObject("EditorColumnHash");
     const entries = Object.entries(hash);
-    const availableColumns = displayColumnNames(state.workingSettings);
+    const validColumns = collectValidColumnNames(state.workingSettings);
+    const totalItems = entries.reduce((total, [, items]) => total + (Array.isArray(items) ? items.length : 0), 0);
+    const missingItems = entries.flatMap(([, items]) => items || []).filter((name) => !validColumns.has(String(name)));
     return `
       <div class="pcu-section-head">
         <div>
           <h2>エディタ配置</h2>
-          <p>入力画面の見出しごとに、表示する項目と順番を編集します。</p>
+          <p>入力画面の見出し、表示順、項目表示名をまとめて確認・編集します。</p>
         </div>
         <button data-action="add-editor-group">見出し追加</button>
       </div>
-      <div class="pcu-message" style="margin-bottom: 10px;">
-        <strong>利用できる項目</strong>
-        <div class="pcu-chip-list" style="margin-top: 8px;">
-          ${[...availableColumns].slice(0, 120).map((name) => `<span class="pcu-chip">${escapeHtml(name)}</span>`).join("")}
+      <div class="pcu-editor-summary">
+        <div class="pcu-editor-summary-item">
+          <span>見出し数</span>
+          <strong>${entries.length}</strong>
+        </div>
+        <div class="pcu-editor-summary-item">
+          <span>配置済み項目</span>
+          <strong>${totalItems}</strong>
+        </div>
+        <div class="pcu-editor-summary-item">
+          <span>未定義参照</span>
+          <strong>${missingItems.length}</strong>
         </div>
       </div>
-      <div class="pcu-grid">
-        ${entries.map(([group, items]) => `
-          <div class="pcu-message">
-            <div class="pcu-subbar">
-              <label>見出し <input data-editor-group-name="${escapeAttr(group)}" value="${escapeAttr(group)}"></label>
-              <button class="pcu-danger" data-action="delete-editor-group" data-group="${escapeAttr(group)}">削除</button>
-            </div>
-            <div class="pcu-chip-list" style="margin-bottom: 6px;">
-              ${(items || []).map((name) => `<span class="pcu-chip">${escapeHtml(name)}</span>`).join("")}
-            </div>
-            <textarea placeholder="この見出しに置く列名を1行ずつ入力" data-editor-group-items="${escapeAttr(group)}">${escapeHtml(arrayToLines(items))}</textarea>
-          </div>
-        `).join("") || '<div class="pcu-empty">エディタ配置はありません。</div>'}
+      <div class="pcu-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 54px;">順</th>
+              <th style="width: 260px;">表示名 / 項目キー</th>
+              <th style="width: 110px;">種類</th>
+              <th style="width: 82px;">必須</th>
+              <th style="width: 128px;">入力形式</th>
+              <th>設定メモ</th>
+              <th style="width: 170px;">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${entries.map(([group, items]) => renderEditorGroupRows(group, Array.isArray(items) ? items : [])).join("") || '<tr><td colspan="7">エディタ配置はありません。</td></tr>'}
+          </tbody>
+        </table>
       </div>
+    `;
+  }
+
+  function renderEditorGroupRows(group, items) {
+    return `
+      <tr class="pcu-editor-group-row">
+        <td colspan="7">
+          <div class="pcu-editor-group-bar">
+            <div class="pcu-editor-group-title">
+              <label>見出し <input data-editor-group-name="${escapeAttr(group)}" value="${escapeAttr(group)}"></label>
+              <span class="pcu-muted">${items.length} 項目</span>
+            </div>
+            <div class="pcu-row-actions">
+              <button data-action="add-editor-item" data-group="${escapeAttr(group)}">項目追加</button>
+              <button class="pcu-danger" data-action="delete-editor-group" data-group="${escapeAttr(group)}">見出し削除</button>
+            </div>
+          </div>
+        </td>
+      </tr>
+      ${items.map((columnName, index) => renderEditorItemRow(group, columnName, index, items.length)).join("") || `
+        <tr>
+          <td></td>
+          <td colspan="6"><span class="pcu-muted">この見出しにはまだ項目がありません。</span></td>
+        </tr>
+      `}
+    `;
+  }
+
+  function renderEditorItemRow(group, columnName, index, groupLength) {
+    const column = findColumn(state.workingSettings, columnName);
+    const missing = !collectValidColumnNames(state.workingSettings).has(String(columnName));
+    return `
+      <tr>
+        <td>${index + 1}</td>
+        <td>
+          <div class="pcu-editor-item-name">
+            <strong>${escapeHtml(columnDisplayName(columnName, state.workingSettings))}</strong>
+            <select data-editor-item-group="${escapeAttr(group)}" data-index="${index}">
+              ${renderColumnOptions(columnName, state.workingSettings)}
+            </select>
+            <span class="pcu-key">${escapeHtml(columnName)}</span>
+          </div>
+        </td>
+        <td><span class="pcu-pill ${missing ? "error" : ""}">${escapeHtml(missing ? "未定義" : columnKindLabel(columnName))}</span></td>
+        <td>${column?.Required ? '<span class="pcu-pill warn">必須</span>' : '<span class="pcu-muted">任意</span>'}</td>
+        <td>${escapeHtml(controlTypeLabel(column?.ControlType))}</td>
+        <td><div class="pcu-editor-note">${renderColumnNote(columnName, column)}</div></td>
+        <td>
+          <div class="pcu-row-actions">
+            <button data-action="move-editor-item" data-group="${escapeAttr(group)}" data-index="${index}" data-delta="-1" ${index === 0 ? "disabled" : ""}>上へ</button>
+            <button data-action="move-editor-item" data-group="${escapeAttr(group)}" data-index="${index}" data-delta="1" ${index === groupLength - 1 ? "disabled" : ""}>下へ</button>
+            <button class="pcu-danger" data-action="delete-editor-item" data-group="${escapeAttr(group)}" data-index="${index}">削除</button>
+          </div>
+        </td>
+      </tr>
     `;
   }
 
@@ -1246,6 +1444,47 @@
     markDirty();
   }
 
+  function addEditorItem(group) {
+    const hash = ensureObject("EditorColumnHash");
+    const items = Array.isArray(hash[group]) ? hash[group] : [];
+    const usedInGroup = new Set(items.map(String));
+    const nextColumn =
+      displayColumnNames(state.workingSettings).find((name) => !usedInGroup.has(String(name))) ||
+      displayColumnNames(state.workingSettings)[0] ||
+      "Title";
+    hash[group] = [...items, nextColumn];
+    markDirty();
+    render();
+  }
+
+  function deleteEditorItem(group, index) {
+    const hash = ensureObject("EditorColumnHash");
+    if (!Array.isArray(hash[group]) || index < 0 || index >= hash[group].length) return;
+    hash[group].splice(index, 1);
+    markDirty();
+    render();
+  }
+
+  function moveEditorItem(group, index, delta) {
+    const hash = ensureObject("EditorColumnHash");
+    const items = hash[group];
+    if (!Array.isArray(items)) return;
+    const nextIndex = index + delta;
+    if (nextIndex < 0 || nextIndex >= items.length) return;
+    const [item] = items.splice(index, 1);
+    items.splice(nextIndex, 0, item);
+    markDirty();
+    render();
+  }
+
+  function setEditorItemColumn(group, index, columnName) {
+    const hash = ensureObject("EditorColumnHash");
+    if (!Array.isArray(hash[group]) || index < 0 || index >= hash[group].length) return;
+    hash[group][index] = columnName;
+    markDirty();
+    render();
+  }
+
   function addColumn() {
     ensureArray("Columns").push({ ColumnName: "ClassA", LabelText: "", FieldCss: "field-normal" });
     markDirty();
@@ -1375,6 +1614,77 @@
     const configured = (settings.Columns || []).map((column) => column?.ColumnName).filter(Boolean);
     const system = ["ResultId", "Ver", "Title", "Body", "Status", "Manager", "Owner", "Comments", "UpdatedTime"];
     return [...new Set([...system, ...configured])];
+  }
+
+  function findColumn(settings, columnName) {
+    return (settings.Columns || []).find((column) => String(column?.ColumnName || "") === String(columnName || "")) || null;
+  }
+
+  function columnDisplayName(columnName, settings) {
+    const column = findColumn(settings, columnName);
+    return column?.LabelText || column?.GridLabelText || systemColumnLabels[columnName] || columnName || "(未設定)";
+  }
+
+  function columnKindLabel(columnName) {
+    const name = String(columnName || "");
+    if (systemColumnLabels[name]) return "標準";
+    if (name.startsWith("Class")) return "分類";
+    if (name.startsWith("Num")) return "数値";
+    if (name.startsWith("Date")) return "日付";
+    if (name.startsWith("Description")) return "説明";
+    if (name.startsWith("Check")) return "チェック";
+    if (name.startsWith("Attachments")) return "添付";
+    return "項目";
+  }
+
+  function controlTypeLabel(value) {
+    return {
+      "": "標準",
+      Normal: "通常",
+      MarkDown: "Markdown",
+      RTEditor: "リッチテキスト",
+      Spinner: "スピナー"
+    }[String(value || "")] || String(value || "標準");
+  }
+
+  function fieldCssLabel(value) {
+    return {
+      "": "標準幅",
+      "field-normal": "標準幅",
+      "field-wide": "広幅",
+      "field-markdown": "Markdown幅",
+      "field-rte": "リッチテキスト幅"
+    }[String(value || "")] || String(value || "");
+  }
+
+  function renderColumnOptions(selected, settings) {
+    const names = displayColumnNames(settings);
+    if (selected && !names.includes(selected)) names.unshift(selected);
+    return names.map((name) => {
+      const label = columnDisplayName(name, settings);
+      const missing = !collectValidColumnNames(settings).has(String(name));
+      const text = missing ? `未定義: ${name}` : `${label}（${name}）`;
+      return `<option value="${escapeAttr(name)}" ${String(selected || "") === String(name) ? "selected" : ""}>${escapeHtml(text)}</option>`;
+    }).join("");
+  }
+
+  function renderColumnNote(columnName, column) {
+    const notes = [];
+    if (!column) {
+      if (systemColumnLabels[columnName]) notes.push("Pleasanter標準項目");
+      else notes.push("Columnsに定義がありません");
+    } else {
+      if (column.FieldCss) notes.push(`幅: ${fieldCssLabel(column.FieldCss)}`);
+      if (column.DefaultInput != null && column.DefaultInput !== "") notes.push(`既定値: ${column.DefaultInput}`);
+      if (column.ChoicesText) notes.push(`選択肢: ${parseChoiceValues(column.ChoicesText).size}件`);
+      if (column.EditorReadOnly) notes.push("読取専用");
+      if (column.TextAlign) notes.push(`文字揃え: ${column.TextAlign}`);
+      if (column.MaxLength) notes.push(`最大文字数: ${column.MaxLength}`);
+      if (column.Min != null || column.Max != null) notes.push(`範囲: ${column.Min ?? ""}〜${column.Max ?? ""}`);
+      if (column.Regex) notes.push("入力検証あり");
+    }
+    if (!notes.length) notes.push("追加設定なし");
+    return notes.map((note) => `<span class="pcu-pill">${escapeHtml(note)}</span>`).join("");
   }
 
   function columnsToTsv(columns) {
@@ -1726,6 +2036,9 @@
       editorColumnHashToTsv,
       editorColumnHashFromTsv,
       allowedFieldCssValues,
+      displayColumnNames,
+      columnDisplayName,
+      columnKindLabel,
       buildWorkingPackage
     }
   };

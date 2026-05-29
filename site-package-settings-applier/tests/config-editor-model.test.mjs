@@ -96,6 +96,21 @@ test("editor column hash TSV preserves group order", () => {
   assert.deepEqual(parsed, hash);
 });
 
+test("editor layout helpers pair column keys with display names", () => {
+  const editor = loadEditor();
+  const settings = {
+    Columns: [
+      { ColumnName: "ClassB", LabelText: "対応区分" },
+      { ColumnName: "DescriptionA", LabelText: "作業メモ" }
+    ]
+  };
+
+  assert.equal(editor.model.columnDisplayName("ClassB", settings), "対応区分");
+  assert.equal(editor.model.columnDisplayName("Title", settings), "タイトル");
+  assert.equal(editor.model.columnKindLabel("DescriptionA"), "説明");
+  assert.ok(editor.model.displayColumnNames(settings).includes("ClassB"));
+});
+
 test("config editor comparison reports order-only changes", () => {
   const editor = loadEditor();
   const differences = editor.model.compareSettings(

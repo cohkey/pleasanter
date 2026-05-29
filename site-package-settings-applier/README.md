@@ -6,7 +6,7 @@ Pleasanter のサイトパッケージ JSON から、対象テーブルの `Site
 
 専用 UI 化の設計は [docs/config-editor-ui-design.md](docs/config-editor-ui-design.md) にまとめています。
 
-MVP 実装として `config-editor-ui.js` を追加しています。サイトパッケージ JSON を読み込み、`Views`、`EditorColumnHash`、`Columns` を画面上で編集し、TSV 入出力、dry-run、適用、適用後比較まで行えます。UI は日本語表示で、読込、編集、確認、適用の流れが見える構成です。
+MVP 実装として `config-editor-ui.js` を追加しています。サイトパッケージ JSON を読み込み、`Views`、`EditorColumnHash`、`Columns` を画面上で編集し、TSV 入出力、dry-run、適用、適用後比較まで行えます。UI は日本語表示で、読込、編集、確認、適用の流れが見える構成です。エディタ配置は表形式で、項目キーだけでなく表示名、種別、必須、入力形式、設定メモを同じ行で確認できます。
 
 ## 対応状況
 
