@@ -154,6 +154,6 @@ test("detailed comparison reports changed property paths", () => {
     differences.map((difference) => difference.path),
     ["Columns[ClassB].Required", "Views[一覧].GridColumns[2]"]
   );
-  assert.equal(differences[0].label, "項目設定 / ClassB / 必須");
+  assert.equal(differences[0].label, "項目設定 / ClassB / 入力必須");
   assert.equal(differences[0].type, "update");
 });

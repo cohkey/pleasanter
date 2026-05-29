@@ -7,7 +7,7 @@
  * - No Node.js, build step, or external library is required.
  */
 (function attachPleasanterConfigEditor(global) {
-  const VERSION = "0.5.0";
+  const VERSION = "0.6.0";
   const rootId = "pleasanter-config-editor-root";
   const applierGlobalName = "PleasanterSitePackageApplier";
   const sections = ["Summary", "Views", "Editor", "Raw JSON", "Diff"];
@@ -670,6 +670,53 @@
         .pcu-wide-table .pcu-narrow input[type="checkbox"] {
           width: auto;
         }
+        .pcu-view-table-wrap,
+        .pcu-editor-matrix-wrap {
+          max-height: max(420px, calc(100vh - 382px));
+          overflow: auto;
+        }
+        .pcu-view-table {
+          min-width: 1760px;
+          table-layout: fixed;
+        }
+        .pcu-view-table th {
+          z-index: 5;
+        }
+        .pcu-view-table .pcu-sticky-view {
+          position: sticky;
+          left: 0;
+          width: 230px;
+          z-index: 3;
+          background: #ffffff;
+          box-shadow: 1px 0 0 #dfe4ea;
+        }
+        .pcu-view-table th.pcu-sticky-view {
+          z-index: 6;
+          background: #f6f7f9;
+        }
+        .pcu-view-table tr:hover .pcu-sticky-view {
+          background: #fbfcfd;
+        }
+        .pcu-preview-list {
+          display: grid;
+          gap: 4px;
+          margin-top: 6px;
+        }
+        .pcu-preview-item {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 6px;
+          align-items: center;
+          padding: 3px 6px;
+          border: 1px solid #dbe1e7;
+          border-radius: 6px;
+          background: #f8fafc;
+          font-size: 11px;
+        }
+        .pcu-preview-item.error {
+          border-color: #fecaca;
+          background: #fff1f2;
+        }
         .pcu-editor-matrix {
           min-width: 3400px;
           table-layout: fixed;
@@ -892,7 +939,11 @@
     }
 
     if (element.dataset.viewField) {
-      updateViewField(Number(element.dataset.index), element.dataset.viewField, element.value);
+      updateViewField(
+        Number(element.dataset.index),
+        element.dataset.viewField,
+        element.type === "checkbox" ? element.checked : element.value
+      );
       return;
     }
 
@@ -1098,6 +1149,11 @@
 
   function renderViews() {
     const views = ensureArray("Views");
+    const modes = [
+      ["Index", "一覧"],
+      ["Kamban", "カンバン"],
+      ["Calendar", "カレンダー"]
+    ];
     return `
       <div class="pcu-section-head">
         <div>
@@ -1106,36 +1162,57 @@
         </div>
         <button data-action="add-view">ビュー追加</button>
       </div>
-      <div class="pcu-table-wrap">
-        <table>
+      <div class="pcu-message" style="margin-bottom: 10px;">
+        <strong>ビュー名とヘッダーは固定表示です。</strong>
+        <span class="pcu-muted">表示項目、フィルタ、ソートの対象項目は表示名付きで確認できます。</span>
+      </div>
+      <div class="pcu-table-wrap pcu-view-table-wrap">
+        <table class="pcu-view-table">
           <thead>
             <tr>
-              <th style="width: 170px;">ビュー名</th>
-              <th style="width: 120px;">表示形式</th>
-              <th>表示列</th>
-              <th>絞り込み</th>
-              <th>並び替え</th>
-              <th style="width: 120px;">操作</th>
+              <th class="pcu-sticky-view">名称</th>
+              <th style="width: 130px;">表示</th>
+              <th style="width: 360px;">表示項目</th>
+              <th style="width: 310px;">フィルタ</th>
+              <th style="width: 290px;">ソート</th>
+              <th style="width: 150px;">フィルタボタン</th>
+              <th style="width: 170px;">操作</th>
             </tr>
           </thead>
           <tbody>
             ${views.map((view, index) => `
               <tr>
-                <td><input data-index="${index}" data-view-field="Name" value="${escapeAttr(view.Name || "")}"></td>
+                <td class="pcu-sticky-view">
+                  <div class="pcu-field-stack">
+                    <input data-index="${index}" data-view-field="Name" value="${escapeAttr(view.Name || "")}">
+                    <span class="pcu-key">Views[${index}]</span>
+                  </div>
+                </td>
                 <td>
                   <select data-index="${index}" data-view-field="DefaultMode">
-                    ${[
-                      ["Index", "一覧"],
-                      ["Kamban", "カンバン"],
-                      ["Calendar", "カレンダー"]
-                    ].map(([mode, label]) => `
+                    ${modes.map(([mode, label]) => `
                       <option value="${mode}" ${view.DefaultMode === mode ? "selected" : ""}>${label}</option>
                     `).join("")}
                   </select>
                 </td>
-                <td><textarea placeholder="列名を1行ずつ入力" data-index="${index}" data-view-field="GridColumns">${escapeHtml(arrayToLines(view.GridColumns))}</textarea></td>
-                <td><textarea placeholder='例: {"Status":"[\"300\"]"}' data-index="${index}" data-view-json-field="ColumnFilterHash">${escapeHtml(formatInlineJson(view.ColumnFilterHash || {}))}</textarea></td>
-                <td><textarea placeholder='例: {"UpdatedTime":"desc"}' data-index="${index}" data-view-json-field="ColumnSorterHash">${escapeHtml(formatInlineJson(view.ColumnSorterHash || {}))}</textarea></td>
+                <td>
+                  <textarea placeholder="項目名を1行ずつ入力" data-index="${index}" data-view-field="GridColumns">${escapeHtml(arrayToLines(view.GridColumns))}</textarea>
+                  ${renderViewColumnPreview(view.GridColumns)}
+                </td>
+                <td>
+                  <textarea placeholder='例: {"Status":"[\"300\"]"}' data-index="${index}" data-view-json-field="ColumnFilterHash">${escapeHtml(formatInlineJson(view.ColumnFilterHash || {}))}</textarea>
+                  ${renderViewHashPreview(view.ColumnFilterHash)}
+                </td>
+                <td>
+                  <textarea placeholder='例: {"UpdatedTime":"desc"}' data-index="${index}" data-view-json-field="ColumnSorterHash">${escapeHtml(formatInlineJson(view.ColumnSorterHash || {}))}</textarea>
+                  ${renderViewHashPreview(view.ColumnSorterHash)}
+                </td>
+                <td class="pcu-narrow">
+                  <label>
+                    <input type="checkbox" data-index="${index}" data-view-field="UseFilterButton" ${view.UseFilterButton ? "checked" : ""}>
+                    使用する
+                  </label>
+                </td>
                 <td>
                   <div class="pcu-row-actions">
                     <button data-action="move-view" data-index="${index}" data-delta="-1" ${index === 0 ? "disabled" : ""}>上へ</button>
@@ -1144,9 +1221,47 @@
                   </div>
                 </td>
               </tr>
-            `).join("") || '<tr><td colspan="6">ビューはありません。</td></tr>'}
+            `).join("") || '<tr><td colspan="7">ビューはありません。</td></tr>'}
           </tbody>
         </table>
+      </div>
+    `;
+  }
+
+  function renderViewColumnPreview(columnNames) {
+    const names = Array.isArray(columnNames) ? columnNames.map(String).filter(Boolean) : [];
+    if (names.length === 0) return '<div class="pcu-muted" style="margin-top: 6px;">表示項目はありません。</div>';
+    const validColumns = collectValidColumnNames(state.workingSettings);
+    return `
+      <div class="pcu-preview-list">
+        ${names.map((columnName) => {
+          const valid = validColumns.has(columnName);
+          return `
+            <div class="pcu-preview-item ${valid ? "" : "error"}">
+              <span>${escapeHtml(valid ? columnDisplayName(columnName, state.workingSettings) : "未定義項目")}</span>
+              <span class="pcu-key">${escapeHtml(columnName)}</span>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  function renderViewHashPreview(hash) {
+    const entries = Object.entries(isPlainObject(hash) ? hash : {});
+    if (entries.length === 0) return '<div class="pcu-muted" style="margin-top: 6px;">条件はありません。</div>';
+    const validColumns = collectValidColumnNames(state.workingSettings);
+    return `
+      <div class="pcu-preview-list">
+        ${entries.map(([columnName, value]) => {
+          const valid = validColumns.has(columnName);
+          return `
+            <div class="pcu-preview-item ${valid ? "" : "error"}" title="${escapeAttr(previewJson(value))}">
+              <span>${escapeHtml(valid ? columnDisplayName(columnName, state.workingSettings) : "未定義項目")}</span>
+              <span class="pcu-key">${escapeHtml(columnName)}</span>
+            </div>
+          `;
+        }).join("")}
       </div>
     `;
   }
@@ -1234,16 +1349,16 @@
         <strong>ヘッダーと左3列は固定表示です。</strong>
         <span class="pcu-muted">縦横にスクロールしても、見出し、順番、項目名を見失わずに編集できます。</span>
       </div>
-      <div class="pcu-table-wrap">
+      <div class="pcu-table-wrap pcu-editor-matrix-wrap">
         <table class="pcu-editor-matrix">
           <thead>
             <tr>
               <th class="pcu-sticky-col pcu-sticky-group">見出し</th>
               <th class="pcu-sticky-col pcu-sticky-order">順</th>
-              <th class="pcu-sticky-col pcu-sticky-item">項目名 / 項目キー</th>
+              <th class="pcu-sticky-col pcu-sticky-item">項目</th>
               <th style="width: 96px;">種類</th>
-              <th style="width: 150px;">配置操作</th>
-              ${fields.map((field) => `<th style="width: ${columnFieldWidth(field)}px;">${escapeHtml(columnFieldLabel(field))}<br><span class="pcu-key">${escapeHtml(field)}</span></th>`).join("")}
+              <th style="width: 150px;">操作</th>
+              ${fields.map((field) => `<th style="width: ${columnFieldWidth(field)}px;" title="${escapeAttr(field)}">${escapeHtml(columnFieldLabel(field))}</th>`).join("")}
             </tr>
           </thead>
           <tbody>
@@ -1974,6 +2089,7 @@
     const view = ensureArray("Views")[index];
     if (!view) return;
     if (field === "GridColumns") view[field] = linesToArray(value);
+    else if (field === "UseFilterButton") view[field] = Boolean(value);
     else view[field] = value;
     markDirty();
   }
@@ -2546,26 +2662,29 @@
   function settingPropertyLabel(property) {
     return {
       __order: "表示順",
-      ColumnName: "項目キー",
+      ColumnName: "項目名",
       LabelText: "表示名",
-      GridLabelText: "一覧表示名",
-      Required: "必須",
-      ControlType: "入力形式",
-      ChoicesText: "選択肢",
+      GridLabelText: "一覧の表示名",
+      Required: "入力必須",
+      ControlType: "コントロール種別",
+      ChoicesText: "選択肢一覧",
       DefaultInput: "既定値",
-      FieldCss: "表示幅",
-      TextAlign: "文字揃え",
+      FieldCss: "フィールドCSS",
+      TextAlign: "配置",
       EditorReadOnly: "読取専用",
-      EditorFormat: "エディタ形式",
+      EditorFormat: "エディタの書式",
       MaxLength: "最大文字数",
       Min: "最小値",
       Max: "最大値",
-      Regex: "入力検証",
-      Name: "名前",
-      DefaultMode: "表示形式",
-      GridColumns: "表示列",
-      ColumnFilterHash: "絞り込み",
-      ColumnSorterHash: "並び替え"
+      Regex: "正規表現",
+      ClientRegex: "クライアント正規表現",
+      ServerRegex: "サーバ正規表現",
+      Name: "名称",
+      DefaultMode: "表示",
+      GridColumns: "表示項目",
+      ColumnFilterHash: "フィルタ",
+      ColumnSorterHash: "ソート",
+      UseFilterButton: "フィルタボタンを使用する"
     }[property] || property;
   }
 
