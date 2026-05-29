@@ -335,6 +335,19 @@
 
     console.log("Applied:", applyResult);
     console.log("Verified:", applyResult.verified);
+    console.log("Post-apply compare:", {
+      equal: applyResult.postApplyCompare.equal,
+      summary: applyResult.postApplyCompare.summary,
+      sections: applyResult.postApplyCompare.sections
+    });
+    if (!applyResult.postApplyCompare.equal) {
+      console.table(
+        applyResult.postApplyCompare.differences.map((difference) => ({
+          type: difference.type,
+          section: difference.section
+        }))
+      );
+    }
 
     return {
       applied: true,
@@ -409,11 +422,13 @@
     };
     const result = await request(ctx, `/api/items/${ctx.targetSiteId}/updatesite`, payload);
     const verify = await getSiteSettings(ctx);
+    const postApplyCompare = compareSiteSettings(plan.nextSettings, verify, { sections: ctx.sections });
 
     return {
       dryRun: false,
       result,
       plan,
+      postApplyCompare,
       verified: summarizeVerified(verify, resolveSections(ctx.sections, verify)),
       verifiedViews: Array.isArray(verify.Views) ? verify.Views.map((view) => view.Name || view.Id) : []
     };

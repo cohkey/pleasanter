@@ -4,6 +4,10 @@ Pleasanter のサイトパッケージ JSON から、対象テーブルの `Site
 
 本番利用で Node.js や外部フレームワークを使わない前提のため、DevTools Console に小さなローダーを貼り付け、ローカルファイル選択ダイアログから JS と JSON を読み込んで実行します。
 
+専用 UI 化の設計は [docs/config-editor-ui-design.md](docs/config-editor-ui-design.md) にまとめています。
+
+MVP 実装として `config-editor-ui.js` を追加しています。サイトパッケージ JSON を読み込み、`Views`、`EditorColumnHash`、`Columns` を画面上で編集し、TSV 入出力、dry-run、適用、適用後比較まで行えます。UI は日本語表示で、読込、編集、確認、適用の流れが見える構成です。
+
 ## 対応状況
 
 対応済みの `SiteSettings`:
@@ -91,6 +95,24 @@ await PleasanterSitePackageApplier.runWizard();
 
 8. ウィザードに従って、サイトパッケージ JSON、TenantId、SiteId、API キー、対象設定、適用モードを指定します。
 
+## 専用 UI の使い方
+
+1. Pleasanter にログインします。
+2. DevTools Console を開きます。
+3. `load-local-js-from-file.js` の中身を Console に貼り付けます。
+4. 次を実行し、`config-editor-ui.js` を選択します。
+
+```js
+await PleasanterLocalJsLoader.pickAndRun();
+```
+
+5. 表示された UI で `Load JSON`、または API キーと Source SiteId を入力して `Fetch Source` を実行します。
+6. dry-run / apply まで行う場合は `Load Applier JS` から `apply-site-package-settings.js` を読み込みます。
+7. Target SiteId、mode、unsafe 設定を確認し、`Dry-run` を実行します。
+8. Diff タブの内容を確認し、問題なければ `Apply` を実行します。
+
+最初の MVP では、画面編集の主対象は `Views`、`EditorColumnHash`、`Columns` です。その他の `SiteSettings` は Raw JSON と dry-run / post-apply compare で確認します。
+
 ## ウィザードで行うこと
 
 `runWizard()` は次を順番に実行します。
@@ -106,6 +128,7 @@ await PleasanterSitePackageApplier.runWizard();
 9. 適用してよいか確認
 10. OK なら API で適用
 11. 再取得して反映結果を確認
+12. 適用予定の `SiteSettings` と再取得した `SiteSettings` を比較し、差分があれば `Post-apply compare` に表示
 
 `Notifications`、`Reminders` などの安全確認が必要な設定が対象に含まれる場合は、dry-run 前に追加確認が出ます。Pleasanter 標準 UI からエクスポートした JSON であることを確認できている場合だけ OK を選んでください。
 
@@ -205,6 +228,8 @@ console.table(diff.differences.map(x => ({
 ```
 
 `diff.equal` が `true` なら、比較対象の `SiteSettings` は一致しています。`false` の場合は `differences` の `section` を見て、どの設定が違うか確認してください。
+
+適用直後の戻り値にも `postApplyCompare` が入ります。`postApplyCompare.equal` が `false` の場合は、API が保存時に値を正規化したか、適用対象に含まれていない設定が残っています。エディタ項目の並び順も配列として比較するため、同じ項目でも順番が違えば差分になります。
 
 ## ブラウザE2E確認メモ
 
