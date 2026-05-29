@@ -121,3 +121,24 @@ test("config editor comparison reports order-only changes", () => {
   assert.equal(differences.length, 1);
   assert.equal(differences[0].section, "EditorColumnHash");
 });
+
+test("detailed comparison reports changed property paths", () => {
+  const editor = loadEditor();
+  const differences = editor.model.compareSettingsDetailed(
+    {
+      Columns: [{ ColumnName: "ClassB", LabelText: "対応区分", Required: false }],
+      Views: [{ Name: "一覧", GridColumns: ["Title"] }]
+    },
+    {
+      Columns: [{ ColumnName: "ClassB", LabelText: "対応区分", Required: true }],
+      Views: [{ Name: "一覧", GridColumns: ["Title", "ClassB"] }]
+    }
+  );
+
+  assert.deepEqual(
+    differences.map((difference) => difference.path),
+    ["Columns[ClassB].Required", "Views[一覧].GridColumns[2]"]
+  );
+  assert.equal(differences[0].label, "項目設定 / ClassB / 必須");
+  assert.equal(differences[0].type, "update");
+});

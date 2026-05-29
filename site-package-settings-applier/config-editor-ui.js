@@ -7,7 +7,7 @@
  * - No Node.js, build step, or external library is required.
  */
 (function attachPleasanterConfigEditor(global) {
-  const VERSION = "0.3.0";
+  const VERSION = "0.4.0";
   const rootId = "pleasanter-config-editor-root";
   const applierGlobalName = "PleasanterSitePackageApplier";
   const sections = ["Summary", "Views", "Editor Layout", "Columns", "Raw JSON", "Diff"];
@@ -589,6 +589,89 @@
           flex-wrap: wrap;
           gap: 4px;
         }
+        .pcu-inline-details {
+          width: 100%;
+          margin-top: 6px;
+        }
+        .pcu-inline-details summary {
+          color: #0a5db7;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .pcu-inline-details textarea {
+          min-height: 160px;
+          margin-top: 6px;
+        }
+        .pcu-diff-table td:first-child {
+          border-left: 5px solid transparent;
+        }
+        .pcu-diff-row-create td:first-child {
+          border-left-color: #16a34a;
+        }
+        .pcu-diff-row-update td:first-child {
+          border-left-color: #f59e0b;
+        }
+        .pcu-diff-row-delete td:first-child {
+          border-left-color: #dc2626;
+        }
+        .pcu-diff-row-skip td:first-child {
+          border-left-color: #64748b;
+        }
+        .pcu-diff-row-create td {
+          background: #f0fdf4;
+        }
+        .pcu-diff-row-update td {
+          background: #fffbeb;
+        }
+        .pcu-diff-row-delete td {
+          background: #fff1f2;
+        }
+        .pcu-diff-row-skip td {
+          background: #f8fafc;
+        }
+        .pcu-diff-path {
+          display: grid;
+          gap: 3px;
+        }
+        .pcu-diff-path strong {
+          font-size: 12px;
+        }
+        .pcu-diff-path code {
+          color: #475569;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 11px;
+          white-space: normal;
+          word-break: break-all;
+        }
+        .pcu-diff-value {
+          min-height: 30px;
+          max-height: 150px;
+          overflow: auto;
+          padding: 6px;
+          border: 1px solid #d8dee6;
+          border-radius: 6px;
+          background: rgba(255, 255, 255, .72);
+          color: #1f2937;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 11px;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .pcu-diff-value.empty {
+          color: #94a3b8;
+          font-family: inherit;
+        }
+        .pcu-change-list {
+          display: grid;
+          gap: 4px;
+        }
+        .pcu-change-list div {
+          padding: 4px 6px;
+          border: 1px solid #e5e7eb;
+          border-radius: 6px;
+          background: rgba(255, 255, 255, .7);
+        }
         .pcu-message.error {
           border-color: #fca5a5;
           background: #fff1f2;
@@ -673,6 +756,8 @@
       else if (action === "add-editor-item") addEditorItem(target.dataset.group);
       else if (action === "delete-editor-item") deleteEditorItem(target.dataset.group, Number(target.dataset.index));
       else if (action === "move-editor-item") moveEditorItem(target.dataset.group, Number(target.dataset.index), Number(target.dataset.delta));
+      else if (action === "ensure-editor-column") ensureEditorColumnSetting(target.dataset.columnName);
+      else if (action === "apply-editor-column-json") applyEditorColumnJson(target.dataset.jsonKey);
       else if (action === "add-column") addColumn();
       else if (action === "delete-column") deleteColumn(Number(target.dataset.index));
       else if (action === "format-raw") formatRawJson();
@@ -1031,6 +1116,7 @@
   function renderEditorItemRow(group, columnName, index, groupLength) {
     const column = findColumn(state.workingSettings, columnName);
     const missing = !collectValidColumnNames(state.workingSettings).has(String(columnName));
+    const jsonKey = editorColumnJsonKey(group, index);
     return `
       <tr>
         <td>${index + 1}</td>
@@ -1046,7 +1132,10 @@
         <td><span class="pcu-pill ${missing ? "error" : ""}">${escapeHtml(missing ? "未定義" : columnKindLabel(columnName))}</span></td>
         <td>${column?.Required ? '<span class="pcu-pill warn">必須</span>' : '<span class="pcu-muted">任意</span>'}</td>
         <td>${escapeHtml(controlTypeLabel(column?.ControlType))}</td>
-        <td><div class="pcu-editor-note">${renderColumnNote(columnName, column)}</div></td>
+        <td>
+          <div class="pcu-editor-note">${renderColumnNote(columnName, column)}</div>
+          ${renderEditorColumnJsonEditor(columnName, column, jsonKey)}
+        </td>
         <td>
           <div class="pcu-row-actions">
             <button data-action="move-editor-item" data-group="${escapeAttr(group)}" data-index="${index}" data-delta="-1" ${index === 0 ? "disabled" : ""}>上へ</button>
@@ -1055,6 +1144,25 @@
           </div>
         </td>
       </tr>
+    `;
+  }
+
+  function renderEditorColumnJsonEditor(columnName, column, jsonKey) {
+    if (!column) {
+      return `
+        <div style="margin-top: 6px;">
+          <button data-action="ensure-editor-column" data-column-name="${escapeAttr(columnName)}">項目設定を追加</button>
+        </div>
+      `;
+    }
+    return `
+      <details class="pcu-inline-details">
+        <summary>全設定JSON</summary>
+        <textarea data-editor-column-json-key="${escapeAttr(jsonKey)}">${escapeHtml(JSON.stringify(column, null, 2))}</textarea>
+        <div class="pcu-row-actions" style="margin-top: 6px;">
+          <button data-action="apply-editor-column-json" data-json-key="${escapeAttr(jsonKey)}">JSONを反映</button>
+        </div>
+      </details>
     `;
   }
 
@@ -1133,14 +1241,15 @@
   }
 
   function renderDiff() {
-    const localDiff = compareSettings(state.sourceSettings, state.workingSettings);
+    const localDiff = compareSettingsDetailed(state.sourceSettings, state.workingSettings);
     const dryOps = state.dryRun?.plan?.operations || [];
     const post = state.applyResult?.postApplyCompare;
+    const postDiff = post ? detailedDifferencesFromCompareResult(post) : [];
     return `
       <div class="pcu-section-head">
         <div>
           <h2>差分確認</h2>
-          <p>編集前との差分、dry-run の操作、適用後の一致確認を見ます。</p>
+          <p>どの設定を、何から何へ変更するかを確認します。</p>
         </div>
       </div>
       <div class="pcu-grid three" style="margin-bottom: 12px;">
@@ -1148,12 +1257,12 @@
         <div class="pcu-metric"><div class="label">適用予定の操作</div><div class="value">${dryOps.length}</div></div>
         <div class="pcu-metric"><div class="label">適用後一致</div><div class="value">${post ? (post.equal ? "一致" : "差分あり") : "-"}</div></div>
       </div>
-      <h3>元JSON と編集中JSON</h3>
-      ${renderSimpleDiffTable(localDiff)}
+      <h3>編集中の変更詳細</h3>
+      ${renderDetailedDiffTable(localDiff)}
       <h3>dry-run 操作</h3>
       ${renderOperationsTable(dryOps)}
       <h3>適用後比較</h3>
-      ${post ? renderSimpleDiffTable(post.differences || []) : '<div class="pcu-empty">まだ適用していません。</div>'}
+      ${post ? renderDetailedDiffTable(postDiff) : '<div class="pcu-empty">まだ適用していません。</div>'}
     `;
   }
 
@@ -1178,18 +1287,63 @@
     `;
   }
 
+  function renderDetailedDiffTable(items) {
+    if (!items.length) return '<div class="pcu-empty">差分はありません。</div>';
+    return `
+      <div class="pcu-table-wrap">
+        <table class="pcu-diff-table">
+          <thead>
+            <tr>
+              <th style="width: 92px;">変更</th>
+              <th style="width: 270px;">場所</th>
+              <th>変更前</th>
+              <th>変更後</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map((item) => `
+              <tr class="pcu-diff-row-${escapeAttr(item.type)}">
+                <td>${renderChangeBadge(item.type)}</td>
+                <td>
+                  <div class="pcu-diff-path">
+                    <strong>${escapeHtml(item.label || item.section || "")}</strong>
+                    <code>${escapeHtml(item.path || item.section || "")}</code>
+                  </div>
+                </td>
+                <td>${renderDiffValue(item.before)}</td>
+                <td>${renderDiffValue(item.after)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
   function renderOperationsTable(operations) {
     if (!operations.length) return '<div class="pcu-empty">dry-run の操作はありません。</div>';
     return `
       <div class="pcu-table-wrap">
-        <table>
-          <thead><tr><th style="width: 80px;">種類</th><th style="width: 140px;">セクション</th><th>対象</th><th>理由</th></tr></thead>
+        <table class="pcu-diff-table">
+          <thead>
+            <tr>
+              <th style="width: 86px;">操作</th>
+              <th style="width: 220px;">対象</th>
+              <th>何が変わるか</th>
+              <th style="width: 180px;">理由</th>
+            </tr>
+          </thead>
           <tbody>
             ${operations.map((operation) => `
-              <tr>
-                <td>${escapeHtml(operation.type)}</td>
-                <td>${escapeHtml(operation.section || "")}</td>
-                <td>${escapeHtml(operation.key || "")}</td>
+              <tr class="pcu-diff-row-${escapeAttr(operation.type || "")}">
+                <td>${renderChangeBadge(operation.type)}</td>
+                <td>
+                  <div class="pcu-diff-path">
+                    <strong>${escapeHtml(operation.key || operation.section || "")}</strong>
+                    <code>${escapeHtml(operation.section || "")}</code>
+                  </div>
+                </td>
+                <td>${renderOperationChange(operation)}</td>
                 <td>${escapeHtml(operation.reason || "")}</td>
               </tr>
             `).join("")}
@@ -1197,6 +1351,52 @@
         </table>
       </div>
     `;
+  }
+
+  function renderChangeBadge(type) {
+    const labels = {
+      create: "追加",
+      update: "更新",
+      delete: "削除",
+      skip: "除外",
+      missing: "削除",
+      extra: "追加",
+      different: "更新"
+    };
+    const badgeKind = type === "delete" || type === "missing" ? "error" : type === "update" || type === "different" ? "warn" : "";
+    return `<span class="pcu-pill ${badgeKind}">${escapeHtml(labels[type] || type || "変更")}</span>`;
+  }
+
+  function detailedDifferencesFromCompareResult(compareResult) {
+    return (compareResult?.differences || []).flatMap((difference) => {
+      const section = difference.section || difference.key || "";
+      return compareSettingsDetailed(
+        { [section]: difference.source ?? difference.before },
+        { [section]: difference.target ?? difference.after }
+      );
+    });
+  }
+
+  function renderDiffValue(value) {
+    if (value === undefined) return '<div class="pcu-diff-value empty">なし</div>';
+    return `<div class="pcu-diff-value">${escapeHtml(previewJson(value))}</div>`;
+  }
+
+  function renderOperationChange(operation) {
+    if (operation.type === "skip") return escapeHtml(operation.reason || "適用しません。");
+    if (operation.before !== undefined || operation.after !== undefined) {
+      const details = summarizeValueDiffs(operation.before, operation.after, 5);
+      if (details.length) {
+        return `<div class="pcu-change-list">${details.map((detail) => `<div>${escapeHtml(detail)}</div>`).join("")}</div>`;
+      }
+      return `
+        <div class="pcu-grid two">
+          ${renderDiffValue(operation.before)}
+          ${renderDiffValue(operation.after)}
+        </div>
+      `;
+    }
+    return '<span class="pcu-muted">詳細なし</span>';
   }
 
   function renderLog() {
@@ -1483,6 +1683,58 @@
     hash[group][index] = columnName;
     markDirty();
     render();
+  }
+
+  function ensureEditorColumnSetting(columnName) {
+    const columns = ensureArray("Columns");
+    if (findColumn(state.workingSettings, columnName)) return;
+    columns.push({
+      ColumnName: columnName,
+      LabelText: systemColumnLabels[columnName] || columnName
+    });
+    markDirty();
+    render();
+  }
+
+  function applyEditorColumnJson(jsonKey) {
+    const textarea = [...shadow.querySelectorAll("[data-editor-column-json-key]")]
+      .find((element) => element.dataset.editorColumnJsonKey === jsonKey);
+    if (!textarea) throw new Error("Column JSON editor was not found.");
+
+    const { group, index } = parseEditorColumnJsonKey(jsonKey);
+    const hash = ensureObject("EditorColumnHash");
+    const currentColumnName = Array.isArray(hash[group]) ? hash[group][index] : "";
+    const nextColumn = parseJson(textarea.value);
+    if (!isPlainObject(nextColumn)) throw new Error("Column JSON must be an object.");
+    if (!nextColumn.ColumnName) nextColumn.ColumnName = currentColumnName;
+    if (!nextColumn.ColumnName) throw new Error("Column JSON must include ColumnName.");
+
+    upsertColumnSetting(currentColumnName || nextColumn.ColumnName, nextColumn);
+    if (Array.isArray(hash[group]) && index >= 0 && index < hash[group].length) {
+      hash[group][index] = nextColumn.ColumnName;
+    }
+    markDirty();
+    logInfo(`${nextColumn.ColumnName} の全設定JSONを反映しました。`);
+    render();
+  }
+
+  function editorColumnJsonKey(group, index) {
+    return `${encodeURIComponent(group)}::${index}`;
+  }
+
+  function parseEditorColumnJsonKey(jsonKey) {
+    const [encodedGroup, indexText] = String(jsonKey || "").split("::");
+    return {
+      group: decodeURIComponent(encodedGroup || ""),
+      index: Number(indexText)
+    };
+  }
+
+  function upsertColumnSetting(oldColumnName, nextColumn) {
+    const columns = ensureArray("Columns");
+    const index = columns.findIndex((column) => String(column?.ColumnName || "") === String(oldColumnName || nextColumn.ColumnName));
+    if (index >= 0) columns[index] = nextColumn;
+    else columns.push(nextColumn);
   }
 
   function addColumn() {
@@ -1799,6 +2051,147 @@
     return differences;
   }
 
+  function compareSettingsDetailed(source, target) {
+    const differences = [];
+    diffValue("", source || {}, target || {}, differences);
+    return differences;
+  }
+
+  function diffValue(path, before, after, differences) {
+    if (stable(before) === stable(after)) return;
+
+    if (before === undefined || after === undefined || !isContainerComparable(before, after)) {
+      differences.push({
+        type: before === undefined ? "create" : after === undefined ? "delete" : "update",
+        section: pathSection(path),
+        path: path || "(root)",
+        label: diffLabel(path),
+        before: clone(before),
+        after: clone(after)
+      });
+      return;
+    }
+
+    if (Array.isArray(before) && Array.isArray(after)) {
+      diffArray(path, before, after, differences);
+      return;
+    }
+
+    const keys = [...new Set([...Object.keys(before || {}), ...Object.keys(after || {})])].sort();
+    for (const key of keys) {
+      diffValue(path ? `${path}.${key}` : key, before?.[key], after?.[key], differences);
+    }
+  }
+
+  function diffArray(path, before, after, differences) {
+    const section = pathSection(path);
+    const keyable = [...before, ...after].every((item) => arrayItemKey(section, item));
+    if (keyable) {
+      const beforeMap = new Map(before.map((item, index) => [arrayItemKey(section, item), { item, index }]));
+      const afterMap = new Map(after.map((item, index) => [arrayItemKey(section, item), { item, index }]));
+      const beforeOrder = before.map((item) => arrayItemKey(section, item));
+      const afterOrder = after.map((item) => arrayItemKey(section, item));
+      if (beforeOrder.join("\n") !== afterOrder.join("\n")) {
+        differences.push({
+          type: "update",
+          section,
+          path: `${path}.__order`,
+          label: `${diffLabel(path)} の順序`,
+          before: beforeOrder,
+          after: afterOrder
+        });
+      }
+      for (const key of [...new Set([...beforeMap.keys(), ...afterMap.keys()])].sort()) {
+        const nextPath = `${path}[${key}]`;
+        diffValue(nextPath, beforeMap.get(key)?.item, afterMap.get(key)?.item, differences);
+      }
+      return;
+    }
+
+    const length = Math.max(before.length, after.length);
+    for (let index = 0; index < length; index += 1) {
+      diffValue(`${path}[${index + 1}]`, before[index], after[index], differences);
+    }
+  }
+
+  function summarizeValueDiffs(before, after, limit = 5) {
+    const differences = [];
+    diffValue("", before, after, differences);
+    return differences.slice(0, limit).map((item) => {
+      const beforeText = compactValue(item.before);
+      const afterText = compactValue(item.after);
+      return `${item.label}: ${beforeText} -> ${afterText}`;
+    }).concat(differences.length > limit ? [`ほか ${differences.length - limit} 件`] : []);
+  }
+
+  function arrayItemKey(section, item) {
+    if (!isPlainObject(item)) return "";
+    if (section === "Columns") return item.ColumnName || "";
+    return item.Name || item.Title || item.Id || item.IdHash || "";
+  }
+
+  function isContainerComparable(before, after) {
+    if (Array.isArray(before) || Array.isArray(after)) return Array.isArray(before) && Array.isArray(after);
+    return isPlainObject(before) && isPlainObject(after);
+  }
+
+  function pathSection(path) {
+    const match = String(path || "").match(/^([^[.]+)/);
+    return match?.[1] || "";
+  }
+
+  function diffLabel(path) {
+    const text = String(path || "");
+    const section = pathSection(text);
+    if (section === "EditorColumnHash") {
+      const match = text.match(/^EditorColumnHash\.([^[.]+)(?:\[(\d+)\])?/);
+      if (match) return `${sectionLabel(section)} / ${match[1]}${match[2] ? ` / ${match[2]}番目` : ""}`;
+    }
+    const last = text.split(".").pop() || text;
+    const property = last.replace(/\[[^\]]+\]/g, "");
+    const propertyLabel = settingPropertyLabel(property);
+    const itemMatch = text.match(/\[([^\]]+)\]/g);
+    if (itemMatch?.length) {
+      const item = itemMatch[itemMatch.length - 1].replace(/^\[|\]$/g, "");
+      return property && property !== item ? `${sectionLabel(section)} / ${item} / ${propertyLabel}` : `${sectionLabel(section)} / ${item}`;
+    }
+    return propertyLabel === section ? sectionLabel(section) : `${sectionLabel(section)} / ${propertyLabel}`;
+  }
+
+  function settingPropertyLabel(property) {
+    return {
+      __order: "表示順",
+      ColumnName: "項目キー",
+      LabelText: "表示名",
+      GridLabelText: "一覧表示名",
+      Required: "必須",
+      ControlType: "入力形式",
+      ChoicesText: "選択肢",
+      DefaultInput: "既定値",
+      FieldCss: "表示幅",
+      TextAlign: "文字揃え",
+      EditorReadOnly: "読取専用",
+      EditorFormat: "エディタ形式",
+      MaxLength: "最大文字数",
+      Min: "最小値",
+      Max: "最大値",
+      Regex: "入力検証",
+      Name: "名前",
+      DefaultMode: "表示形式",
+      GridColumns: "表示列",
+      ColumnFilterHash: "絞り込み",
+      ColumnSorterHash: "並び替え"
+    }[property] || property;
+  }
+
+  function compactValue(value) {
+    if (value === undefined) return "なし";
+    if (typeof value === "string") return value.length > 80 ? `${value.slice(0, 80)}...` : value;
+    if (typeof value === "number" || typeof value === "boolean" || value == null) return String(value);
+    const text = JSON.stringify(value);
+    return text.length > 100 ? `${text.slice(0, 100)}...` : text;
+  }
+
   async function getSite(siteId) {
     const response = await fetch(`${location.origin.replace(/\/+$/, "")}/api/items/${siteId}/getsite`, {
       method: "POST",
@@ -2031,6 +2424,7 @@
     model: {
       validateSettings,
       compareSettings,
+      compareSettingsDetailed,
       columnsToTsv,
       mergeColumnsFromTsv,
       editorColumnHashToTsv,
