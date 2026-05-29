@@ -670,6 +670,49 @@
         .pcu-wide-table .pcu-narrow input[type="checkbox"] {
           width: auto;
         }
+        .pcu-editor-matrix {
+          min-width: 3400px;
+          table-layout: fixed;
+        }
+        .pcu-editor-matrix th {
+          z-index: 5;
+        }
+        .pcu-editor-matrix .pcu-sticky-col {
+          position: sticky;
+          z-index: 3;
+          background: #ffffff;
+        }
+        .pcu-editor-matrix th.pcu-sticky-col {
+          z-index: 6;
+          background: #f6f7f9;
+        }
+        .pcu-editor-matrix tr:hover .pcu-sticky-col {
+          background: #fbfcfd;
+        }
+        .pcu-editor-matrix .pcu-sticky-group {
+          left: 0;
+          width: 174px;
+        }
+        .pcu-editor-matrix .pcu-sticky-order {
+          left: 174px;
+          width: 58px;
+          text-align: center;
+        }
+        .pcu-editor-matrix .pcu-sticky-item {
+          left: 232px;
+          width: 286px;
+          box-shadow: 1px 0 0 #dfe4ea;
+        }
+        .pcu-editor-matrix .pcu-placement-cell {
+          display: grid;
+          gap: 5px;
+        }
+        .pcu-editor-matrix .pcu-unplaced td {
+          background: #f8fafc;
+        }
+        .pcu-editor-matrix .pcu-unplaced .pcu-sticky-col {
+          background: #f8fafc;
+        }
         .pcu-diff-table td:first-child {
           border-left: 5px solid transparent;
         }
@@ -823,6 +866,7 @@
       else if (action === "add-editor-item") addEditorItem(target.dataset.group);
       else if (action === "delete-editor-item") deleteEditorItem(target.dataset.group, Number(target.dataset.index));
       else if (action === "move-editor-item") moveEditorItem(target.dataset.group, Number(target.dataset.index), Number(target.dataset.delta));
+      else if (action === "place-column") placeColumnInEditor(target.dataset.columnName);
       else if (action === "ensure-editor-column") ensureEditorColumnSetting(target.dataset.columnName);
       else if (action === "add-column-field") addColumnField();
       else if (action === "add-column") addColumn();
@@ -1157,11 +1201,14 @@
   }
 
   function renderEditor() {
+    const rows = editorMatrixRows(state.workingSettings);
+    const fields = columnDetailFields(state.workingSettings).filter((field) => field !== "ColumnName");
+    const summary = editorMatrixSummary(rows);
     return `
       <div class="pcu-section-head">
         <div>
           <h2>エディタ</h2>
-          <p>入力画面の配置と項目詳細を同じ画面で編集します。</p>
+          <p>見出し、順番、項目名、項目詳細を1つの表で編集します。</p>
         </div>
         <div class="pcu-row-actions">
           <button data-action="add-editor-group">見出し追加</button>
@@ -1169,15 +1216,170 @@
           <button data-action="add-column-field">詳細列追加</button>
         </div>
       </div>
-      <div class="pcu-section-block">
-        <h3>配置</h3>
-        ${renderEditorLayoutBody()}
+      <div class="pcu-editor-summary">
+        <div class="pcu-editor-summary-item">
+          <span>見出し数</span>
+          <strong>${summary.groupCount}</strong>
+        </div>
+        <div class="pcu-editor-summary-item">
+          <span>配置済み項目</span>
+          <strong>${summary.placedCount}</strong>
+        </div>
+        <div class="pcu-editor-summary-item">
+          <span>未配置項目</span>
+          <strong>${summary.unplacedCount}</strong>
+        </div>
       </div>
-      <div class="pcu-section-block">
-        <h3>項目詳細</h3>
-        ${renderColumnsBody()}
+      <div class="pcu-message" style="margin-bottom: 10px;">
+        <strong>ヘッダーと左3列は固定表示です。</strong>
+        <span class="pcu-muted">縦横にスクロールしても、見出し、順番、項目名を見失わずに編集できます。</span>
+      </div>
+      <div class="pcu-table-wrap">
+        <table class="pcu-editor-matrix">
+          <thead>
+            <tr>
+              <th class="pcu-sticky-col pcu-sticky-group">見出し</th>
+              <th class="pcu-sticky-col pcu-sticky-order">順</th>
+              <th class="pcu-sticky-col pcu-sticky-item">項目名 / 項目キー</th>
+              <th style="width: 96px;">種類</th>
+              <th style="width: 150px;">配置操作</th>
+              ${fields.map((field) => `<th style="width: ${columnFieldWidth(field)}px;">${escapeHtml(columnFieldLabel(field))}<br><span class="pcu-key">${escapeHtml(field)}</span></th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => renderEditorMatrixRow(row, fields)).join("") || `<tr><td colspan="${fields.length + 5}">エディタ項目はありません。</td></tr>`}
+          </tbody>
+        </table>
       </div>
     `;
+  }
+
+  function renderEditorMatrixRow(row, fields) {
+    const columnIndex = row.column ? findColumnIndex(state.workingSettings, row.columnName) : -1;
+    return `
+      <tr class="${row.placed ? "" : "pcu-unplaced"}">
+        <td class="pcu-sticky-col pcu-sticky-group">${renderEditorGroupCell(row)}</td>
+        <td class="pcu-sticky-col pcu-sticky-order">${row.placed ? row.index + 1 : "-"}</td>
+        <td class="pcu-sticky-col pcu-sticky-item">${renderEditorItemCell(row)}</td>
+        <td><span class="pcu-pill ${row.missing ? "error" : ""}">${escapeHtml(row.missing ? "未定義" : columnKindLabel(row.columnName))}</span></td>
+        <td>${renderEditorMatrixActions(row)}</td>
+        ${fields.map((field, fieldIndex) => renderEditorMatrixFieldCell(row, columnIndex, field, fieldIndex)).join("")}
+      </tr>
+    `;
+  }
+
+  function renderEditorGroupCell(row) {
+    if (row.placed) {
+      return `
+        <div class="pcu-placement-cell">
+          <input data-editor-group-name="${escapeAttr(row.group)}" value="${escapeAttr(row.group)}">
+          <span class="pcu-muted">${row.groupLength} 項目</span>
+        </div>
+      `;
+    }
+    const groups = Object.keys(ensureObject("EditorColumnHash"));
+    return `
+      <div class="pcu-placement-cell">
+        <span class="pcu-pill">未配置</span>
+        <select data-place-group-for="${escapeAttr(row.columnName)}">
+          ${groups.map((group) => `<option value="${escapeAttr(group)}">${escapeHtml(group)}</option>`).join("")}
+        </select>
+      </div>
+    `;
+  }
+
+  function renderEditorItemCell(row) {
+    return `
+      <div class="pcu-editor-item-name">
+        <strong>${escapeHtml(columnDisplayName(row.columnName, state.workingSettings))}</strong>
+        ${row.placed ? `
+          <select data-editor-item-group="${escapeAttr(row.group)}" data-index="${row.index}">
+            ${renderColumnOptions(row.columnName, state.workingSettings)}
+          </select>
+          <span class="pcu-key">${escapeHtml(row.columnName)}</span>
+        ` : `<span class="pcu-key">${escapeHtml(row.columnName)}</span>`}
+      </div>
+    `;
+  }
+
+  function renderEditorMatrixActions(row) {
+    if (!row.placed) {
+      return `
+        <div class="pcu-row-actions">
+          <button data-action="place-column" data-column-name="${escapeAttr(row.columnName)}" ${Object.keys(ensureObject("EditorColumnHash")).length ? "" : "disabled"}>配置</button>
+          <button class="pcu-danger" data-action="delete-column" data-index="${findColumnIndex(state.workingSettings, row.columnName)}">削除</button>
+        </div>
+      `;
+    }
+    return `
+      <div class="pcu-row-actions">
+        <button data-action="move-editor-item" data-group="${escapeAttr(row.group)}" data-index="${row.index}" data-delta="-1" ${row.index === 0 ? "disabled" : ""}>上へ</button>
+        <button data-action="move-editor-item" data-group="${escapeAttr(row.group)}" data-index="${row.index}" data-delta="1" ${row.index === row.groupLength - 1 ? "disabled" : ""}>下へ</button>
+        <button data-action="add-editor-item" data-group="${escapeAttr(row.group)}">追加</button>
+        <button class="pcu-danger" data-action="delete-editor-item" data-group="${escapeAttr(row.group)}" data-index="${row.index}">外す</button>
+      </div>
+    `;
+  }
+
+  function renderEditorMatrixFieldCell(row, columnIndex, field, fieldIndex) {
+    if (columnIndex >= 0) return renderColumnFieldCell(row.column, columnIndex, field);
+    if (fieldIndex > 0) return '<td></td>';
+    return `
+      <td>
+        <span class="pcu-muted">項目設定なし</span>
+        <div style="margin-top: 6px;">
+          <button data-action="ensure-editor-column" data-column-name="${escapeAttr(row.columnName)}">項目設定を追加</button>
+        </div>
+      </td>
+    `;
+  }
+
+  function editorMatrixRows(settings) {
+    const hash = ensureObject("EditorColumnHash");
+    const rows = [];
+    const placedColumnNames = new Set();
+    const validColumns = collectValidColumnNames(settings);
+
+    for (const [group, items] of Object.entries(hash)) {
+      const list = Array.isArray(items) ? items : [];
+      list.forEach((columnName, index) => {
+        const name = String(columnName || "");
+        placedColumnNames.add(name);
+        rows.push({
+          placed: true,
+          group,
+          index,
+          groupLength: list.length,
+          columnName: name,
+          column: findColumn(settings, name),
+          missing: !validColumns.has(name)
+        });
+      });
+    }
+
+    for (const column of ensureArray("Columns")) {
+      const name = String(column?.ColumnName || "");
+      if (!name || placedColumnNames.has(name)) continue;
+      rows.push({
+        placed: false,
+        group: "",
+        index: -1,
+        groupLength: 0,
+        columnName: name,
+        column,
+        missing: !validColumns.has(name)
+      });
+    }
+
+    return rows;
+  }
+
+  function editorMatrixSummary(rows) {
+    return {
+      groupCount: Object.keys(ensureObject("EditorColumnHash")).length,
+      placedCount: rows.filter((row) => row.placed).length,
+      unplacedCount: rows.filter((row) => !row.placed).length
+    };
   }
 
   function renderEditorLayoutBody() {
@@ -1865,6 +2067,22 @@
     render();
   }
 
+  function placeColumnInEditor(columnName) {
+    const hash = ensureObject("EditorColumnHash");
+    let group = "";
+    for (const element of shadow.querySelectorAll("[data-place-group-for]")) {
+      if (element.dataset.placeGroupFor === columnName) {
+        group = element.value;
+        break;
+      }
+    }
+    if (!group) group = Object.keys(hash)[0] || "基本";
+    if (!Array.isArray(hash[group])) hash[group] = [];
+    if (!hash[group].includes(columnName)) hash[group].push(columnName);
+    markDirty();
+    render();
+  }
+
   function ensureEditorColumnSetting(columnName) {
     const columns = ensureArray("Columns");
     if (findColumn(state.workingSettings, columnName)) return;
@@ -2033,6 +2251,10 @@
 
   function findColumn(settings, columnName) {
     return (settings.Columns || []).find((column) => String(column?.ColumnName || "") === String(columnName || "")) || null;
+  }
+
+  function findColumnIndex(settings, columnName) {
+    return (settings.Columns || []).findIndex((column) => String(column?.ColumnName || "") === String(columnName || ""));
   }
 
   function columnDisplayName(columnName, settings) {
