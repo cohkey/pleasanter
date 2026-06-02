@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
-  <title id="title">Madoguchi window ticket blue favicon</title>
-  <desc id="desc">A service window icon blended with a ticket shape.</desc>
-  <rect width="64" height="64" rx="14" fill="#1d4ed8"/>
-  <path fill="#ffffff" d="M13 16h38a5 5 0 0 1 5 5v6a5 5 0 0 0 0 10v6a5 5 0 0 1-5 5H13a5 5 0 0 1-5-5v-6a5 5 0 0 0 0-10v-6a5 5 0 0 1 5-5Z"/>
-  <path fill="#1d4ed8" d="M18 22h28v18H18z"/>
-  <path fill="#ffffff" d="M29 22h6v18h-6zM18 30h28v5H18z"/>
-  <path fill="#93c5fd" d="M48 24h4v4h-4zM48 36h4v4h-4z"/>
-</svg>

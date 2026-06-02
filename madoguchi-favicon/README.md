@@ -1,34 +1,113 @@
-# Madoguchi System favicon
+# 窓口システム favicon 生成プロンプト
 
-This favicon follows the "service window" direction:
+窓口システム用 favicon のPNG画像を生成するためのプロンプトです。
 
-- `madoguchi-favicon.svg` is the editable source icon.
-- `madoguchi-counter.svg` is a stronger reception-counter variation.
-- `madoguchi-window-clean.svg` removes the status badge from the first icon.
-- `madoguchi-window-blue-dot.svg` keeps the guide dot but avoids alert colors.
-- `madoguchi-window-check.svg` uses a check mark for a received or confirmed state.
-- `madoguchi-counter-calm.svg` keeps the counter shape but removes the warm badge color.
-- `madoguchi-window-ticket-blue.svg` blends the E window with the B ticket concept in blue.
-- `madoguchi-window-ticket-teal.svg` blends the E window with the B ticket concept in teal.
-- `madoguchi-window-chat-slate.svg` blends the E window with the D chat/check concept.
-- `madoguchi-window-chat-green.svg` uses the chat/check concept with a green completed tone.
-- `madoguchi-window-outline-navy.svg` is a lighter white-ground navy version.
-- `madoguchi-window-solid-indigo.svg` is a solid indigo window version with no badge.
-- `madoguchi-ticket.svg` is a ticket and request-queue variation.
-- `madoguchi-chat-check.svg` is a consultation and completion variation.
-- `madoguchi-kanji.svg` is a Japanese "窓" monogram variation.
-- `madoguchi-favicon-16.png`, `madoguchi-favicon-32.png`, and `madoguchi-favicon-64.png` are generated PNG targets.
-- `preview.html` shows the first icon at browser-tab sizes.
-- `tab-favicon-sample.html` compares the favicon candidates and can switch the active browser-tab icon.
-- `generate-png.mjs` regenerates the PNG files from the same simplified geometry.
+## E-1 窓口案
 
-Recommended browser tags:
+```text
+512x512pxの正方形PNGアイコンを作ってください。
+デザインは、シンプルなfavicon用の「受付窓口」アイコンです。
 
-```html
-<link rel="icon" href="./madoguchi-favicon.svg" type="image/svg+xml">
-<link rel="icon" href="./madoguchi-favicon-32.png" sizes="32x32" type="image/png">
+見た目を以下にかなり忠実にしてください。
+
+背景:
+- 角丸の正方形
+- 背景色は濃い青緑 #0f766e
+- 角丸は全体の約22%くらい
+- 影、グラデーション、質感はなし
+
+中央モチーフ:
+- 白い受付窓口の建物形を中央に大きく配置
+- 白い外形は、上が建物、下が受付カウンターに見える形
+- 上部の白い建物は、左上から右上まで広く、屋根はなく、角は少し丸い
+- 建物の中に青緑の四角い窓を入れる
+- 窓は白い縦線と横線で4分割に見えるようにする
+- 縦線は中央、横線はやや下寄り
+- 下部には白い横長の受付カウンターを置く
+
+右下のドット:
+- 右下に小さいオレンジ色の丸を置く
+- 丸の色は #f59e0b
+- オレンジ丸の中心に小さい白丸を置く
+- 丸は通知バッジではなく、案内ポイントのように見せる
+
+全体条件:
+- 色は #0f766e、白、#f59e0b の3色だけ
+- 文字、数字、人物、吹き出し、ヘッドセットは入れない
+- 線を細くしない
+- 16pxや32pxに縮小しても分かるように、太く単純な形にする
+- アイコンは中央に大きく、余白は少なめ
+- SVG風のベクターアイコンのような、完全にフラットな見た目にする
+- 自由なアレンジはしないでください
+- 完成画像は1枚のPNGだけにしてください
 ```
 
-Use the 32px PNG when the upload target only accepts raster images.
+## E-1 窓口案の画像修正用
 
-The orange or warm badge in the first drafts was meant as a reception guide point, not an alert. Use the clean or blue-dot versions if the badge reads too much like a warning state.
+```text
+この画像をベースに、窓口システム用のfaviconとしてもっとシンプルで正確なフラットアイコンに修正してください。
+
+現在のコンセプトは維持してください。
+- 濃い青緑の角丸正方形背景
+- 白い受付窓
+- 白い受付カウンター
+- 右下の小さいオレンジの案内ドット
+
+修正したい点:
+- 写真っぽさ、画面の網目、ぼやけ、影、立体感を完全になくしてください
+- 完全なフラットデザインのPNGにしてください
+- 背景は濃い青緑 #0f766e の角丸正方形
+- 背景の角丸は大きめだが、角が丸くなりすぎないようにする
+- 白い受付窓パネルは、今より少し小さくして中央上寄りに置く
+- 窓パネルの中は青緑の4分割窓にする
+- 4分割窓の白い縦線と横線は太く、均等に見えるようにする
+- 下の白いカウンターは横長にするが、今より少し薄くする
+- カウンターはアイコン下部に置き、左右に十分な余白を残す
+- オレンジの丸は右下に置くが、大きすぎないようにする
+- オレンジ丸の中央には小さい白丸を入れる
+- 赤っぽくしない。オレンジは #f59e0b にする
+
+重要:
+- 色は #0f766e、白、#f59e0b の3色だけ
+- 文字、数字、人物、影、グラデーション、細かい装飾は入れない
+- 16pxや32pxに縮小しても見えるように、太く単純な形にする
+- 512x512pxの正方形PNGとして出力してください
+```
+
+## B チケット案
+
+```text
+512x512pxの正方形PNGアイコンを作ってください。
+デザインは、シンプルなfavicon用の「受付番号チケット」アイコンです。
+
+見た目を以下にかなり忠実にしてください。
+
+背景:
+- 角丸の正方形
+- 背景色は濃いブルー #1d4ed8
+- 角丸は全体の約22%くらい
+- 影、グラデーション、質感はなし
+
+中央モチーフ:
+- 中央に白いチケット形を大きく配置
+- チケットは横長の長方形で、角は少し丸い
+- チケットの左右中央に、半円の切り欠きがあるように見せる
+- チケットは画面幅の70%くらい、高さは50%くらい
+
+チケット内:
+- 左側に青い横線を2本入れる
+- 上の横線は長め
+- 下の横線は少し短め
+- 線の色は背景と同じ #1d4ed8
+- 右側に薄い水色 #60a5fa の小さい正方形を縦に2つ置く
+- その2つの四角はチケットのミシン目や受付欄のように見せる
+
+全体条件:
+- 色は #1d4ed8、白、#60a5fa の3色だけ
+- 文字、数字、人物、窓、吹き出し、ヘッドセットは入れない
+- 細い線、影、グラデーション、3D表現は使わない
+- 16pxや32pxでもチケットだと分かる、太く単純なシルエットにする
+- SVG風のベクターアイコンのような、完全にフラットな見た目にする
+- 自由なアレンジはしないでください
+- 完成画像は1枚のPNGだけにしてください
+```

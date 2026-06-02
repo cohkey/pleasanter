@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
-  <title id="title">Madoguchi outline navy favicon</title>
-  <desc id="desc">A navy outlined service window icon.</desc>
-  <rect width="64" height="64" rx="14" fill="#f8fafc"/>
-  <path fill="#1e3a8a" d="M15 12h34a5 5 0 0 1 5 5v35H10V17a5 5 0 0 1 5-5Z"/>
-  <path fill="#f8fafc" d="M17 19h30v23H17z"/>
-  <path fill="#1e3a8a" d="M29 19h6v23h-6zM17 30h30v6H17z"/>
-  <path fill="#1e3a8a" d="M8 47h48a4 4 0 0 1 4 4v3H4v-3a4 4 0 0 1 4-4Z"/>
-</svg>

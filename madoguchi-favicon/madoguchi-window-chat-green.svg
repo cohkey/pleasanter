@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
-  <title id="title">Madoguchi window chat green favicon</title>
-  <desc id="desc">A green service window icon blended with a consultation bubble.</desc>
-  <rect width="64" height="64" rx="14" fill="#166534"/>
-  <path fill="#ffffff" d="M13 14h38a6 6 0 0 1 6 6v25a6 6 0 0 1-6 6H33l-11 7v-7h-9a6 6 0 0 1-6-6V20a6 6 0 0 1 6-6Z"/>
-  <path fill="#166534" d="M17 22h30v19H17z"/>
-  <path fill="#ffffff" d="M29 22h6v19h-6zM17 31h30v5H17z"/>
-  <path fill="#86efac" d="m43 44 4 4 9-11 4 4-13 15-8-8z"/>
-</svg>
