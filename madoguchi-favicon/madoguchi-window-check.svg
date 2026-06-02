@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Madoguchi checked window favicon</title>
+  <desc id="desc">A service window icon with a completed check mark.</desc>
+  <rect width="64" height="64" rx="14" fill="#0f766e"/>
+  <path fill="#ffffff" d="M15 12h34a5 5 0 0 1 5 5v35H10V17a5 5 0 0 1 5-5Z"/>
+  <path fill="#0f766e" d="M16 18h32v25H16z"/>
+  <path fill="#ffffff" d="M29 18h6v25h-6z"/>
+  <path fill="#ffffff" d="M16 30h32v6H16z"/>
+  <path fill="#ffffff" d="M8 47h48a4 4 0 0 1 4 4v3H4v-3a4 4 0 0 1 4-4Z"/>
+  <circle cx="49" cy="49" r="8" fill="#16a34a"/>
+  <path fill="#ffffff" d="m45 49 3 3 6-7 3 3-9 10-6-6z"/>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Madoguchi solid indigo favicon</title>
+  <desc id="desc">A solid indigo service window icon.</desc>
+  <rect width="64" height="64" rx="14" fill="#4338ca"/>
+  <path fill="#ffffff" d="M13 13h38a5 5 0 0 1 5 5v31a5 5 0 0 1-5 5H13a5 5 0 0 1-5-5V18a5 5 0 0 1 5-5Z"/>
+  <path fill="#4338ca" d="M16 20h32v22H16z"/>
+  <path fill="#ffffff" d="M29 20h6v22h-6zM16 31h32v5H16z"/>
+</svg>
