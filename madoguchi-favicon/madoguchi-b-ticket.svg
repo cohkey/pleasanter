@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
-  <title id="title">Madoguchi ticket favicon</title>
-  <desc id="desc">A simplified reception ticket icon.</desc>
-  <rect width="64" height="64" fill="#1d4ed8"/>
-  <path fill="#ffffff" d="M15 17h34a5 5 0 0 1 5 5v6a5 5 0 0 0 0 10v6a5 5 0 0 1-5 5H15a5 5 0 0 1-5-5v-6a5 5 0 0 0 0-10v-6a5 5 0 0 1 5-5Z"/>
-  <path fill="#1d4ed8" d="M23 24h22v6H23zM23 36h14v6H23z"/>
-  <path fill="#60a5fa" d="M47 27h4v4h-4zM47 35h4v4h-4z"/>
-</svg>
