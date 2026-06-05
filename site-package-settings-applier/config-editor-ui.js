@@ -7,7 +7,7 @@
  * - No Node.js, build step, or external library is required.
  */
 (function attachPleasanterConfigEditor(global) {
-  const VERSION = "0.7.0";
+  const VERSION = "0.8.0";
   const rootId = "pleasanter-config-editor-root";
   const applierGlobalName = "PleasanterSitePackageApplier";
   const sections = ["Summary", "Views", "Editor", "Raw JSON", "Diff"];
@@ -24,9 +24,17 @@
     "ColumnName",
     "LabelText",
     "GridLabelText",
+    "Description",
+    "InputGuide",
     "Required",
+    "ValidateRequired",
+    "NoDuplication",
+    "MessageWhenDuplicated",
     "ControlType",
     "ChoicesText",
+    "ChoicesControlType",
+    "UseSearch",
+    "NotInsertBlankChoice",
     "DefaultInput",
     "FieldCss",
     "TextAlign",
@@ -35,8 +43,22 @@
     "MaxLength",
     "Min",
     "Max",
+    "Step",
+    "DecimalPlaces",
+    "RoundingType",
+    "Unit",
     "Regex",
-    "Description"
+    "ClientRegexValidation",
+    "ServerRegexValidation",
+    "RegexValidationMessage",
+    "Nullable",
+    "DateTimeStep",
+    "ViewerSwitchingType",
+    "ThumbnailLimitSize",
+    "LimitQuantity",
+    "LimitSize",
+    "TotalLimitSize",
+    "AllowDeleteAttachments"
   ];
   const primaryColumnFields = new Set([
     "LabelText",
@@ -57,6 +79,10 @@
   ]);
   const booleanColumnFields = new Set([
     "Required",
+    "ValidateRequired",
+    "NoDuplication",
+    "UseSearch",
+    "NotInsertBlankChoice",
     "EditorReadOnly",
     "NoDisplay",
     "Hidden",
@@ -64,13 +90,20 @@
     "AllowBulkUpdate",
     "ReadOnly",
     "Nullable",
-    "MultipleSelections"
+    "MultipleSelections",
+    "AllowDeleteAttachments"
   ]);
   const numberColumnFields = new Set([
     "MaxLength",
     "Min",
     "Max",
+    "Step",
     "DecimalPlaces",
+    "DateTimeStep",
+    "ThumbnailLimitSize",
+    "LimitQuantity",
+    "LimitSize",
+    "TotalLimitSize",
     "LinkedSiteId",
     "Width",
     "Height",
@@ -1831,6 +1864,9 @@
     if (field === "ControlType") {
       return `<td class="${cellClass}">${renderSelect(common, value, ["", "Normal", "MarkDown", "RTEditor", "Spinner"])}${beforeHtml}</td>`;
     }
+    if (field === "ChoicesControlType") {
+      return `<td class="${cellClass}">${renderSelect(common, value, ["", "DropDown", "Radio", "Checkbox"])}${beforeHtml}</td>`;
+    }
     if (field === "FieldCss") {
       return `<td class="${cellClass}">${renderSelect(common, value, allowedFieldCssValues(column.ColumnName, column))}${beforeHtml}</td>`;
     }
@@ -1839,6 +1875,9 @@
     }
     if (field === "EditorFormat") {
       return `<td class="${cellClass}">${renderSelect(common, value, ["", "Ymd", "Ymdhm", "Ymdhms"])}${beforeHtml}</td>`;
+    }
+    if (field === "ViewerSwitchingType") {
+      return `<td class="${cellClass}">${renderSelect(common, value, ["", "0", "1", "2"])}${beforeHtml}</td>`;
     }
     if (field === "ChoicesText" || field === "Description" || String(value || "").includes("\n") || isPlainObject(value) || Array.isArray(value)) {
       return `<td class="${cellClass}"><textarea ${common} placeholder="${escapeAttr(columnFieldPlaceholder(field, value))}">${escapeHtml(columnFieldInputValue(value))}</textarea>${beforeHtml}</td>`;
@@ -2513,7 +2552,7 @@
         errors.push(`${column.ColumnName}.FieldCss is not valid for this column: ${column.FieldCss}`);
       }
       if (column.ControlType === "RTEditor" && !column.FieldCss) {
-        warnings.push(`${column.ColumnName} uses RTEditor and should set FieldCss to field-wide or field-normal.`);
+        warnings.push(`${column.ColumnName} uses RTEditor and should set FieldCss to field-rte or field-wide.`);
       }
     }
 
@@ -2869,9 +2908,17 @@
       ColumnName: "項目名",
       LabelText: "表示名",
       GridLabelText: "一覧の表示名",
+      Description: "説明",
+      InputGuide: "入力ガイド",
       Required: "入力必須",
+      ValidateRequired: "入力必須検証",
+      NoDuplication: "重複禁止",
+      MessageWhenDuplicated: "重複時のメッセージ",
       ControlType: "コントロール種別",
       ChoicesText: "選択肢一覧",
+      ChoicesControlType: "選択肢の表示形式",
+      UseSearch: "検索機能を使う",
+      NotInsertBlankChoice: "選択肢にブランクを挿入しない",
       DefaultInput: "既定値",
       FieldCss: "フィールドCSS",
       TextAlign: "配置",
@@ -2880,9 +2927,24 @@
       MaxLength: "最大文字数",
       Min: "最小値",
       Max: "最大値",
+      Step: "ステップ",
+      DecimalPlaces: "小数点以下桁数",
+      RoundingType: "端数処理種類",
+      Unit: "単位",
       Regex: "正規表現",
       ClientRegex: "クライアント正規表現",
       ServerRegex: "サーバ正規表現",
+      ClientRegexValidation: "クライアント正規表現",
+      ServerRegexValidation: "サーバ正規表現",
+      RegexValidationMessage: "エラーメッセージ",
+      Nullable: "NULL許容",
+      DateTimeStep: "日時ステップ",
+      ViewerSwitchingType: "ビュワー切替",
+      ThumbnailLimitSize: "サムネイルサイズ",
+      LimitQuantity: "ファイル数制限",
+      LimitSize: "容量制限(MB)",
+      TotalLimitSize: "合計容量制限(MB)",
+      AllowDeleteAttachments: "添付ファイルの削除を許可",
       Name: "名称",
       DefaultMode: "表示",
       GridColumns: "表示項目",
@@ -3058,10 +3120,7 @@
   }
 
   function allowedFieldCssValues(columnName, column) {
-    const values = ["", "field-normal", "field-wide"];
-    if (String(columnName || "").startsWith("Description") && column?.ControlType !== "RTEditor") {
-      values.push("field-markdown", "field-rte");
-    }
+    const values = ["", "field-normal", "field-wide", "field-title", "field-radio", "field-markdown", "field-rte"];
     return values;
   }
 

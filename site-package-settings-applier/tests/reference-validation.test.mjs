@@ -30,7 +30,7 @@ function loadApplier(currentSettings) {
   return globalThis.PleasanterSitePackageApplier;
 }
 
-test("dry-run rejects invalid field CSS, default choices, and missing columns", async () => {
+test("dry-run preserves valid field CSS and rejects invalid choices and missing columns", async () => {
   const currentSettings = {
     Columns: [
       { ColumnName: "Title", FieldCss: "field-title" },
@@ -90,38 +90,10 @@ test("dry-run rejects invalid field CSS, default choices, and missing columns", 
   assert.deepEqual(reasons, [
     {
       type: "skip",
-      key: "Columns.Title.FieldCss",
-      before: "field-title",
-      after: undefined,
-      reason: "value is not available in the target UI options"
-    },
-    {
-      type: "skip",
-      key: "Columns.ClassB.FieldCss",
-      before: "field-radio",
-      after: undefined,
-      reason: "value is not available in the target UI options"
-    },
-    {
-      type: "skip",
       key: "Columns.ClassB.DefaultInput",
       before: "999",
       after: undefined,
       reason: "default value is not in ChoicesText: 999"
-    },
-    {
-      type: "skip",
-      key: "Columns.DescriptionC.FieldCss",
-      before: "field-rte",
-      after: undefined,
-      reason: "value is not available in the target UI options"
-    },
-    {
-      type: "update",
-      key: "Columns.DescriptionC.FieldCss",
-      before: undefined,
-      after: "field-wide",
-      reason: "RTEditor requires a valid FieldCss; normalized to field-wide"
     },
     {
       type: "skip",
@@ -139,10 +111,10 @@ test("dry-run rejects invalid field CSS, default choices, and missing columns", 
     }
   ]);
 
-  assert.equal(result.plan.nextSettings.Columns[0].FieldCss, undefined);
-  assert.equal(result.plan.nextSettings.Columns[1].FieldCss, undefined);
+  assert.equal(result.plan.nextSettings.Columns[0].FieldCss, "field-title");
+  assert.equal(result.plan.nextSettings.Columns[1].FieldCss, "field-radio");
   assert.equal(result.plan.nextSettings.Columns[1].DefaultInput, undefined);
-  assert.equal(result.plan.nextSettings.Columns[2].FieldCss, "field-wide");
+  assert.equal(result.plan.nextSettings.Columns[2].FieldCss, "field-rte");
   assert.deepEqual(result.plan.nextSettings.EditorColumnHash.General, ["Title"]);
   assert.deepEqual(result.plan.nextSettings.Exports[0].Columns, []);
 });

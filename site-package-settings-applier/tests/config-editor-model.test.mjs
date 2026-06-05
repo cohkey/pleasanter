@@ -26,7 +26,12 @@ test("config editor validates invalid references and field values", () => {
       },
       {
         ColumnName: "DescriptionC",
-        ControlType: "RTEditor"
+        ControlType: "RTEditor",
+        FieldCss: "field-rte"
+      },
+      {
+        ColumnName: "Title",
+        FieldCss: "field-unknown"
       }
     ],
     EditorColumnHash: {
@@ -43,14 +48,12 @@ test("config editor validates invalid references and field values", () => {
 
   assert.deepEqual(result.errors, [
     "ClassB.DefaultInput is not in ChoicesText: 999",
-    "ClassB.FieldCss is not valid for this column: field-radio",
+    "Title.FieldCss is not valid for this column: field-unknown",
     "EditorColumnHash.General references missing column: NoSuchColumn",
     "View \"Broken view\" GridColumns references missing column: NoSuchColumn",
     "View \"Broken view\" ColumnSorterHash references missing column: MissingSorter"
   ]);
-  assert.deepEqual(result.warnings, [
-    "DescriptionC uses RTEditor and should set FieldCss to field-wide or field-normal."
-  ]);
+  assert.deepEqual(result.warnings, []);
 });
 
 test("columns TSV round-trips editable column fields", () => {
@@ -156,4 +159,14 @@ test("detailed comparison reports changed property paths", () => {
   );
   assert.equal(differences[0].label, "項目設定 / ClassB / 入力必須");
   assert.equal(differences[0].type, "update");
+});
+
+test("column field labels use Japanese names for extended Pleasanter settings", () => {
+  const editor = loadEditor();
+  const differences = editor.model.compareSettingsDetailed(
+    { Columns: [{ ColumnName: "Title", InputGuide: "" }] },
+    { Columns: [{ ColumnName: "Title", InputGuide: "件名を入力してください。" }] }
+  );
+
+  assert.equal(differences[0].label, "項目設定 / Title / 入力ガイド");
 });

@@ -829,23 +829,19 @@
     }
 
     if (column.ControlType === "RTEditor" && !column.FieldCss) {
-      column.FieldCss = "field-wide";
+      column.FieldCss = "field-rte";
       ctx.operations.push({
         type: "update",
         section: ctx.section,
         key: `${ctx.path}.${columnName}.FieldCss`,
-        after: "field-wide",
-        reason: "RTEditor requires a valid FieldCss; normalized to field-wide"
+        after: "field-rte",
+        reason: "RTEditor requires a valid FieldCss; normalized to field-rte"
       });
     }
   }
 
   function allowedFieldCssValues(columnName, column) {
-    const values = new Set(["", "field-normal", "field-wide"]);
-    if (String(columnName || "").startsWith("Description") && column?.ControlType !== "RTEditor") {
-      values.add("field-markdown");
-      values.add("field-rte");
-    }
+    const values = new Set(["", "field-normal", "field-wide", "field-title", "field-radio", "field-markdown", "field-rte"]);
     return values;
   }
 

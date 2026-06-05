@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>Pleasanter Config Editor Preview</title>
+  <style>
+    body {
+      margin: 0;
+      background: #f2f4f7;
+    }
+  </style>
+</head>
+<body>
+  <input id="TenantId" type="hidden" value="1">
+  <input id="SiteId" type="hidden" value="3">
+  <script src="./config-editor-ui.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const samplePackage = {
+      PackageName: "UI preview",
+      Sites: [
+        {
+          SiteId: 3,
+          Title: "動作確認テーブル",
+          ReferenceType: "Results",
+          SiteSettings: {
+            EditorColumnHash: {
+              "基本": ["Title", "ClassB", "DescriptionC"],
+              "詳細": ["NumA", "DateA", "AttachmentsA"]
+            },
+            Columns: [
+              {
+                ColumnName: "Title",
+                LabelText: "件名",
+                InputGuide: "案件名や作業名を160文字以内で入力してください。",
+                MaxLength: 160,
+                NoDuplication: true,
+                MessageWhenDuplicated: "同じ件名のレコードが既にあります。",
+                FieldCss: "field-title"
+              },
+              {
+                ColumnName: "ClassB",
+                LabelText: "対応区分",
+                InputGuide: "現在の作業区分を選択します。",
+                ChoicesText: "10,調査\n20,実装\n30,レビュー\n40,保留",
+                DefaultInput: "10",
+                ChoicesControlType: "Radio",
+                ValidateRequired: true,
+                FieldCss: "field-radio"
+              },
+              {
+                ColumnName: "DescriptionC",
+                LabelText: "リッチテキスト備考",
+                InputGuide: "装飾付きの補足説明に使います。",
+                DefaultInput: "初期メモを入力してください。",
+                ControlType: "RTEditor",
+                MaxLength: 3000,
+                FieldCss: "field-rte"
+              },
+              {
+                ColumnName: "NumA",
+                LabelText: "金額",
+                Unit: "円",
+                DecimalPlaces: 0,
+                RoundingType: "Round",
+                Step: 1000,
+                FieldCss: "field-wide"
+              },
+              {
+                ColumnName: "DateA",
+                LabelText: "期限",
+                DateTimeStep: 15,
+                Nullable: true
+              },
+              {
+                ColumnName: "AttachmentsA",
+                LabelText: "添付資料",
+                ThumbnailLimitSize: 2,
+                LimitQuantity: 5,
+                LimitSize: 10,
+                TotalLimitSize: 50,
+                AllowDeleteAttachments: true
+              }
+            ],
+            Views: [
+              {
+                Name: "進行中一覧",
+                DefaultMode: "Index",
+                GridColumns: ["ResultId", "Title", "ClassB", "DescriptionC", "UpdatedTime"],
+                ColumnFilterHash: { ClassB: "[\"20\",\"30\"]" },
+                ColumnSorterHash: { UpdatedTime: "desc" },
+                UseFilterButton: true
+              }
+            ]
+          }
+        }
+      ]
+    };
+
+    PleasanterConfigEditor.state.activeSection = params.get("section") || "Editor";
+    PleasanterConfigEditor.loadPackage(samplePackage, "config-editor-ui.preview.json");
+
+    setTimeout(() => {
+      const root = document.getElementById("pleasanter-config-editor-root")?.shadowRoot;
+      const wrap = root?.querySelector(PleasanterConfigEditor.state.activeSection === "Views" ? ".pcu-view-table-wrap" : ".pcu-editor-matrix-wrap");
+      if (wrap) {
+        wrap.scrollTop = Number(params.get("top") || 0);
+        wrap.scrollLeft = Number(params.get("left") || 0);
+      }
+    }, 250);
+  </script>
+</body>
+</html>
