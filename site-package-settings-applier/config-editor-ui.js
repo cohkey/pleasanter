@@ -7,7 +7,7 @@
  * - No Node.js, build step, or external library is required.
  */
 (function attachPleasanterConfigEditor(global) {
-  const VERSION = "0.6.0";
+  const VERSION = "0.7.0";
   const rootId = "pleasanter-config-editor-root";
   const applierGlobalName = "PleasanterSitePackageApplier";
   const sections = ["Summary", "Views", "Editor", "Raw JSON", "Diff"];
@@ -38,6 +38,23 @@
     "Regex",
     "Description"
   ];
+  const primaryColumnFields = new Set([
+    "LabelText",
+    "GridLabelText",
+    "Required",
+    "ControlType",
+    "ChoicesText",
+    "DefaultInput",
+    "FieldCss"
+  ]);
+  const validationColumnFields = new Set([
+    "MaxLength",
+    "Min",
+    "Max",
+    "Regex",
+    "ClientRegex",
+    "ServerRegex"
+  ]);
   const booleanColumnFields = new Set([
     "Required",
     "EditorReadOnly",
@@ -837,6 +854,113 @@
           border-color: #fbbf24;
           background: #fffbeb;
         }
+        .pcu-analysis {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 8px;
+          margin-bottom: 12px;
+        }
+        .pcu-analysis-card {
+          min-height: 86px;
+          padding: 10px;
+          border: 1px solid #d6dbe1;
+          border-radius: 8px;
+          background: #ffffff;
+        }
+        .pcu-analysis-card strong {
+          display: block;
+          margin-bottom: 4px;
+          color: #1f2937;
+        }
+        .pcu-analysis-card span {
+          color: #5b6470;
+          font-size: 12px;
+        }
+        .pcu-cell-changed {
+          position: relative;
+          background: #fff7ed;
+          box-shadow: inset 3px 0 0 #f59e0b;
+        }
+        .pcu-row-changed .pcu-sticky-col,
+        .pcu-row-changed .pcu-sticky-view {
+          box-shadow: inset 3px 0 0 #f59e0b;
+        }
+        .pcu-cell-changed input,
+        .pcu-cell-changed select,
+        .pcu-cell-changed textarea {
+          border-color: #f59e0b;
+          background: #fffaf0;
+        }
+        tr:hover .pcu-cell-changed {
+          background: #fff3dc;
+        }
+        .pcu-core-field {
+          background: #eef6ff;
+        }
+        th.pcu-core-field {
+          color: #0f4c81;
+        }
+        .pcu-validation-field {
+          background: #f7f3ff;
+        }
+        th.pcu-validation-field {
+          color: #5b21b6;
+        }
+        .pcu-core-field.pcu-cell-changed,
+        .pcu-validation-field.pcu-cell-changed {
+          background: #fff7ed;
+        }
+        .pcu-before-value {
+          margin-top: 4px;
+          padding: 3px 5px;
+          border-radius: 5px;
+          background: rgba(245, 158, 11, .12);
+          color: #92400e;
+          font-size: 11px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pcu-view-cards {
+          display: grid;
+          gap: 5px;
+          margin-bottom: 8px;
+        }
+        .pcu-view-card {
+          padding: 6px 8px;
+          border: 1px solid #dbe1e7;
+          border-radius: 7px;
+          background: #ffffff;
+        }
+        .pcu-view-card.error {
+          border-color: #fecaca;
+          background: #fff1f2;
+        }
+        .pcu-view-card-title {
+          display: flex;
+          justify-content: space-between;
+          gap: 8px;
+          align-items: center;
+          margin-bottom: 3px;
+        }
+        .pcu-view-card-title strong {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pcu-raw-details {
+          margin-top: 6px;
+        }
+        .pcu-raw-details summary {
+          color: #0a5db7;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .pcu-raw-details textarea {
+          margin-top: 6px;
+        }
         .pcu-hidden {
           display: none !important;
         }
@@ -1107,6 +1231,7 @@
           <p>読み込んだ設定、検証結果、適用前後の状態を確認します。</p>
         </div>
       </div>
+      ${renderUsabilityAnalysis()}
       <div class="pcu-grid" style="grid-template-columns: repeat(4, minmax(120px, 1fr)); margin-bottom: 12px;">
         ${metrics.map(([label, value]) => `
           <div class="pcu-metric">
@@ -1132,6 +1257,25 @@
             `).join("") || '<tr><td colspan="4">設定は未読込です。</td></tr>'}
           </tbody>
         </table>
+      </div>
+    `;
+  }
+
+  function renderUsabilityAnalysis() {
+    const items = [
+      ["変更箇所が見つけにくい", "変更済みセルと変更済み行を画面上で強調し、差分画面に行かなくても把握できるようにします。"],
+      ["JSON編集に寄りすぎ", "ビューの表示項目、フィルタ、ソートは項目表示名付きのカードで先に確認できるようにします。"],
+      ["重要設定と詳細設定が同列", "表示名、必須、入力形式などの主要項目を色分けし、入力検証などは別の重みで見せます。"],
+      ["項目キーだけでは判断しづらい", "項目キーの横にPleasanter上の表示名を必ず出し、未定義参照は赤く表示します。"]
+    ];
+    return `
+      <div class="pcu-analysis">
+        ${items.map(([title, body]) => `
+          <div class="pcu-analysis-card">
+            <strong>${escapeHtml(title)}</strong>
+            <span>${escapeHtml(body)}</span>
+          </div>
+        `).join("")}
       </div>
     `;
   }
@@ -1181,7 +1325,7 @@
           </thead>
           <tbody>
             ${views.map((view, index) => `
-              <tr>
+              <tr class="${isViewChanged(view) ? "pcu-row-changed" : ""}">
                 <td class="pcu-sticky-view">
                   <div class="pcu-field-stack">
                     <input data-index="${index}" data-view-field="Name" value="${escapeAttr(view.Name || "")}">
@@ -1196,16 +1340,25 @@
                   </select>
                 </td>
                 <td>
-                  <textarea placeholder="項目名を1行ずつ入力" data-index="${index}" data-view-field="GridColumns">${escapeHtml(arrayToLines(view.GridColumns))}</textarea>
                   ${renderViewColumnPreview(view.GridColumns)}
+                  <details class="pcu-raw-details">
+                    <summary>表示項目を直接編集</summary>
+                    <textarea placeholder="項目名を1行ずつ入力" data-index="${index}" data-view-field="GridColumns">${escapeHtml(arrayToLines(view.GridColumns))}</textarea>
+                  </details>
                 </td>
                 <td>
-                  <textarea placeholder='例: {"Status":"[\"300\"]"}' data-index="${index}" data-view-json-field="ColumnFilterHash">${escapeHtml(formatInlineJson(view.ColumnFilterHash || {}))}</textarea>
                   ${renderViewHashPreview(view.ColumnFilterHash)}
+                  <details class="pcu-raw-details">
+                    <summary>フィルタJSONを直接編集</summary>
+                    <textarea placeholder='例: {"Status":"[\"300\"]"}' data-index="${index}" data-view-json-field="ColumnFilterHash">${escapeHtml(formatInlineJson(view.ColumnFilterHash || {}))}</textarea>
+                  </details>
                 </td>
                 <td>
-                  <textarea placeholder='例: {"UpdatedTime":"desc"}' data-index="${index}" data-view-json-field="ColumnSorterHash">${escapeHtml(formatInlineJson(view.ColumnSorterHash || {}))}</textarea>
                   ${renderViewHashPreview(view.ColumnSorterHash)}
+                  <details class="pcu-raw-details">
+                    <summary>ソートJSONを直接編集</summary>
+                    <textarea placeholder='例: {"UpdatedTime":"desc"}' data-index="${index}" data-view-json-field="ColumnSorterHash">${escapeHtml(formatInlineJson(view.ColumnSorterHash || {}))}</textarea>
+                  </details>
                 </td>
                 <td class="pcu-narrow">
                   <label>
@@ -1233,12 +1386,15 @@
     if (names.length === 0) return '<div class="pcu-muted" style="margin-top: 6px;">表示項目はありません。</div>';
     const validColumns = collectValidColumnNames(state.workingSettings);
     return `
-      <div class="pcu-preview-list">
-        ${names.map((columnName) => {
+      <div class="pcu-view-cards">
+        ${names.map((columnName, index) => {
           const valid = validColumns.has(columnName);
           return `
-            <div class="pcu-preview-item ${valid ? "" : "error"}">
-              <span>${escapeHtml(valid ? columnDisplayName(columnName, state.workingSettings) : "未定義項目")}</span>
+            <div class="pcu-view-card ${valid ? "" : "error"}">
+              <div class="pcu-view-card-title">
+                <strong>${escapeHtml(valid ? columnDisplayName(columnName, state.workingSettings) : "未定義項目")}</strong>
+                <span class="pcu-badge">${index + 1}</span>
+              </div>
               <span class="pcu-key">${escapeHtml(columnName)}</span>
             </div>
           `;
@@ -1252,18 +1408,28 @@
     if (entries.length === 0) return '<div class="pcu-muted" style="margin-top: 6px;">条件はありません。</div>';
     const validColumns = collectValidColumnNames(state.workingSettings);
     return `
-      <div class="pcu-preview-list">
+      <div class="pcu-view-cards">
         ${entries.map(([columnName, value]) => {
           const valid = validColumns.has(columnName);
           return `
-            <div class="pcu-preview-item ${valid ? "" : "error"}" title="${escapeAttr(previewJson(value))}">
-              <span>${escapeHtml(valid ? columnDisplayName(columnName, state.workingSettings) : "未定義項目")}</span>
+            <div class="pcu-view-card ${valid ? "" : "error"}" title="${escapeAttr(previewJson(value))}">
+              <div class="pcu-view-card-title">
+                <strong>${escapeHtml(valid ? columnDisplayName(columnName, state.workingSettings) : "未定義項目")}</strong>
+                <span class="pcu-key">${escapeHtml(compactValue(value))}</span>
+              </div>
               <span class="pcu-key">${escapeHtml(columnName)}</span>
             </div>
           `;
         }).join("")}
       </div>
     `;
+  }
+
+  function isViewChanged(view) {
+    if (!view?.Name) return false;
+    const before = (state.sourceSettings.Views || []).find((item) => item?.Name === view.Name);
+    if (!before) return true;
+    return stable(before) !== stable(view);
   }
 
   function renderEditorLayout() {
@@ -1358,7 +1524,7 @@
               <th class="pcu-sticky-col pcu-sticky-item">項目</th>
               <th style="width: 96px;">種類</th>
               <th style="width: 150px;">操作</th>
-              ${fields.map((field) => `<th style="width: ${columnFieldWidth(field)}px;" title="${escapeAttr(field)}">${escapeHtml(columnFieldLabel(field))}</th>`).join("")}
+              ${fields.map((field) => `<th class="${fieldVisualClass(field)}" style="width: ${columnFieldWidth(field)}px;" title="${escapeAttr(field)}">${escapeHtml(columnFieldLabel(field))}</th>`).join("")}
             </tr>
           </thead>
           <tbody>
@@ -1371,8 +1537,9 @@
 
   function renderEditorMatrixRow(row, fields) {
     const columnIndex = row.column ? findColumnIndex(state.workingSettings, row.columnName) : -1;
+    const changed = row.column ? isColumnChanged(row.column) : false;
     return `
-      <tr class="${row.placed ? "" : "pcu-unplaced"}">
+      <tr class="${row.placed ? "" : "pcu-unplaced"} ${changed ? "pcu-row-changed" : ""}">
         <td class="pcu-sticky-col pcu-sticky-group">${renderEditorGroupCell(row)}</td>
         <td class="pcu-sticky-col pcu-sticky-order">${row.placed ? row.index + 1 : "-"}</td>
         <td class="pcu-sticky-col pcu-sticky-item">${renderEditorItemCell(row)}</td>
@@ -1625,7 +1792,7 @@
         <table class="pcu-wide-table">
           <thead>
             <tr>
-              ${fields.map((field) => `<th style="width: ${columnFieldWidth(field)}px;">${escapeHtml(columnFieldLabel(field))}<br><span class="pcu-key">${escapeHtml(field)}</span></th>`).join("")}
+              ${fields.map((field) => `<th class="${fieldVisualClass(field)}" style="width: ${columnFieldWidth(field)}px;">${escapeHtml(columnFieldLabel(field))}<br><span class="pcu-key">${escapeHtml(field)}</span></th>`).join("")}
               <th style="width: 72px;">操作</th>
             </tr>
           </thead>
@@ -1654,28 +1821,65 @@
   function renderColumnFieldCell(column, index, field) {
     const value = column?.[field];
     const common = `data-index="${index}" data-column-field="${escapeAttr(field)}"`;
+    const changed = isColumnFieldChanged(column, field);
+    const before = sourceColumnFieldValue(column, field);
+    const cellClass = [fieldVisualClass(field), changed ? "pcu-cell-changed" : ""].filter(Boolean).join(" ");
+    const beforeHtml = changed ? renderBeforeValue(before) : "";
     if (booleanColumnFields.has(field)) {
-      return `<td class="pcu-narrow"><input type="checkbox" ${common} ${value ? "checked" : ""}></td>`;
+      return `<td class="pcu-narrow ${cellClass}"><input type="checkbox" ${common} ${value ? "checked" : ""}>${beforeHtml}</td>`;
     }
     if (field === "ControlType") {
-      return `<td>${renderSelect(common, value, ["", "Normal", "MarkDown", "RTEditor", "Spinner"])}</td>`;
+      return `<td class="${cellClass}">${renderSelect(common, value, ["", "Normal", "MarkDown", "RTEditor", "Spinner"])}${beforeHtml}</td>`;
     }
     if (field === "FieldCss") {
-      return `<td>${renderSelect(common, value, allowedFieldCssValues(column.ColumnName, column))}</td>`;
+      return `<td class="${cellClass}">${renderSelect(common, value, allowedFieldCssValues(column.ColumnName, column))}${beforeHtml}</td>`;
     }
     if (field === "TextAlign") {
-      return `<td>${renderSelect(common, value, ["", "left", "center", "right"])}</td>`;
+      return `<td class="${cellClass}">${renderSelect(common, value, ["", "left", "center", "right"])}${beforeHtml}</td>`;
     }
     if (field === "EditorFormat") {
-      return `<td>${renderSelect(common, value, ["", "Ymd", "Ymdhm", "Ymdhms"])}</td>`;
+      return `<td class="${cellClass}">${renderSelect(common, value, ["", "Ymd", "Ymdhm", "Ymdhms"])}${beforeHtml}</td>`;
     }
     if (field === "ChoicesText" || field === "Description" || String(value || "").includes("\n") || isPlainObject(value) || Array.isArray(value)) {
-      return `<td><textarea ${common} placeholder="${escapeAttr(columnFieldPlaceholder(field, value))}">${escapeHtml(columnFieldInputValue(value))}</textarea></td>`;
+      return `<td class="${cellClass}"><textarea ${common} placeholder="${escapeAttr(columnFieldPlaceholder(field, value))}">${escapeHtml(columnFieldInputValue(value))}</textarea>${beforeHtml}</td>`;
     }
     if (numberColumnFields.has(field) || typeof value === "number") {
-      return `<td><input type="number" ${common} value="${escapeAttr(value ?? "")}"></td>`;
+      return `<td class="${cellClass}"><input type="number" ${common} value="${escapeAttr(value ?? "")}">${beforeHtml}</td>`;
     }
-    return `<td><input ${common} value="${escapeAttr(value ?? "")}"></td>`;
+    return `<td class="${cellClass}"><input ${common} value="${escapeAttr(value ?? "")}">${beforeHtml}</td>`;
+  }
+
+  function fieldVisualClass(field) {
+    if (primaryColumnFields.has(field)) return "pcu-core-field";
+    if (validationColumnFields.has(field)) return "pcu-validation-field";
+    return "";
+  }
+
+  function sourceColumnFieldValue(column, field) {
+    return sourceColumnFor(column)?.[field];
+  }
+
+  function isColumnFieldChanged(column, field) {
+    if (!column?.ColumnName) return false;
+    const beforeColumn = sourceColumnFor(column);
+    if (!beforeColumn) return true;
+    return stable(beforeColumn?.[field]) !== stable(column?.[field]);
+  }
+
+  function isColumnChanged(column) {
+    if (!column?.ColumnName) return false;
+    const beforeColumn = sourceColumnFor(column);
+    if (!beforeColumn) return true;
+    return stable(beforeColumn) !== stable(column);
+  }
+
+  function sourceColumnFor(column) {
+    if (!column?.ColumnName) return null;
+    return findColumn(state.sourceSettings, column.ColumnName);
+  }
+
+  function renderBeforeValue(value) {
+    return `<div class="pcu-before-value" title="${escapeAttr(previewJson(value))}">変更前: ${escapeHtml(compactValue(value))}</div>`;
   }
 
   function renderSelect(commonAttributes, value, options) {
