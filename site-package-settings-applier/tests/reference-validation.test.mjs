@@ -152,3 +152,62 @@ test("site package comparison reports editor column order differences", () => {
   assert.deepEqual(result.differences[0].source.General, ["Title", "ClassA", "ClassB"]);
   assert.deepEqual(result.differences[0].target.General, ["Title", "ClassB", "ClassA"]);
 });
+
+test("Japanese section names can be used instead of comma-separated English keys", async () => {
+  const applier = loadApplier({
+    Columns: [{ ColumnName: "Title", LabelText: "旧タイトル" }],
+    Views: []
+  });
+  const sitePackage = {
+    Sites: [
+      {
+        SiteSettings: {
+          Columns: [{ ColumnName: "Title", LabelText: "タイトル" }],
+          Views: [{ Name: "一覧", GridColumns: ["Title"] }],
+          Notifications: [{ Name: "通知" }]
+        }
+      }
+    ]
+  };
+
+  const result = await applier.applySiteSettings(sitePackage, {
+    apiKey: "dummy",
+    tenantId: 1,
+    targetSiteId: 3,
+    sections: "項目設定、表示\n通知",
+    mode: "merge",
+    dryRun: true
+  });
+
+  assert.deepEqual(result.plan.sections, ["Columns", "Views", "Notifications"]);
+  assert.equal(result.plan.nextSettings.Columns[0].LabelText, "タイトル");
+  assert.equal(result.plan.nextSettings.Views[0].Name, "一覧");
+  assert.equal(result.plan.nextSettings.Notifications, undefined);
+  assert.ok(result.plan.operations.some((operation) => (
+    operation.type === "skip" &&
+    operation.section === "Notifications" &&
+    operation.reason.includes("unsafe")
+  )));
+});
+
+test("section selector metadata uses Japanese labels for package keys", () => {
+  const applier = loadApplier({});
+  const sections = applier.selectableSections({
+    Views: [],
+    Columns: [],
+    EditorColumnHash: {},
+    Notifications: []
+  });
+
+  assert.deepEqual(
+    sections.map((section) => [section.key, section.label, section.unsafe]),
+    [
+      ["Views", "表示", false],
+      ["Columns", "項目設定", false],
+      ["EditorColumnHash", "エディタ", false],
+      ["Notifications", "通知", true]
+    ]
+  );
+  assert.deepEqual(applier.parseSections("すべて"), ["all"]);
+  assert.equal(applier.sectionLabel("Comments"), "コメント");
+});

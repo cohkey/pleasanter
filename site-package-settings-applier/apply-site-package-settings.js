@@ -99,6 +99,90 @@
     "StatusControls",
     "Aggregations"
   ]);
+  const sectionCatalog = [
+    { key: "Version", label: "バージョン", group: "基本", description: "サイト設定のバージョン情報" },
+    { key: "ReferenceType", label: "参照種別", group: "基本", description: "テーブル種別。通常は変更しません。" },
+    { key: "GeneralTabLabelText", label: "全般タブ名", group: "基本", description: "エディタ画面の全般タブ表示名" },
+    { key: "NoDisplayIfReadOnly", label: "読取専用時は非表示", group: "基本", description: "読取専用の項目を画面に表示しない設定" },
+    { key: "NotInheritPermissionsWhenCreatingSite", label: "サイト作成時に権限を継承しない", group: "基本", description: "新規サイト作成時の権限継承設定" },
+    { key: "AllowApiUpdate", label: "API更新を許可", group: "基本", description: "APIによる更新を許可する設定" },
+    { key: "AllowApiDelete", label: "API削除を許可", group: "基本", description: "APIによる削除を許可する設定" },
+    { key: "AllowBulkUpdate", label: "一括更新を許可", group: "基本", description: "一覧からの一括更新を許可する設定" },
+    { key: "AllowExport", label: "エクスポートを許可", group: "基本", description: "データのエクスポート可否" },
+    { key: "AllowImport", label: "インポートを許可", group: "基本", description: "データのインポート可否" },
+    { key: "AllowCopy", label: "コピーを許可", group: "基本", description: "レコードやサイトのコピー可否" },
+    { key: "AllowMove", label: "移動を許可", group: "基本", description: "レコードやサイトの移動可否" },
+    { key: "AllowReferenceFromAnotherSite", label: "他サイトからの参照を許可", group: "基本", description: "他サイトから参照されることを許可する設定" },
+    { key: "DefaultViewName", label: "既定の表示", group: "表示", description: "既定で開く表示名" },
+    { key: "ViewLatestId", label: "表示ID採番", group: "表示", description: "表示設定の内部ID採番値。通常は表示と一緒に調整されます。" },
+    { key: "Views", label: "表示", group: "表示", description: "一覧、カンバン、カレンダーなどのビュー設定" },
+    { key: "UseFilterButton", label: "フィルタボタンを使用", group: "表示", description: "一覧のフィルタボタン表示設定" },
+    { key: "UseGridHeaderFilters", label: "列ヘッダーフィルタを使用", group: "表示", description: "一覧列ヘッダーのフィルタ表示設定" },
+    { key: "UseNegativeFilters", label: "否定フィルタを使用", group: "表示", description: "フィルタで否定条件を使う設定" },
+    { key: "GridColumns", label: "一覧項目", group: "表示", description: "一覧に表示する項目" },
+    { key: "Calendar", label: "カレンダー", group: "表示", description: "カレンダー表示の設定" },
+    { key: "Dashboard", label: "ダッシュボード", group: "表示", description: "ダッシュボード設定" },
+    { key: "Columns", label: "項目設定", group: "項目", description: "各項目の表示名、入力制御、検証などの詳細設定" },
+    { key: "EditorColumnHash", label: "エディタ", group: "項目", description: "エディタ画面のタブ/見出しと項目配置" },
+    { key: "EditorColumns", label: "エディタ項目", group: "項目", description: "エディタに配置する項目の一覧" },
+    { key: "Styles", label: "スタイル", group: "拡張", description: "スタイル設定" },
+    { key: "Scripts", label: "スクリプト", group: "拡張", description: "クライアントスクリプト" },
+    { key: "ServerScripts", label: "サーバスクリプト", group: "拡張", description: "サーバスクリプト" },
+    { key: "Htmls", label: "HTML", group: "拡張", description: "HTML設定" },
+    { key: "Processes", label: "プロセス", group: "ワークフロー", description: "プロセス設定" },
+    { key: "StatusControls", label: "状況制御", group: "ワークフロー", description: "状況ごとの制御設定" },
+    { key: "Notifications", label: "通知", group: "自動処理", description: "通知設定" },
+    { key: "Reminders", label: "リマインダー", group: "自動処理", description: "リマインダー設定" },
+    { key: "NearCompletionTimeBeforeDays", label: "期限前通知日数", group: "自動処理", description: "期限前通知の基準日数" },
+    { key: "NearCompletionTimeAfterDays", label: "期限後通知日数", group: "自動処理", description: "期限後通知の基準日数" },
+    { key: "Aggregations", label: "集計", group: "出力", description: "集計設定" },
+    { key: "Mail", label: "メール", group: "出力", description: "メール設定" },
+    { key: "Export", label: "エクスポート", group: "出力", description: "エクスポート設定" },
+    { key: "Exports", label: "エクスポート", group: "出力", description: "エクスポート設定" },
+    { key: "Comments", label: "コメント", group: "その他", description: "コメント設定。レコードのコメント本文は対象外です。" }
+  ];
+  const sectionDefinitionByKey = new Map(sectionCatalog.map((section) => [section.key, section]));
+  const sectionAliases = new Map();
+
+  for (const section of sectionCatalog) {
+    sectionAliases.set(section.key.toLowerCase(), section.key);
+    sectionAliases.set(section.label.toLowerCase(), section.key);
+  }
+
+  [
+    ["all", "all"],
+    ["すべて", "all"],
+    ["全て", "all"],
+    ["全部", "all"],
+    ["全設定", "all"],
+    ["完全同期", "all"],
+    ["ビュー", "Views"],
+    ["表示", "Views"],
+    ["一覧", "GridColumns"],
+    ["一覧項目", "GridColumns"],
+    ["項目", "Columns"],
+    ["項目設定", "Columns"],
+    ["エディタ", "EditorColumnHash"],
+    ["エディター", "EditorColumnHash"],
+    ["エディタ配置", "EditorColumnHash"],
+    ["エディター配置", "EditorColumnHash"],
+    ["エディタ項目", "EditorColumns"],
+    ["エディター項目", "EditorColumns"],
+    ["通知", "Notifications"],
+    ["リマインダー", "Reminders"],
+    ["スクリプト", "Scripts"],
+    ["サーバースクリプト", "ServerScripts"],
+    ["サーバスクリプト", "ServerScripts"],
+    ["html", "Htmls"],
+    ["html設定", "Htmls"],
+    ["スタイル", "Styles"],
+    ["プロセス", "Processes"],
+    ["状況制御", "StatusControls"],
+    ["集計", "Aggregations"],
+    ["エクスポート", "Exports"],
+    ["メール", "Mail"],
+    ["コメント", "Comments"]
+  ].forEach(([alias, key]) => sectionAliases.set(alias.toLowerCase(), key));
 
   const volatileKeys = new Set([
     "Id",
@@ -265,15 +349,7 @@
       sessionStorage.setItem("PleasanterViewPackageApplier.apiKey", apiKey);
     }
 
-    const sectionsText = promptWithDefault(
-      [
-        "対象設定をカンマ区切りで入力してください。",
-        `JSON内の設定: ${detectedSections.join(", ")}`,
-        "例: Views または Columns,EditorColumnHash,GridColumns または all"
-      ].join("\n"),
-      defaults.sections || detectedSections.join(",")
-    );
-    const sections = parseSections(sectionsText);
+    const sections = await pickSections(sourceSettings, defaults.sections || detectedSections);
 
     const replace = confirm(
       [
@@ -293,7 +369,7 @@
         [
           "安全確認が必要な設定が含まれています。",
           "",
-          `対象: ${unsafeSections.join(", ")}`,
+          `対象: ${formatSectionNames(unsafeSections)}`,
           "",
           "OK: Pleasanter からエクスポートした JSON と確認済みなので適用対象に含める",
           "キャンセル: これらの設定は変更しない"
@@ -1028,11 +1104,7 @@
   function normalizeOptions(options = {}) {
     if (!options.apiKey) throw new Error("options.apiKey is required.");
     if (!options.targetSiteId) throw new Error("options.targetSiteId is required.");
-    const sections = Array.isArray(options.sections)
-      ? options.sections
-      : typeof options.sections === "string"
-        ? options.sections.split(",").map((item) => item.trim()).filter(Boolean)
-        : ["Views"];
+    const sections = parseSections(options.sections == null ? "Views" : options.sections);
 
     return {
       baseUrl: (options.baseUrl || location.origin).replace(/\/+$/, ""),
@@ -1273,6 +1345,405 @@
     return [...new Set(items.map((item) => String(item || "").trim()).filter(Boolean))];
   }
 
+  function sectionLabel(section) {
+    return sectionDefinitionByKey.get(section)?.label || section;
+  }
+
+  function sectionGroup(section) {
+    return sectionDefinitionByKey.get(section)?.group || "その他";
+  }
+
+  function sectionDescription(section) {
+    return sectionDefinitionByKey.get(section)?.description || "サイトパッケージ JSON に含まれる設定";
+  }
+
+  function formatSectionNames(sections) {
+    return parseSections(sections)
+      .map((section) => (section === "all" ? "すべて (all)" : `${sectionLabel(section)} (${section})`))
+      .join(", ");
+  }
+
+  function selectableSections(sourceSettings) {
+    const catalogOrder = new Map(sectionCatalog.map((section, index) => [section.key, index]));
+    return Object.keys(sourceSettings || {})
+      .map((key) => ({
+        key,
+        label: sectionLabel(key),
+        group: sectionGroup(key),
+        description: sectionDescription(key),
+        unsafe: unsafeSettingKeys.has(key),
+        known: sectionDefinitionByKey.has(key),
+        order: catalogOrder.has(key) ? catalogOrder.get(key) : Number.MAX_SAFE_INTEGER
+      }))
+      .sort((a, b) => a.order - b.order || a.group.localeCompare(b.group, "ja") || a.label.localeCompare(b.label, "ja") || a.key.localeCompare(b.key));
+  }
+
+  async function pickSections(sourceSettings, defaultSections) {
+    const choices = selectableSections(sourceSettings);
+    const initialSections = parseSections(defaultSections);
+    const defaultText = initialSections.includes("all")
+      ? "all"
+      : (initialSections.length > 0 ? initialSections : choices.map((choice) => choice.key)).join(",");
+
+    if (!global.document?.body) {
+      const sectionsText = promptWithDefault(
+        [
+          "対象設定を入力してください。",
+          "日本語名、英語キー、カンマ、読点、改行区切りが使えます。",
+          `JSON内の設定: ${formatSectionNames(choices.map((choice) => choice.key))}`,
+          "例: 表示,項目設定,エディタ または all"
+        ].join("\n"),
+        defaultText
+      );
+      return parseSections(sectionsText);
+    }
+
+    return showSectionPickerDialog(choices, initialSections);
+  }
+
+  function showSectionPickerDialog(choices, initialSections) {
+    return new Promise((resolve, reject) => {
+      const initialSet = initialSections.includes("all")
+        ? new Set(choices.map((choice) => choice.key))
+        : new Set(initialSections);
+      const overlay = document.createElement("div");
+      overlay.className = "psa-section-picker";
+      overlay.innerHTML = sectionPickerHtml(choices, initialSet, initialSections.includes("all"));
+
+      const cleanup = () => {
+        document.removeEventListener("keydown", onKeyDown);
+        overlay.remove();
+      };
+      const finish = (sections) => {
+        cleanup();
+        resolve(sections);
+      };
+      const cancel = () => {
+        cleanup();
+        reject(new Error("Canceled."));
+      };
+      const checkboxItems = () => Array.from(overlay.querySelectorAll("input[data-section-key]"));
+      const allMode = () => overlay.querySelector("[data-all-mode]");
+      const summary = () => overlay.querySelector("[data-summary]");
+      const setChecked = (predicate) => {
+        checkboxItems().forEach((checkbox) => {
+          checkbox.checked = predicate(checkbox.dataset.sectionKey);
+        });
+        updateSummary();
+      };
+      const updateSummary = () => {
+        const selected = checkboxItems().filter((checkbox) => checkbox.checked);
+        const unsafeCount = selected.filter((checkbox) => checkbox.dataset.unsafe === "true").length;
+        const allText = allMode()?.checked ? " / 完全同期(all)" : "";
+        summary().textContent = `${selected.length}件を選択中${unsafeCount ? ` / 注意 ${unsafeCount}件` : ""}${allText}`;
+      };
+      const applyFilter = () => {
+        const term = String(overlay.querySelector("[data-search]")?.value || "").trim().toLowerCase();
+        const rows = Array.from(overlay.querySelectorAll("[data-section-row]"));
+        rows.forEach((row) => {
+          const text = row.dataset.searchText || "";
+          row.hidden = term !== "" && !text.includes(term);
+        });
+        Array.from(overlay.querySelectorAll("[data-section-group]")).forEach((group) => {
+          const visibleRows = Array.from(group.querySelectorAll("[data-section-row]")).filter((row) => !row.hidden);
+          group.hidden = visibleRows.length === 0;
+        });
+      };
+      const onKeyDown = (event) => {
+        if (event.key === "Escape") cancel();
+      };
+
+      overlay.addEventListener("click", (event) => {
+        const action = event.target?.closest?.("[data-action]")?.dataset.action;
+        if (!action) return;
+        if (action === "cancel") cancel();
+        if (action === "all") {
+          setChecked(() => true);
+          if (allMode()) allMode().checked = false;
+        }
+        if (action === "safe") {
+          setChecked((key) => !unsafeSettingKeys.has(key));
+          if (allMode()) allMode().checked = false;
+        }
+        if (action === "none") {
+          setChecked(() => false);
+          if (allMode()) allMode().checked = false;
+        }
+        if (action === "sync") {
+          setChecked(() => true);
+          if (allMode()) allMode().checked = true;
+        }
+        if (action === "apply") {
+          const selected = checkboxItems()
+            .filter((checkbox) => checkbox.checked)
+            .map((checkbox) => checkbox.dataset.sectionKey);
+          if (selected.length === 0) {
+            summary().textContent = "対象設定を1件以上選択してください。";
+            return;
+          }
+          finish(allMode()?.checked ? ["all"] : selected);
+        }
+        updateSummary();
+      });
+
+      overlay.addEventListener("change", (event) => {
+        if (event.target?.matches?.("input[data-section-key], [data-all-mode]")) updateSummary();
+      });
+      overlay.querySelector("[data-search]")?.addEventListener("input", applyFilter);
+      document.addEventListener("keydown", onKeyDown);
+      document.body.appendChild(overlay);
+      overlay.querySelector("[data-search]")?.focus();
+      updateSummary();
+    });
+  }
+
+  function sectionPickerHtml(choices, initialSet, allMode) {
+    const groups = [];
+    for (const choice of choices) {
+      let group = groups.find((item) => item.name === choice.group);
+      if (!group) {
+        group = { name: choice.group, choices: [] };
+        groups.push(group);
+      }
+      group.choices.push(choice);
+    }
+    const rows = groups.map((group) => `
+      <section class="psa-section-group" data-section-group>
+        <h3>${escapeHtml(group.name)}</h3>
+        ${group.choices.map((choice) => sectionPickerRowHtml(choice, initialSet.has(choice.key))).join("")}
+      </section>
+    `).join("");
+
+    return `
+      <style>
+        .psa-section-picker {
+          position: fixed;
+          inset: 0;
+          z-index: 2147483647;
+          display: grid;
+          place-items: center;
+          background: rgba(20, 25, 33, 0.38);
+          color: #1f2937;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        .psa-section-dialog {
+          width: min(920px, calc(100vw - 40px));
+          max-height: min(780px, calc(100vh - 40px));
+          display: grid;
+          grid-template-rows: auto auto minmax(260px, 1fr) auto;
+          background: #f7f8fa;
+          border: 1px solid #d6dbe3;
+          border-radius: 14px;
+          box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+          overflow: hidden;
+        }
+        .psa-section-header,
+        .psa-section-toolbar,
+        .psa-section-footer {
+          padding: 16px 20px;
+          background: rgba(255, 255, 255, 0.86);
+          backdrop-filter: blur(14px);
+        }
+        .psa-section-header h2 {
+          margin: 0 0 4px;
+          font-size: 20px;
+          font-weight: 700;
+        }
+        .psa-section-header p,
+        .psa-section-footer p {
+          margin: 0;
+          color: #5f6b7a;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+        .psa-section-toolbar {
+          display: grid;
+          grid-template-columns: minmax(220px, 1fr) auto;
+          gap: 12px;
+          border-top: 1px solid #e2e6ed;
+          border-bottom: 1px solid #e2e6ed;
+        }
+        .psa-section-search {
+          width: 100%;
+          box-sizing: border-box;
+          padding: 10px 12px;
+          border: 1px solid #cfd6df;
+          border-radius: 8px;
+          font-size: 14px;
+          background: #fff;
+        }
+        .psa-section-actions,
+        .psa-section-footer-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          align-items: center;
+          justify-content: flex-end;
+        }
+        .psa-section-button {
+          border: 1px solid #c9d1dc;
+          border-radius: 8px;
+          background: #fff;
+          color: #263241;
+          padding: 8px 12px;
+          font-size: 13px;
+          cursor: pointer;
+        }
+        .psa-section-button.primary {
+          border-color: #2563eb;
+          background: #2563eb;
+          color: #fff;
+          font-weight: 700;
+        }
+        .psa-section-button.warning {
+          border-color: #c2410c;
+          color: #9a3412;
+        }
+        .psa-section-list {
+          padding: 8px 20px 20px;
+          overflow: auto;
+        }
+        .psa-section-group {
+          margin-top: 14px;
+        }
+        .psa-section-group h3 {
+          position: sticky;
+          top: -8px;
+          z-index: 1;
+          margin: 0;
+          padding: 10px 0 8px;
+          background: #f7f8fa;
+          color: #374151;
+          font-size: 13px;
+          font-weight: 700;
+        }
+        .psa-section-row {
+          display: grid;
+          grid-template-columns: auto 170px minmax(180px, 1fr) auto;
+          gap: 12px;
+          align-items: start;
+          min-height: 44px;
+          padding: 10px 12px;
+          border: 1px solid #e2e6ed;
+          border-radius: 8px;
+          background: #fff;
+        }
+        .psa-section-row + .psa-section-row {
+          margin-top: 6px;
+        }
+        .psa-section-row input {
+          margin-top: 3px;
+        }
+        .psa-section-name {
+          font-weight: 700;
+          color: #111827;
+        }
+        .psa-section-key {
+          color: #64748b;
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+          font-size: 12px;
+          word-break: break-all;
+        }
+        .psa-section-description {
+          color: #4b5563;
+          font-size: 12px;
+          line-height: 1.5;
+        }
+        .psa-section-badge {
+          justify-self: end;
+          border-radius: 999px;
+          padding: 3px 8px;
+          background: #fff7ed;
+          color: #c2410c;
+          border: 1px solid #fed7aa;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .psa-section-footer {
+          display: grid;
+          grid-template-columns: minmax(220px, 1fr) auto;
+          gap: 12px;
+          border-top: 1px solid #e2e6ed;
+        }
+        .psa-section-allmode {
+          display: flex;
+          gap: 8px;
+          align-items: flex-start;
+          margin-top: 6px;
+          color: #475569;
+          font-size: 12px;
+          line-height: 1.5;
+        }
+        @media (max-width: 720px) {
+          .psa-section-toolbar,
+          .psa-section-footer,
+          .psa-section-row {
+            grid-template-columns: 1fr;
+          }
+          .psa-section-actions,
+          .psa-section-footer-actions {
+            justify-content: flex-start;
+          }
+        }
+      </style>
+      <div class="psa-section-dialog" role="dialog" aria-modal="true" aria-label="対象設定を選択">
+        <header class="psa-section-header">
+          <h2>対象設定を選択</h2>
+          <p>サイトパッケージ JSON に含まれている設定だけを表示しています。注意マークの設定は dry-run 前に追加確認します。</p>
+        </header>
+        <div class="psa-section-toolbar">
+          <input class="psa-section-search" data-search type="search" placeholder="設定名、英語キー、説明で絞り込み">
+          <div class="psa-section-actions">
+            <button class="psa-section-button" type="button" data-action="all">全選択</button>
+            <button class="psa-section-button" type="button" data-action="safe">安全な設定だけ</button>
+            <button class="psa-section-button" type="button" data-action="none">解除</button>
+            <button class="psa-section-button warning" type="button" data-action="sync">完全同期(all)</button>
+          </div>
+        </div>
+        <main class="psa-section-list">${rows}</main>
+        <footer class="psa-section-footer">
+          <div>
+            <p data-summary></p>
+            <label class="psa-section-allmode">
+              <input type="checkbox" data-all-mode ${allMode ? "checked" : ""}>
+              <span>all として適用する。replace の場合、JSONに存在しない設定も削除対象になります。</span>
+            </label>
+          </div>
+          <div class="psa-section-footer-actions">
+            <button class="psa-section-button" type="button" data-action="cancel">キャンセル</button>
+            <button class="psa-section-button primary" type="button" data-action="apply">選択して進む</button>
+          </div>
+        </footer>
+      </div>
+    `;
+  }
+
+  function sectionPickerRowHtml(choice, checked) {
+    const searchText = [
+      choice.key,
+      choice.label,
+      choice.group,
+      choice.description,
+      choice.unsafe ? "注意 unsafe" : ""
+    ].join(" ").toLowerCase();
+    return `
+      <label class="psa-section-row" data-section-row data-search-text="${escapeHtml(searchText)}">
+        <input
+          type="checkbox"
+          data-section-key="${escapeHtml(choice.key)}"
+          data-unsafe="${choice.unsafe ? "true" : "false"}"
+          ${checked ? "checked" : ""}
+        >
+        <span>
+          <span class="psa-section-name">${escapeHtml(choice.label)}</span>
+          <span class="psa-section-key">${escapeHtml(choice.key)}</span>
+        </span>
+        <span class="psa-section-description">${escapeHtml(choice.description)}</span>
+        ${choice.unsafe ? '<span class="psa-section-badge">注意</span>' : ""}
+      </label>
+    `;
+  }
+
   function promptWithDefault(message, defaultValue) {
     const value = prompt(message, defaultValue == null ? "" : String(defaultValue));
     if (value == null) throw new Error("Canceled.");
@@ -1280,10 +1751,28 @@
   }
 
   function parseSections(value) {
-    return String(value || "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
+    const items = Array.isArray(value) ? value : String(value || "").split(/[,\n、，]/);
+    return uniqueStrings(
+      items
+        .map((item) => normalizeSectionName(item))
+        .filter(Boolean)
+    );
+  }
+
+  function normalizeSectionName(value) {
+    const text = String(value || "").replace(/\u3000/g, " ").trim();
+    if (!text) return "";
+    return sectionAliases.get(text.toLowerCase()) || text;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    }[char]));
   }
 
   function domValue(id) {
@@ -1352,7 +1841,10 @@
     pickPackageFile,
     pickPackageAndPlan,
     pickPackageAndApply,
-    runWizard
+    runWizard,
+    parseSections,
+    sectionLabel,
+    selectableSections
   };
 
   global.PleasanterSitePackageApplier = api;
