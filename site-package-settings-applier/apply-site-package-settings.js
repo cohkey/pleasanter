@@ -99,6 +99,12 @@
     "StatusControls",
     "Aggregations"
   ]);
+  const unsafeSectionKeys = new Set([
+    ...unsafeSettingKeys,
+    "Site.ReferenceType",
+    "Site.ParentId",
+    "Site.InheritPermission"
+  ]);
   const sectionCatalog = [
     { key: "Version", label: "バージョン", group: "基本", description: "サイト設定のバージョン情報" },
     { key: "ReferenceType", label: "参照種別", group: "基本", description: "テーブル種別。通常は変更しません。" },
@@ -141,12 +147,43 @@
     { key: "Exports", label: "エクスポート", group: "出力", description: "エクスポート設定" },
     { key: "Comments", label: "コメント", group: "その他", description: "コメント設定。レコードのコメント本文は対象外です。" }
   ];
+  const sitePropertyCatalog = [
+    { key: "Title", label: "タイトル", group: "サイト", description: "管理画面のタイトル" },
+    { key: "SiteName", label: "サイト名", group: "サイト", description: "管理画面のサイト名" },
+    { key: "SiteGroupName", label: "サイトグループ名", group: "サイト", description: "管理画面のサイトグループ名" },
+    { key: "Body", label: "内容", group: "サイト", description: "管理画面の内容" },
+    { key: "GridGuide", label: "一覧の説明", group: "サイト", description: "一覧画面に表示する説明" },
+    { key: "EditorGuide", label: "エディタの説明", group: "サイト", description: "エディタ画面に表示する説明" },
+    { key: "CalendarGuide", label: "カレンダーの説明", group: "サイト", description: "カレンダー画面に表示する説明" },
+    { key: "CrosstabGuide", label: "クロス集計の説明", group: "サイト", description: "クロス集計画面に表示する説明" },
+    { key: "GanttGuide", label: "ガントチャートの説明", group: "サイト", description: "ガントチャート画面に表示する説明" },
+    { key: "BurnDownGuide", label: "バーンダウンチャートの説明", group: "サイト", description: "バーンダウンチャート画面に表示する説明" },
+    { key: "TimeSeriesGuide", label: "時系列チャートの説明", group: "サイト", description: "時系列チャート画面に表示する説明" },
+    { key: "AnalyGuide", label: "分析チャートの説明", group: "サイト", description: "分析チャート画面に表示する説明" },
+    { key: "KambanGuide", label: "カンバンの説明", group: "サイト", description: "カンバン画面に表示する説明" },
+    { key: "ImageLibGuide", label: "画像ライブラリの説明", group: "サイト", description: "画像ライブラリ画面に表示する説明" },
+    { key: "ReferenceType", label: "サイト参照種別", group: "サイト", description: "サイト本体の参照種別。通常は変更しません。" },
+    { key: "ParentId", label: "親サイトID", group: "サイト", description: "親サイトID" },
+    { key: "InheritPermission", label: "権限継承", group: "サイト", description: "権限の継承設定" },
+    { key: "Publish", label: "公開", group: "サイト", description: "公開設定" },
+    { key: "DisableCrossSearch", label: "横断検索を無効化", group: "サイト", description: "横断検索の対象外にする設定" },
+    { key: "Comments", label: "管理コメント", group: "サイト", description: "管理画面のコメント欄。レコードコメント本文ではありません。" }
+  ];
+  const excludedSitePropertyKeys = new Set(["TenantId", "SiteId", "SiteSettings"]);
   const sectionDefinitionByKey = new Map(sectionCatalog.map((section) => [section.key, section]));
+  const sitePropertyDefinitionByKey = new Map(sitePropertyCatalog.map((section) => [`Site.${section.key}`, {
+    ...section,
+    key: `Site.${section.key}`
+  }]));
   const sectionAliases = new Map();
 
   for (const section of sectionCatalog) {
     sectionAliases.set(section.key.toLowerCase(), section.key);
     sectionAliases.set(section.label.toLowerCase(), section.key);
+  }
+  for (const section of sitePropertyCatalog) {
+    sectionAliases.set(`site.${section.key}`.toLowerCase(), `Site.${section.key}`);
+    sectionAliases.set(section.label.toLowerCase(), `Site.${section.key}`);
   }
 
   [
@@ -181,7 +218,21 @@
     ["集計", "Aggregations"],
     ["エクスポート", "Exports"],
     ["メール", "Mail"],
-    ["コメント", "Comments"]
+    ["タイトル", "Site.Title"],
+    ["内容", "Site.Body"],
+    ["説明", "Site.Body"],
+    ["一覧の説明", "Site.GridGuide"],
+    ["エディタの説明", "Site.EditorGuide"],
+    ["カレンダーの説明", "Site.CalendarGuide"],
+    ["カンバンの説明", "Site.KambanGuide"],
+    ["公開", "Site.Publish"],
+    ["横断検索", "Site.DisableCrossSearch"],
+    ["横断検索を無効化", "Site.DisableCrossSearch"],
+    ["管理コメント", "Site.Comments"],
+    ["管理画面コメント", "Site.Comments"],
+    ["管理画面のコメント", "Site.Comments"],
+    ["コメント欄", "Site.Comments"],
+    ["コメント", "Site.Comments"]
   ].forEach(([alias, key]) => sectionAliases.set(alias.toLowerCase(), key));
 
   const volatileKeys = new Set([
@@ -324,11 +375,12 @@
           package: defaults.sitePackage
         }
       : await pickPackageFile();
+    const sourceSite = extractSite(picked.package);
     const sourceSettings = extractSiteSettings(picked.package);
-    const detectedSections = Object.keys(sourceSettings);
+    const detectedSections = selectableSections(picked.package).map((section) => section.key);
 
     if (detectedSections.length === 0) {
-      throw new Error("The selected JSON does not contain SiteSettings sections.");
+      throw new Error("The selected JSON does not contain site settings.");
     }
 
     const tenantId = Number(
@@ -349,7 +401,7 @@
       sessionStorage.setItem("PleasanterViewPackageApplier.apiKey", apiKey);
     }
 
-    const sections = await pickSections(sourceSettings, defaults.sections || detectedSections);
+    const sections = await pickSections({ site: sourceSite, settings: sourceSettings }, defaults.sections || detectedSections);
 
     const replace = confirm(
       [
@@ -362,8 +414,8 @@
       ].join("\n")
     );
     const mode = defaults.mode || (replace ? "replace" : "merge");
-    const unsafeSections = resolveSections(sections, sourceSettings)
-      .filter((section) => unsafeSettingKeys.has(section));
+    const unsafeSections = expandRequestedSections(sections, extractSiteProperties(sourceSite), sourceSettings)
+      .filter((section) => unsafeSectionKeys.has(section));
     const allowUnsafeSections = defaults.allowUnsafeSections === true || (
       unsafeSections.length > 0 && confirm(
         [
@@ -435,15 +487,48 @@
 
   async function planSiteSettings(sitePackage, options) {
     const ctx = normalizeOptions(options);
-    const currentSettings = await getSiteSettings(ctx);
+    const currentSite = await getSite(ctx);
+    const currentSettings = currentSite.SiteSettings || {};
+    const sourceSite = extractSite(sitePackage);
     const sourceSettings = extractSiteSettings(sitePackage);
-    return buildSettingsPlan(currentSettings, sourceSettings, ctx);
+    const settingsPlan = buildSettingsPlan(currentSettings, sourceSettings, {
+      ...ctx,
+      sections: settingSectionsFor(ctx.sections, sourceSettings)
+    });
+    const sitePlan = buildSitePropertiesPlan(currentSite, sourceSite, ctx);
+    const operations = [...sitePlan.operations, ...settingsPlan.operations];
+
+    return {
+      mode: ctx.mode,
+      sections: [...sitePlan.sections, ...settingsPlan.sections],
+      summary: summarize(operations),
+      operations,
+      nextSiteProperties: sitePlan.nextSiteProperties,
+      nextSettings: settingsPlan.nextSettings,
+      nextViews: settingsPlan.nextSettings.Views || [],
+      viewLatestId: settingsPlan.nextSettings.ViewLatestId || 0
+    };
   }
 
   function compareSitePackages(sourcePackage, targetPackage, options = {}) {
+    const requestedSections = parseSections(options.sections || "all");
+    const sourceSite = extractSite(sourcePackage);
+    const targetSite = extractSite(targetPackage);
     const sourceSettings = extractSiteSettings(sourcePackage);
     const targetSettings = extractSiteSettings(targetPackage);
-    return compareSiteSettings(sourceSettings, targetSettings, options);
+    const siteCompare = compareSiteProperties(sourceSite, targetSite, requestedSections, options);
+    const settingsCompare = compareSiteSettings(sourceSettings, targetSettings, {
+      ...options,
+      sections: compareSettingSectionsFor(requestedSections, sourceSettings, targetSettings)
+    });
+    const differences = [...siteCompare.differences, ...settingsCompare.differences];
+
+    return {
+      equal: differences.length === 0,
+      summary: summarize(differences),
+      sections: [...siteCompare.sections, ...settingsCompare.sections],
+      differences
+    };
   }
 
   function compareSiteSettings(sourceSettings, targetSettings, options = {}) {
@@ -478,6 +563,41 @@
     };
   }
 
+  function compareSiteProperties(sourceSite, targetSite, requestedSections, options = {}) {
+    const sourceProperties = extractSiteProperties(sourceSite);
+    const targetProperties = extractSiteProperties(targetSite);
+    const sections = resolveCompareSiteSections(requestedSections, sourceProperties, targetProperties);
+    const ignoreKeys = new Set(options.ignoreKeys || defaultCompareIgnoreKeys);
+    const differences = [];
+
+    for (const section of sections) {
+      const key = sitePropertyKey(section);
+      if (ignoreKeys.has(section) || ignoreKeys.has(key)) continue;
+      const sourceHas = Object.prototype.hasOwnProperty.call(sourceProperties, key);
+      const targetHas = Object.prototype.hasOwnProperty.call(targetProperties, key);
+
+      if (!sourceHas && targetHas) {
+        differences.push({ type: "extra", section, target: clone(targetProperties[key]) });
+      } else if (sourceHas && !targetHas) {
+        differences.push({ type: "missing", section, source: clone(sourceProperties[key]) });
+      } else if (!sameValue(sourceProperties[key], targetProperties[key])) {
+        differences.push({
+          type: "different",
+          section,
+          source: clone(sourceProperties[key]),
+          target: clone(targetProperties[key])
+        });
+      }
+    }
+
+    return {
+      equal: differences.length === 0,
+      summary: summarize(differences),
+      sections,
+      differences
+    };
+  }
+
   async function applySiteSettings(sitePackage, options) {
     const ctx = normalizeOptions(options);
     const plan = await planSiteSettings(sitePackage, ctx);
@@ -491,21 +611,30 @@
     }
 
     const currentSite = await getSite(ctx);
-    const currentSettings = await getSiteSettings(ctx);
     const payload = {
       ...siteUpdateBase(currentSite),
+      ...plan.nextSiteProperties,
       SiteSettings: plan.nextSettings
     };
     const result = await request(ctx, `/api/items/${ctx.targetSiteId}/updatesite`, payload);
-    const verify = await getSiteSettings(ctx);
-    const postApplyCompare = compareSiteSettings(plan.nextSettings, verify, { sections: ctx.sections });
+    const verifySite = await getSite(ctx);
+    const verify = verifySite.SiteSettings || {};
+    const postApplyCompare = compareSitePackages(
+      { Site: { ...plan.nextSiteProperties, SiteSettings: plan.nextSettings } },
+      { Site: verifySite },
+      { sections: ctx.sections }
+    );
 
     return {
       dryRun: false,
       result,
       plan,
       postApplyCompare,
-      verified: summarizeVerified(verify, resolveSections(ctx.sections, verify)),
+      verifiedSiteProperties: summarizeVerifiedSiteProperties(
+        verifySite,
+        resolveSiteSections(ctx.sections, extractSiteProperties(verifySite))
+      ),
+      verified: summarizeVerified(verify, resolveSections(settingSectionsFor(ctx.sections, verify), verify)),
       verifiedViews: Array.isArray(verify.Views) ? verify.Views.map((view) => view.Name || view.Id) : []
     };
   }
@@ -514,12 +643,30 @@
     return extractSiteSettings(sitePackage).Views.map(normalizeItem);
   }
 
+  function extractSite(sitePackage) {
+    return Array.isArray(sitePackage?.Sites) && sitePackage.Sites.length > 0
+      ? sitePackage.Sites[0]
+      : sitePackage?.Site || sitePackage;
+  }
+
   function extractSiteSettings(sitePackage) {
-    const site =
-      Array.isArray(sitePackage?.Sites) && sitePackage.Sites.length > 0
-        ? sitePackage.Sites[0]
-        : sitePackage?.Site || sitePackage;
+    const site = extractSite(sitePackage);
     return site?.SiteSettings || sitePackage?.SiteSettings || {};
+  }
+
+  function extractSiteProperties(site) {
+    const source = extractSite(site) || {};
+    const properties = {};
+    const keys = uniqueStrings([
+      ...sitePropertyCatalog.map((property) => property.key),
+      ...Object.keys(source)
+    ]);
+
+    for (const key of keys) {
+      if (excludedSitePropertyKeys.has(key)) continue;
+      if (Object.prototype.hasOwnProperty.call(source, key)) properties[key] = clone(source[key]);
+    }
+    return properties;
   }
 
   function extractEditorColumns(sourceSettings, options = {}) {
@@ -644,6 +791,54 @@
       summary: summarize(operations),
       operations,
       nextSettings
+    };
+  }
+
+  function buildSitePropertiesPlan(currentSite, sourceSite, ctx) {
+    const currentProperties = extractSiteProperties(currentSite);
+    const sourceProperties = extractSiteProperties(sourceSite);
+    const sections = resolveSiteSections(ctx.sections, sourceProperties);
+    const operations = [];
+    const nextSiteProperties = {};
+
+    for (const section of sections) {
+      const key = sitePropertyKey(section);
+      if (isUnsafeSection(section, ctx)) {
+        if (Object.prototype.hasOwnProperty.call(currentProperties, key)) {
+          nextSiteProperties[key] = clone(currentProperties[key]);
+        }
+        operations.push({
+          type: "skip",
+          section,
+          key: section,
+          reason: `${section} is unsafe and was not changed. Set allowUnsafeSections:true to apply it.`
+        });
+        continue;
+      }
+      const sourceHas = Object.prototype.hasOwnProperty.call(sourceProperties, key);
+      const currentHas = Object.prototype.hasOwnProperty.call(currentProperties, key);
+
+      if (!sourceHas) {
+        operations.push({ type: "skip", section, key: section, reason: `${section} is not in source site.` });
+        continue;
+      }
+
+      const before = currentHas ? currentProperties[key] : undefined;
+      const after = sourceProperties[key];
+      nextSiteProperties[key] = clone(after);
+      operations.push({
+        type: currentHas ? (sameValue(before, after) ? "skip" : "update") : "create",
+        section,
+        key: section,
+        before: clone(before),
+        after: clone(after)
+      });
+    }
+
+    return {
+      sections,
+      operations,
+      nextSiteProperties
     };
   }
 
@@ -1122,7 +1317,7 @@
   }
 
   function isUnsafeSection(section, ctx) {
-    return unsafeSettingKeys.has(section) && ctx.allowUnsafeSections !== true;
+    return unsafeSectionKeys.has(section) && ctx.allowUnsafeSections !== true;
   }
 
   function ctxMergeItem(currentItem, normalizedSource, section, mode) {
@@ -1229,7 +1424,7 @@
     if (requestedSections.includes("all")) {
       return Object.keys(sourceSettings);
     }
-    return requestedSections;
+    return requestedSections.filter((section) => !isSiteSection(section));
   }
 
   function resolveCompareSections(requestedSections, sourceSettings, targetSettings) {
@@ -1237,7 +1432,58 @@
     if (parsed.includes("all")) {
       return [...new Set([...Object.keys(sourceSettings), ...Object.keys(targetSettings)])].sort();
     }
+    return parsed.filter((section) => !isSiteSection(section));
+  }
+
+  function settingSectionsFor(requestedSections, sourceSettings) {
+    const parsed = parseSections(requestedSections);
+    if (parsed.includes("all")) return ["all"];
+    return parsed.filter((section) => !isSiteSection(section) && Object.prototype.hasOwnProperty.call(sourceSettings, section));
+  }
+
+  function compareSettingSectionsFor(requestedSections, sourceSettings, targetSettings) {
+    const parsed = parseSections(requestedSections);
+    if (parsed.includes("all")) return "all";
+    const knownKeys = new Set([...Object.keys(sourceSettings || {}), ...Object.keys(targetSettings || {})]);
+    return parsed.filter((section) => !isSiteSection(section) && knownKeys.has(section));
+  }
+
+  function resolveSiteSections(requestedSections, sourceProperties) {
+    const parsed = parseSections(requestedSections);
+    if (parsed.includes("all")) {
+      return Object.keys(sourceProperties || {}).map((key) => `Site.${key}`);
+    }
+    return parsed.filter((section) => isSiteSection(section));
+  }
+
+  function resolveCompareSiteSections(requestedSections, sourceProperties, targetProperties) {
+    const parsed = parseSections(requestedSections);
+    if (parsed.includes("all")) {
+      return [...new Set([
+        ...Object.keys(sourceProperties || {}).map((key) => `Site.${key}`),
+        ...Object.keys(targetProperties || {}).map((key) => `Site.${key}`)
+      ])].sort();
+    }
+    return parsed.filter((section) => isSiteSection(section));
+  }
+
+  function expandRequestedSections(requestedSections, sourceProperties, sourceSettings) {
+    const parsed = parseSections(requestedSections);
+    if (parsed.includes("all")) {
+      return [
+        ...Object.keys(sourceProperties || {}).map((key) => `Site.${key}`),
+        ...Object.keys(sourceSettings || {})
+      ];
+    }
     return parsed;
+  }
+
+  function isSiteSection(section) {
+    return String(section || "").startsWith("Site.");
+  }
+
+  function sitePropertyKey(section) {
+    return String(section || "").replace(/^Site\./, "");
   }
 
   function summarizeVerified(settings, sections) {
@@ -1253,6 +1499,16 @@
       } else {
         result[section] = null;
       }
+    }
+    return result;
+  }
+
+  function summarizeVerifiedSiteProperties(site, sections) {
+    const result = {};
+    for (const section of sections) {
+      const key = sitePropertyKey(section);
+      const value = site?.[key];
+      result[section] = Array.isArray(value) ? value.length : value ?? null;
     }
     return result;
   }
@@ -1346,14 +1602,17 @@
   }
 
   function sectionLabel(section) {
+    if (isSiteSection(section)) return sitePropertyDefinitionByKey.get(section)?.label || section;
     return sectionDefinitionByKey.get(section)?.label || section;
   }
 
   function sectionGroup(section) {
+    if (isSiteSection(section)) return sitePropertyDefinitionByKey.get(section)?.group || "サイト";
     return sectionDefinitionByKey.get(section)?.group || "その他";
   }
 
   function sectionDescription(section) {
+    if (isSiteSection(section)) return sitePropertyDefinitionByKey.get(section)?.description || "サイト本体の設定";
     return sectionDefinitionByKey.get(section)?.description || "サイトパッケージ JSON に含まれる設定";
   }
 
@@ -1365,16 +1624,39 @@
 
   function selectableSections(sourceSettings) {
     const catalogOrder = new Map(sectionCatalog.map((section, index) => [section.key, index]));
-    return Object.keys(sourceSettings || {})
+    const siteOrder = new Map(sitePropertyCatalog.map((section, index) => [`Site.${section.key}`, index]));
+    const hasPackageShape = sourceSettings?.SiteSettings || sourceSettings?.Sites || sourceSettings?.Site;
+    const sourceSite = sourceSettings?.site || (hasPackageShape ? extractSite(sourceSettings) : {});
+    const settings = sourceSettings?.settings || (
+      hasPackageShape
+        ? extractSiteSettings(sourceSettings)
+        : sourceSettings
+    );
+    const siteProperties = extractSiteProperties(sourceSite || {});
+    const siteSections = Object.keys(siteProperties || {}).map((key) => {
+      const sectionKey = `Site.${key}`;
+      return {
+        key: sectionKey,
+        label: sectionLabel(sectionKey),
+        group: sectionGroup(sectionKey),
+        description: sectionDescription(sectionKey),
+        unsafe: unsafeSectionKeys.has(sectionKey),
+        known: sitePropertyDefinitionByKey.has(sectionKey),
+        order: siteOrder.has(sectionKey) ? siteOrder.get(sectionKey) : Number.MAX_SAFE_INTEGER
+      };
+    });
+    const settingSections = Object.keys(settings || {})
       .map((key) => ({
         key,
         label: sectionLabel(key),
         group: sectionGroup(key),
         description: sectionDescription(key),
-        unsafe: unsafeSettingKeys.has(key),
+        unsafe: unsafeSectionKeys.has(key),
         known: sectionDefinitionByKey.has(key),
-        order: catalogOrder.has(key) ? catalogOrder.get(key) : Number.MAX_SAFE_INTEGER
-      }))
+        order: 1000 + (catalogOrder.has(key) ? catalogOrder.get(key) : Number.MAX_SAFE_INTEGER)
+      }));
+
+    return [...siteSections, ...settingSections]
       .sort((a, b) => a.order - b.order || a.group.localeCompare(b.group, "ja") || a.label.localeCompare(b.label, "ja") || a.key.localeCompare(b.key));
   }
 
@@ -1462,7 +1744,7 @@
           if (allMode()) allMode().checked = false;
         }
         if (action === "safe") {
-          setChecked((key) => !unsafeSettingKeys.has(key));
+          setChecked((key) => !unsafeSectionKeys.has(key));
           if (allMode()) allMode().checked = false;
         }
         if (action === "none") {

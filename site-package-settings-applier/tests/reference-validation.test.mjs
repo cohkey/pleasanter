@@ -7,7 +7,7 @@ const script = fs.readFileSync(
   "utf8"
 );
 
-function loadApplier(currentSettings) {
+function loadApplier(currentSettings, currentSite = {}) {
   globalThis.window = globalThis;
   globalThis.location = { origin: "http://localhost:50001" };
   globalThis.fetch = async () =>
@@ -17,6 +17,7 @@ function loadApplier(currentSettings) {
           Data: {
             Title: "Target",
             ReferenceType: "Results",
+            ...currentSite,
             SiteSettings: currentSettings
           }
         }
@@ -210,4 +211,78 @@ test("section selector metadata uses Japanese labels for package keys", () => {
   );
   assert.deepEqual(applier.parseSections("すべて"), ["all"]);
   assert.equal(applier.sectionLabel("Comments"), "コメント");
+});
+
+test("site management fields including comments can be selected and planned", async () => {
+  const applier = loadApplier(
+    { Views: [] },
+    {
+      Body: "old body",
+      GridGuide: "old guide",
+      Comments: []
+    }
+  );
+  const sitePackage = {
+    Sites: [
+      {
+        Title: "Source",
+        Body: "new body",
+        GridGuide: "new guide",
+        Comments: [{ Body: "管理画面コメント" }],
+        SiteSettings: {
+          Views: []
+        }
+      }
+    ]
+  };
+
+  const result = await applier.applySiteSettings(sitePackage, {
+    apiKey: "dummy",
+    tenantId: 1,
+    targetSiteId: 3,
+    sections: "内容、一覧の説明、管理コメント",
+    mode: "merge",
+    dryRun: true
+  });
+
+  assert.deepEqual(result.plan.sections, ["Site.Body", "Site.GridGuide", "Site.Comments"]);
+  assert.deepEqual(result.plan.nextSiteProperties, {
+    Body: "new body",
+    GridGuide: "new guide",
+    Comments: [{ Body: "管理画面コメント" }]
+  });
+  assert.deepEqual(result.plan.nextSettings.Views, []);
+});
+
+test("site package comparison includes selected site management fields", () => {
+  const applier = loadApplier({});
+  const source = {
+    Sites: [
+      {
+        Body: "new body",
+        Comments: [{ Body: "管理画面コメント" }],
+        SiteSettings: {}
+      }
+    ]
+  };
+  const target = {
+    Sites: [
+      {
+        Body: "old body",
+        Comments: [],
+        SiteSettings: {}
+      }
+    ]
+  };
+
+  const result = applier.compareSitePackages(source, target, {
+    sections: "内容,管理コメント"
+  });
+
+  assert.equal(result.equal, false);
+  assert.deepEqual(
+    result.differences.map((difference) => difference.section),
+    ["Site.Body", "Site.Comments"]
+  );
+  assert.deepEqual(applier.parseSections("コメント"), ["Site.Comments"]);
 });
