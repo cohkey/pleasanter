@@ -12,13 +12,27 @@
     "Columns",
     "EditorColumns",
     "GridColumns",
+    "FilterColumns",
+    "LinkColumns",
+    "HistoryColumns",
+    "MoveTargets",
+    "Summaries",
+    "Formulas",
+    "Imports",
+    "Aggregations",
+    "Notifications",
+    "Reminders",
     "Scripts",
     "ServerScripts",
     "Styles",
     "Htmls",
     "Processes",
     "StatusControls",
-    "Exports"
+    "Exports",
+    "Sections",
+    "CreateColumnAccessControls",
+    "ReadColumnAccessControls",
+    "UpdateColumnAccessControls"
   ];
   const objectSettingKeys = ["EditorColumnHash"];
   const supportedSettingKeys = [...arraySettingKeys, ...objectSettingKeys];
@@ -103,71 +117,116 @@
     ...unsafeSettingKeys,
     "Site.ReferenceType",
     "Site.ParentId",
-    "Site.InheritPermission"
+    "Site.InheritPermission",
+    "Package.Permissions",
+    "Package.PermissionIdList",
+    "Package.Data"
   ]);
   const sectionCatalog = [
-    { key: "Version", label: "バージョン", group: "基本", description: "サイト設定のバージョン情報" },
-    { key: "ReferenceType", label: "参照種別", group: "基本", description: "テーブル種別。通常は変更しません。" },
-    { key: "GeneralTabLabelText", label: "全般タブ名", group: "基本", description: "エディタ画面の全般タブ表示名" },
-    { key: "NoDisplayIfReadOnly", label: "読取専用時は非表示", group: "基本", description: "読取専用の項目を画面に表示しない設定" },
-    { key: "NotInheritPermissionsWhenCreatingSite", label: "サイト作成時に権限を継承しない", group: "基本", description: "新規サイト作成時の権限継承設定" },
-    { key: "AllowApiUpdate", label: "API更新を許可", group: "基本", description: "APIによる更新を許可する設定" },
-    { key: "AllowApiDelete", label: "API削除を許可", group: "基本", description: "APIによる削除を許可する設定" },
-    { key: "AllowBulkUpdate", label: "一括更新を許可", group: "基本", description: "一覧からの一括更新を許可する設定" },
-    { key: "AllowExport", label: "エクスポートを許可", group: "基本", description: "データのエクスポート可否" },
-    { key: "AllowImport", label: "インポートを許可", group: "基本", description: "データのインポート可否" },
-    { key: "AllowCopy", label: "コピーを許可", group: "基本", description: "レコードやサイトのコピー可否" },
-    { key: "AllowMove", label: "移動を許可", group: "基本", description: "レコードやサイトの移動可否" },
-    { key: "AllowReferenceFromAnotherSite", label: "他サイトからの参照を許可", group: "基本", description: "他サイトから参照されることを許可する設定" },
-    { key: "DefaultViewName", label: "既定の表示", group: "表示", description: "既定で開く表示名" },
-    { key: "ViewLatestId", label: "表示ID採番", group: "表示", description: "表示設定の内部ID採番値。通常は表示と一緒に調整されます。" },
-    { key: "Views", label: "表示", group: "表示", description: "一覧、カンバン、カレンダーなどのビュー設定" },
-    { key: "UseFilterButton", label: "フィルタボタンを使用", group: "表示", description: "一覧のフィルタボタン表示設定" },
-    { key: "UseGridHeaderFilters", label: "列ヘッダーフィルタを使用", group: "表示", description: "一覧列ヘッダーのフィルタ表示設定" },
-    { key: "UseNegativeFilters", label: "否定フィルタを使用", group: "表示", description: "フィルタで否定条件を使う設定" },
-    { key: "GridColumns", label: "一覧項目", group: "表示", description: "一覧に表示する項目" },
-    { key: "Calendar", label: "カレンダー", group: "表示", description: "カレンダー表示の設定" },
-    { key: "Dashboard", label: "ダッシュボード", group: "表示", description: "ダッシュボード設定" },
-    { key: "Columns", label: "項目設定", group: "項目", description: "各項目の表示名、入力制御、検証などの詳細設定" },
-    { key: "EditorColumnHash", label: "エディタ", group: "項目", description: "エディタ画面のタブ/見出しと項目配置" },
-    { key: "EditorColumns", label: "エディタ項目", group: "項目", description: "エディタに配置する項目の一覧" },
-    { key: "Styles", label: "スタイル", group: "拡張", description: "スタイル設定" },
-    { key: "Scripts", label: "スクリプト", group: "拡張", description: "クライアントスクリプト" },
-    { key: "ServerScripts", label: "サーバスクリプト", group: "拡張", description: "サーバスクリプト" },
-    { key: "Htmls", label: "HTML", group: "拡張", description: "HTML設定" },
-    { key: "Processes", label: "プロセス", group: "ワークフロー", description: "プロセス設定" },
-    { key: "StatusControls", label: "状況制御", group: "ワークフロー", description: "状況ごとの制御設定" },
-    { key: "Notifications", label: "通知", group: "自動処理", description: "通知設定" },
-    { key: "Reminders", label: "リマインダー", group: "自動処理", description: "リマインダー設定" },
-    { key: "NearCompletionTimeBeforeDays", label: "期限前通知日数", group: "自動処理", description: "期限前通知の基準日数" },
-    { key: "NearCompletionTimeAfterDays", label: "期限後通知日数", group: "自動処理", description: "期限後通知の基準日数" },
-    { key: "Aggregations", label: "集計", group: "出力", description: "集計設定" },
-    { key: "Mail", label: "メール", group: "出力", description: "メール設定" },
-    { key: "Export", label: "エクスポート", group: "出力", description: "エクスポート設定" },
-    { key: "Exports", label: "エクスポート", group: "出力", description: "エクスポート設定" },
+    { key: "Version", label: "バージョン", group: "全般", description: "サイト設定のバージョン情報" },
+    { key: "ReferenceType", label: "参照種別", group: "全般", description: "テーブル種別。通常は変更しません。" },
+    { key: "GeneralTabLabelText", label: "全般タブ名", group: "全般", description: "エディタ画面の全般タブ表示名" },
+    { key: "NoDisplayIfReadOnly", label: "読取専用時は非表示", group: "全般", description: "読取専用の項目を画面に表示しない設定" },
+    { key: "NotInheritPermissionsWhenCreatingSite", label: "サイト作成時に権限を継承しない", group: "全般", description: "新規サイト作成時の権限継承設定" },
+    { key: "AllowApiUpdate", label: "API更新を許可", group: "全般", description: "APIによる更新を許可する設定" },
+    { key: "AllowApiDelete", label: "API削除を許可", group: "全般", description: "APIによる削除を許可する設定" },
+    { key: "AllowBulkUpdate", label: "一括更新を許可", group: "全般", description: "一覧からの一括更新を許可する設定" },
+    { key: "AllowExport", label: "エクスポートを許可", group: "全般", description: "データのエクスポート可否" },
+    { key: "AllowImport", label: "インポートを許可", group: "全般", description: "データのインポート可否" },
+    { key: "AllowCopy", label: "コピーを許可", group: "全般", description: "レコードやサイトのコピー可否" },
+    { key: "AllowMove", label: "移動を許可", group: "全般", description: "レコードやサイトの移動可否" },
+    { key: "AllowReferenceFromAnotherSite", label: "他サイトからの参照を許可", group: "全般", description: "他サイトから参照されることを許可する設定" },
+    { key: "TitleColumns", label: "タイトル項目", group: "全般", description: "タイトル表示に使う項目" },
+    { key: "TitleSeparator", label: "タイトル区切り文字", group: "全般", description: "複数タイトル項目の区切り文字" },
+    { key: "GridColumns", label: "一覧項目", group: "一覧", description: "一覧に表示する項目" },
+    { key: "GridView", label: "一覧表示", group: "一覧", description: "一覧表示の基本設定" },
+    { key: "UseGridHeaderFilters", label: "列ヘッダーフィルタを使用", group: "一覧", description: "一覧列ヘッダーのフィルタ表示設定" },
+    { key: "FilterColumns", label: "フィルタ項目", group: "フィルタ", description: "フィルタに表示する項目" },
+    { key: "UseFilterButton", label: "フィルタボタンを使用", group: "フィルタ", description: "一覧のフィルタボタン表示設定" },
+    { key: "UseNegativeFilters", label: "否定フィルタを使用", group: "フィルタ", description: "フィルタで否定条件を使う設定" },
+    { key: "Aggregations", label: "集計", group: "集計", description: "集計設定" },
+    { key: "Columns", label: "項目設定", group: "エディタ", description: "各項目の表示名、入力制御、検証などの詳細設定" },
+    { key: "EditorColumnHash", label: "エディタ", group: "エディタ", description: "エディタ画面のタブ/見出しと項目配置" },
+    { key: "EditorColumns", label: "エディタ項目", group: "エディタ", description: "エディタに配置する項目の一覧" },
+    { key: "Sections", label: "セクション", group: "エディタ", description: "エディタのセクション設定" },
+    { key: "SectionLatestId", label: "セクションID採番", group: "エディタ", description: "セクション設定の内部ID採番値" },
+    { key: "LinkColumns", label: "リンク項目", group: "リンク", description: "リンクタブに表示する項目" },
+    { key: "HistoryColumns", label: "履歴項目", group: "履歴", description: "履歴タブに表示する項目" },
+    { key: "MoveTargets", label: "移動先", group: "移動", description: "レコード移動先サイトの設定" },
+    { key: "Summaries", label: "サマリ", group: "サマリ", description: "サマリ設定" },
+    { key: "Formulas", label: "計算式", group: "計算式", description: "計算式設定" },
+    { key: "Processes", label: "プロセス", group: "プロセス", description: "プロセス設定" },
+    { key: "StatusControls", label: "状況による制御", group: "状況による制御", description: "状況ごとの制御設定" },
+    { key: "DefaultViewName", label: "既定の表示", group: "ビュー", description: "既定で開く表示名" },
+    { key: "ViewLatestId", label: "表示ID採番", group: "ビュー", description: "表示設定の内部ID採番値。通常は表示と一緒に調整されます。" },
+    { key: "Views", label: "ビュー", group: "ビュー", description: "一覧、カンバン、カレンダーなどのビュー設定" },
+    { key: "Notifications", label: "通知", group: "通知", description: "通知設定" },
+    { key: "Reminders", label: "リマインダー", group: "リマインダー", description: "リマインダー設定" },
+    { key: "NearCompletionTimeBeforeDays", label: "期限前通知日数", group: "リマインダー", description: "期限前通知の基準日数" },
+    { key: "NearCompletionTimeAfterDays", label: "期限後通知日数", group: "リマインダー", description: "期限後通知の基準日数" },
+    { key: "Imports", label: "インポート", group: "インポート", description: "インポート設定" },
+    { key: "Export", label: "エクスポート", group: "エクスポート", description: "エクスポート設定" },
+    { key: "Exports", label: "エクスポート", group: "エクスポート", description: "エクスポート設定" },
+    { key: "Calendar", label: "カレンダー", group: "カレンダー", description: "カレンダー表示の設定" },
+    { key: "EnableCalendar", label: "カレンダーを有効化", group: "カレンダー", description: "カレンダー機能の有効化設定" },
+    { key: "Crosstab", label: "クロス集計", group: "クロス集計", description: "クロス集計設定" },
+    { key: "EnableCrosstab", label: "クロス集計を有効化", group: "クロス集計", description: "クロス集計機能の有効化設定" },
+    { key: "Gantt", label: "ガントチャート", group: "ガントチャート", description: "ガントチャート設定" },
+    { key: "EnableGantt", label: "ガントチャートを有効化", group: "ガントチャート", description: "ガントチャート機能の有効化設定" },
+    { key: "ShowGanttProgressRate", label: "進捗率を表示", group: "ガントチャート", description: "ガントチャートの進捗率表示設定" },
+    { key: "BurnDown", label: "バーンダウンチャート", group: "バーンダウンチャート", description: "バーンダウンチャート設定" },
+    { key: "EnableBurnDown", label: "バーンダウンチャートを有効化", group: "バーンダウンチャート", description: "バーンダウンチャート機能の有効化設定" },
+    { key: "TimeSeries", label: "時系列チャート", group: "時系列チャート", description: "時系列チャート設定" },
+    { key: "EnableTimeSeries", label: "時系列チャートを有効化", group: "時系列チャート", description: "時系列チャート機能の有効化設定" },
+    { key: "Analy", label: "分析チャート", group: "分析チャート", description: "分析チャート設定" },
+    { key: "Kamban", label: "カンバン", group: "カンバン", description: "カンバン設定" },
+    { key: "EnableKamban", label: "カンバンを有効化", group: "カンバン", description: "カンバン機能の有効化設定" },
+    { key: "ImageLib", label: "画像ライブラリ", group: "画像ライブラリ", description: "画像ライブラリ設定" },
+    { key: "Search", label: "検索", group: "検索", description: "検索設定" },
+    { key: "Mail", label: "メール", group: "メール", description: "メール設定" },
+    { key: "SiteIntegration", label: "サイト統合", group: "サイト統合", description: "サイト統合設定" },
+    { key: "Styles", label: "スタイル", group: "スタイル", description: "スタイル設定" },
+    { key: "Scripts", label: "スクリプト", group: "スクリプト", description: "クライアントスクリプト" },
+    { key: "ServerScripts", label: "サーバスクリプト", group: "サーバスクリプト", description: "サーバスクリプト" },
+    { key: "Htmls", label: "HTML", group: "HTML", description: "HTML設定" },
+    { key: "PermissionForCreating", label: "レコード作成のアクセス制御", group: "レコードのアクセス制御", description: "レコード作成時のアクセス制御" },
+    { key: "PermissionForUpdating", label: "レコード更新のアクセス制御", group: "レコードのアクセス制御", description: "レコード更新時のアクセス制御" },
+    { key: "CreateColumnAccessControls", label: "作成時の項目アクセス制御", group: "項目のアクセス制御", description: "作成時の項目アクセス制御" },
+    { key: "ReadColumnAccessControls", label: "読取時の項目アクセス制御", group: "項目のアクセス制御", description: "読取時の項目アクセス制御" },
+    { key: "UpdateColumnAccessControls", label: "更新時の項目アクセス制御", group: "項目のアクセス制御", description: "更新時の項目アクセス制御" },
+    { key: "ChangeHistoryList", label: "変更履歴の一覧", group: "変更履歴の一覧", description: "変更履歴一覧の設定" },
+    { key: "Dashboard", label: "ダッシュボード", group: "ダッシュボード", description: "ダッシュボード設定" },
+    { key: "DashboardParts", label: "ダッシュボードパーツ", group: "ダッシュボード", description: "ダッシュボードパーツ設定" },
     { key: "Comments", label: "コメント", group: "その他", description: "コメント設定。レコードのコメント本文は対象外です。" }
   ];
   const sitePropertyCatalog = [
-    { key: "Title", label: "タイトル", group: "サイト", description: "管理画面のタイトル" },
-    { key: "SiteName", label: "サイト名", group: "サイト", description: "管理画面のサイト名" },
-    { key: "SiteGroupName", label: "サイトグループ名", group: "サイト", description: "管理画面のサイトグループ名" },
-    { key: "Body", label: "内容", group: "サイト", description: "管理画面の内容" },
-    { key: "GridGuide", label: "一覧の説明", group: "サイト", description: "一覧画面に表示する説明" },
-    { key: "EditorGuide", label: "エディタの説明", group: "サイト", description: "エディタ画面に表示する説明" },
-    { key: "CalendarGuide", label: "カレンダーの説明", group: "サイト", description: "カレンダー画面に表示する説明" },
-    { key: "CrosstabGuide", label: "クロス集計の説明", group: "サイト", description: "クロス集計画面に表示する説明" },
-    { key: "GanttGuide", label: "ガントチャートの説明", group: "サイト", description: "ガントチャート画面に表示する説明" },
-    { key: "BurnDownGuide", label: "バーンダウンチャートの説明", group: "サイト", description: "バーンダウンチャート画面に表示する説明" },
-    { key: "TimeSeriesGuide", label: "時系列チャートの説明", group: "サイト", description: "時系列チャート画面に表示する説明" },
-    { key: "AnalyGuide", label: "分析チャートの説明", group: "サイト", description: "分析チャート画面に表示する説明" },
-    { key: "KambanGuide", label: "カンバンの説明", group: "サイト", description: "カンバン画面に表示する説明" },
-    { key: "ImageLibGuide", label: "画像ライブラリの説明", group: "サイト", description: "画像ライブラリ画面に表示する説明" },
-    { key: "ReferenceType", label: "サイト参照種別", group: "サイト", description: "サイト本体の参照種別。通常は変更しません。" },
-    { key: "ParentId", label: "親サイトID", group: "サイト", description: "親サイトID" },
-    { key: "InheritPermission", label: "権限継承", group: "サイト", description: "権限の継承設定" },
-    { key: "Publish", label: "公開", group: "サイト", description: "公開設定" },
-    { key: "DisableCrossSearch", label: "横断検索を無効化", group: "サイト", description: "横断検索の対象外にする設定" },
-    { key: "Comments", label: "管理コメント", group: "サイト", description: "管理画面のコメント欄。レコードコメント本文ではありません。" }
+    { key: "Title", label: "タイトル", group: "全般", description: "管理画面のタイトル" },
+    { key: "SiteName", label: "サイト名", group: "全般", description: "管理画面のサイト名" },
+    { key: "SiteGroupName", label: "サイトグループ名", group: "全般", description: "管理画面のサイトグループ名" },
+    { key: "Body", label: "内容", group: "全般", description: "管理画面の内容" },
+    { key: "GridGuide", label: "一覧の説明", group: "ガイド", description: "一覧画面に表示する説明" },
+    { key: "EditorGuide", label: "エディタの説明", group: "ガイド", description: "エディタ画面に表示する説明" },
+    { key: "CalendarGuide", label: "カレンダーの説明", group: "ガイド", description: "カレンダー画面に表示する説明" },
+    { key: "CrosstabGuide", label: "クロス集計の説明", group: "ガイド", description: "クロス集計画面に表示する説明" },
+    { key: "GanttGuide", label: "ガントチャートの説明", group: "ガイド", description: "ガントチャート画面に表示する説明" },
+    { key: "BurnDownGuide", label: "バーンダウンチャートの説明", group: "ガイド", description: "バーンダウンチャート画面に表示する説明" },
+    { key: "TimeSeriesGuide", label: "時系列チャートの説明", group: "ガイド", description: "時系列チャート画面に表示する説明" },
+    { key: "AnalyGuide", label: "分析チャートの説明", group: "ガイド", description: "分析チャート画面に表示する説明" },
+    { key: "KambanGuide", label: "カンバンの説明", group: "ガイド", description: "カンバン画面に表示する説明" },
+    { key: "ImageLibGuide", label: "画像ライブラリの説明", group: "ガイド", description: "画像ライブラリ画面に表示する説明" },
+    { key: "SiteImage", label: "サイト画像", group: "サイト画像", description: "サイト画像設定" },
+    { key: "SiteImageId", label: "サイト画像ID", group: "サイト画像", description: "サイト画像の内部ID" },
+    { key: "ReferenceType", label: "サイト参照種別", group: "全般", description: "サイト本体の参照種別。通常は変更しません。" },
+    { key: "ParentId", label: "親サイトID", group: "全般", description: "親サイトID" },
+    { key: "InheritPermission", label: "権限継承", group: "全般", description: "権限の継承設定" },
+    { key: "Publish", label: "公開", group: "全般", description: "公開設定" },
+    { key: "DisableCrossSearch", label: "横断検索を無効化", group: "検索", description: "横断検索の対象外にする設定" },
+    { key: "Comments", label: "管理コメント", group: "全般", description: "管理画面のコメント欄。レコードコメント本文ではありません。" }
+  ];
+  const packageSectionCatalog = [
+    { key: "Package.Permissions", label: "サイトのアクセス制御", group: "サイトのアクセス制御", description: "サイトパッケージ最上位の権限情報。updatesite では適用しません。", unsupported: true },
+    { key: "Package.PermissionIdList", label: "権限ID一覧", group: "サイトのアクセス制御", description: "サイトパッケージ最上位の権限ID一覧。updatesite では適用しません。", unsupported: true },
+    { key: "Package.Data", label: "レコードデータ", group: "データ", description: "サイトパッケージ内のレコードデータ。設定同期の対象外です。", unsupported: true }
   ];
   const excludedSitePropertyKeys = new Set(["TenantId", "SiteId", "SiteSettings"]);
   const sectionDefinitionByKey = new Map(sectionCatalog.map((section) => [section.key, section]));
@@ -175,6 +234,7 @@
     ...section,
     key: `Site.${section.key}`
   }]));
+  const packageSectionDefinitionByKey = new Map(packageSectionCatalog.map((section) => [section.key, section]));
   const sectionAliases = new Map();
 
   for (const section of sectionCatalog) {
@@ -185,6 +245,10 @@
     sectionAliases.set(`site.${section.key}`.toLowerCase(), `Site.${section.key}`);
     sectionAliases.set(section.label.toLowerCase(), `Site.${section.key}`);
   }
+  for (const section of packageSectionCatalog) {
+    sectionAliases.set(section.key.toLowerCase(), section.key);
+    sectionAliases.set(section.label.toLowerCase(), section.key);
+  }
 
   [
     ["all", "all"],
@@ -193,10 +257,18 @@
     ["全部", "all"],
     ["全設定", "all"],
     ["完全同期", "all"],
+    ["全般", "Site.Body"],
     ["ビュー", "Views"],
     ["表示", "Views"],
     ["一覧", "GridColumns"],
     ["一覧項目", "GridColumns"],
+    ["フィルタ", "FilterColumns"],
+    ["フィルター", "FilterColumns"],
+    ["リンク", "LinkColumns"],
+    ["履歴", "HistoryColumns"],
+    ["移動", "MoveTargets"],
+    ["サマリ", "Summaries"],
+    ["計算式", "Formulas"],
     ["項目", "Columns"],
     ["項目設定", "Columns"],
     ["エディタ", "EditorColumnHash"],
@@ -207,6 +279,7 @@
     ["エディター項目", "EditorColumns"],
     ["通知", "Notifications"],
     ["リマインダー", "Reminders"],
+    ["インポート", "Imports"],
     ["スクリプト", "Scripts"],
     ["サーバースクリプト", "ServerScripts"],
     ["サーバスクリプト", "ServerScripts"],
@@ -215,12 +288,29 @@
     ["スタイル", "Styles"],
     ["プロセス", "Processes"],
     ["状況制御", "StatusControls"],
+    ["状況による制御", "StatusControls"],
     ["集計", "Aggregations"],
     ["エクスポート", "Exports"],
+    ["カレンダー", "Calendar"],
+    ["クロス集計", "Crosstab"],
+    ["ガントチャート", "Gantt"],
+    ["バーンダウンチャート", "BurnDown"],
+    ["時系列チャート", "TimeSeries"],
+    ["分析チャート", "Analy"],
+    ["カンバン", "Kamban"],
+    ["画像ライブラリ", "ImageLib"],
+    ["検索", "Search"],
     ["メール", "Mail"],
+    ["サイト統合", "SiteIntegration"],
+    ["サイトのアクセス制御", "Package.Permissions"],
+    ["レコードのアクセス制御", "PermissionForUpdating"],
+    ["項目のアクセス制御", "UpdateColumnAccessControls"],
+    ["変更履歴の一覧", "ChangeHistoryList"],
     ["タイトル", "Site.Title"],
     ["内容", "Site.Body"],
     ["説明", "Site.Body"],
+    ["ガイド", "Site.GridGuide"],
+    ["サイト画像", "Site.SiteImage"],
     ["一覧の説明", "Site.GridGuide"],
     ["エディタの説明", "Site.EditorGuide"],
     ["カレンダーの説明", "Site.CalendarGuide"],
@@ -491,16 +581,17 @@
     const currentSettings = currentSite.SiteSettings || {};
     const sourceSite = extractSite(sitePackage);
     const sourceSettings = extractSiteSettings(sitePackage);
+    const packagePlan = buildPackageSectionsPlan(sitePackage, ctx);
     const settingsPlan = buildSettingsPlan(currentSettings, sourceSettings, {
       ...ctx,
       sections: settingSectionsFor(ctx.sections, sourceSettings)
     });
     const sitePlan = buildSitePropertiesPlan(currentSite, sourceSite, ctx);
-    const operations = [...sitePlan.operations, ...settingsPlan.operations];
+    const operations = [...sitePlan.operations, ...settingsPlan.operations, ...packagePlan.operations];
 
     return {
       mode: ctx.mode,
-      sections: [...sitePlan.sections, ...settingsPlan.sections],
+      sections: [...sitePlan.sections, ...settingsPlan.sections, ...packagePlan.sections],
       summary: summarize(operations),
       operations,
       nextSiteProperties: sitePlan.nextSiteProperties,
@@ -667,6 +758,22 @@
       if (Object.prototype.hasOwnProperty.call(source, key)) properties[key] = clone(source[key]);
     }
     return properties;
+  }
+
+  function extractPackageSections(sitePackage) {
+    const site = extractSite(sitePackage) || {};
+    const sections = {};
+
+    for (const section of packageSectionCatalog) {
+      const key = packageSectionKey(section.key);
+      if (Object.prototype.hasOwnProperty.call(sitePackage || {}, key)) {
+        sections[section.key] = clone(sitePackage[key]);
+      } else if (Object.prototype.hasOwnProperty.call(site, key)) {
+        sections[section.key] = clone(site[key]);
+      }
+    }
+
+    return sections;
   }
 
   function extractEditorColumns(sourceSettings, options = {}) {
@@ -839,6 +946,23 @@
       sections,
       operations,
       nextSiteProperties
+    };
+  }
+
+  function buildPackageSectionsPlan(sitePackage, ctx) {
+    const sourceSections = extractPackageSections(sitePackage);
+    const sections = resolvePackageSections(ctx.sections, sourceSections);
+    const operations = sections.map((section) => ({
+      type: "skip",
+      section,
+      key: section,
+      before: clone(sourceSections[section]),
+      reason: `${section} is a top-level site-package section and is not applied by updatesite.`
+    }));
+
+    return {
+      sections,
+      operations
     };
   }
 
@@ -1398,7 +1522,26 @@
   }
 
   function assignIds(views, section) {
-    if (!["Views", "Scripts", "ServerScripts", "Styles", "Htmls", "Processes", "StatusControls", "Exports"].includes(section)) {
+    if (![
+      "Views",
+      "Scripts",
+      "ServerScripts",
+      "Styles",
+      "Htmls",
+      "Processes",
+      "StatusControls",
+      "Exports",
+      "Imports",
+      "Notifications",
+      "Reminders",
+      "Aggregations",
+      "Summaries",
+      "Formulas",
+      "Sections",
+      "CreateColumnAccessControls",
+      "ReadColumnAccessControls",
+      "UpdateColumnAccessControls"
+    ].includes(section)) {
       return;
     }
     let nextId = 1;
@@ -1438,14 +1581,13 @@
   function settingSectionsFor(requestedSections, sourceSettings) {
     const parsed = parseSections(requestedSections);
     if (parsed.includes("all")) return ["all"];
-    return parsed.filter((section) => !isSiteSection(section) && Object.prototype.hasOwnProperty.call(sourceSettings, section));
+    return parsed.filter((section) => !isSiteSection(section) && !isPackageSection(section));
   }
 
   function compareSettingSectionsFor(requestedSections, sourceSettings, targetSettings) {
     const parsed = parseSections(requestedSections);
     if (parsed.includes("all")) return "all";
-    const knownKeys = new Set([...Object.keys(sourceSettings || {}), ...Object.keys(targetSettings || {})]);
-    return parsed.filter((section) => !isSiteSection(section) && knownKeys.has(section));
+    return parsed.filter((section) => !isSiteSection(section) && !isPackageSection(section));
   }
 
   function resolveSiteSections(requestedSections, sourceProperties) {
@@ -1467,6 +1609,14 @@
     return parsed.filter((section) => isSiteSection(section));
   }
 
+  function resolvePackageSections(requestedSections, sourceSections) {
+    const parsed = parseSections(requestedSections);
+    if (parsed.includes("all")) {
+      return Object.keys(sourceSections || {});
+    }
+    return parsed.filter((section) => isPackageSection(section));
+  }
+
   function expandRequestedSections(requestedSections, sourceProperties, sourceSettings) {
     const parsed = parseSections(requestedSections);
     if (parsed.includes("all")) {
@@ -1484,6 +1634,14 @@
 
   function sitePropertyKey(section) {
     return String(section || "").replace(/^Site\./, "");
+  }
+
+  function isPackageSection(section) {
+    return String(section || "").startsWith("Package.");
+  }
+
+  function packageSectionKey(section) {
+    return String(section || "").replace(/^Package\./, "");
   }
 
   function summarizeVerified(settings, sections) {
@@ -1603,16 +1761,19 @@
 
   function sectionLabel(section) {
     if (isSiteSection(section)) return sitePropertyDefinitionByKey.get(section)?.label || section;
+    if (isPackageSection(section)) return packageSectionDefinitionByKey.get(section)?.label || section;
     return sectionDefinitionByKey.get(section)?.label || section;
   }
 
   function sectionGroup(section) {
     if (isSiteSection(section)) return sitePropertyDefinitionByKey.get(section)?.group || "サイト";
+    if (isPackageSection(section)) return packageSectionDefinitionByKey.get(section)?.group || "パッケージ";
     return sectionDefinitionByKey.get(section)?.group || "その他";
   }
 
   function sectionDescription(section) {
     if (isSiteSection(section)) return sitePropertyDefinitionByKey.get(section)?.description || "サイト本体の設定";
+    if (isPackageSection(section)) return packageSectionDefinitionByKey.get(section)?.description || "サイトパッケージ最上位の設定";
     return sectionDefinitionByKey.get(section)?.description || "サイトパッケージ JSON に含まれる設定";
   }
 
@@ -1625,15 +1786,32 @@
   function selectableSections(sourceSettings) {
     const catalogOrder = new Map(sectionCatalog.map((section, index) => [section.key, index]));
     const siteOrder = new Map(sitePropertyCatalog.map((section, index) => [`Site.${section.key}`, index]));
+    const packageOrder = new Map(packageSectionCatalog.map((section, index) => [section.key, index]));
     const hasPackageShape = sourceSettings?.SiteSettings || sourceSettings?.Sites || sourceSettings?.Site;
     const sourceSite = sourceSettings?.site || (hasPackageShape ? extractSite(sourceSettings) : {});
+    const packageSections = hasPackageShape ? extractPackageSections(sourceSettings) : {};
     const settings = sourceSettings?.settings || (
       hasPackageShape
         ? extractSiteSettings(sourceSettings)
         : sourceSettings
     );
     const siteProperties = extractSiteProperties(sourceSite || {});
-    const siteSections = Object.keys(siteProperties || {}).map((key) => {
+    const siteKeys = uniqueStrings([
+      ...sitePropertyCatalog.map((property) => property.key),
+      ...Object.keys(siteProperties || {})
+    ]);
+    const settingKeys = uniqueStrings([
+      ...sectionCatalog.map((section) => section.key),
+      ...Object.keys(settings || {})
+    ]);
+    const packageKeys = hasPackageShape
+      ? uniqueStrings([
+          ...packageSectionCatalog.map((section) => section.key),
+          ...Object.keys(packageSections || {})
+        ])
+      : [];
+
+    const siteSections = siteKeys.map((key) => {
       const sectionKey = `Site.${key}`;
       return {
         key: sectionKey,
@@ -1642,10 +1820,11 @@
         description: sectionDescription(sectionKey),
         unsafe: unsafeSectionKeys.has(sectionKey),
         known: sitePropertyDefinitionByKey.has(sectionKey),
+        inSource: Object.prototype.hasOwnProperty.call(siteProperties, key),
         order: siteOrder.has(sectionKey) ? siteOrder.get(sectionKey) : Number.MAX_SAFE_INTEGER
       };
     });
-    const settingSections = Object.keys(settings || {})
+    const settingSections = settingKeys
       .map((key) => ({
         key,
         label: sectionLabel(key),
@@ -1653,10 +1832,22 @@
         description: sectionDescription(key),
         unsafe: unsafeSectionKeys.has(key),
         known: sectionDefinitionByKey.has(key),
+        inSource: Object.prototype.hasOwnProperty.call(settings || {}, key),
         order: 1000 + (catalogOrder.has(key) ? catalogOrder.get(key) : Number.MAX_SAFE_INTEGER)
       }));
+    const topLevelSections = packageKeys.map((key) => ({
+      key,
+      label: sectionLabel(key),
+      group: sectionGroup(key),
+      description: sectionDescription(key),
+      unsafe: true,
+      unsupported: true,
+      known: packageSectionDefinitionByKey.has(key),
+      inSource: Object.prototype.hasOwnProperty.call(packageSections || {}, key),
+      order: 2000 + (packageOrder.has(key) ? packageOrder.get(key) : Number.MAX_SAFE_INTEGER)
+    }));
 
-    return [...siteSections, ...settingSections]
+    return [...siteSections, ...settingSections, ...topLevelSections]
       .sort((a, b) => a.order - b.order || a.group.localeCompare(b.group, "ja") || a.label.localeCompare(b.label, "ja") || a.key.localeCompare(b.key));
   }
 
@@ -1716,8 +1907,9 @@
       const updateSummary = () => {
         const selected = checkboxItems().filter((checkbox) => checkbox.checked);
         const unsafeCount = selected.filter((checkbox) => checkbox.dataset.unsafe === "true").length;
+        const unsupportedCount = selected.filter((checkbox) => checkbox.dataset.unsupported === "true").length;
         const allText = allMode()?.checked ? " / 完全同期(all)" : "";
-        summary().textContent = `${selected.length}件を選択中${unsafeCount ? ` / 注意 ${unsafeCount}件` : ""}${allText}`;
+        summary().textContent = `${selected.length}件を選択中${unsafeCount ? ` / 注意 ${unsafeCount}件` : ""}${unsupportedCount ? ` / 未対応 ${unsupportedCount}件` : ""}${allText}`;
       };
       const applyFilter = () => {
         const term = String(overlay.querySelector("[data-search]")?.value || "").trim().toLowerCase();
@@ -1744,7 +1936,7 @@
           if (allMode()) allMode().checked = false;
         }
         if (action === "safe") {
-          setChecked((key) => !unsafeSectionKeys.has(key));
+          setChecked((key) => !unsafeSectionKeys.has(key) && !packageSectionDefinitionByKey.has(key));
           if (allMode()) allMode().checked = false;
         }
         if (action === "none") {
@@ -1941,6 +2133,17 @@
           font-size: 12px;
           font-weight: 700;
         }
+        .psa-section-badges {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          justify-content: flex-end;
+        }
+        .psa-section-badge.neutral {
+          background: #f8fafc;
+          color: #64748b;
+          border-color: #e2e8f0;
+        }
         .psa-section-footer {
           display: grid;
           grid-template-columns: minmax(220px, 1fr) auto;
@@ -2006,7 +2209,9 @@
       choice.label,
       choice.group,
       choice.description,
-      choice.unsafe ? "注意 unsafe" : ""
+      choice.unsafe ? "注意 unsafe" : "",
+      choice.unsupported ? "未対応 unsupported" : "",
+      choice.inSource === false ? "未設定 not-in-source" : ""
     ].join(" ").toLowerCase();
     return `
       <label class="psa-section-row" data-section-row data-search-text="${escapeHtml(searchText)}">
@@ -2014,6 +2219,7 @@
           type="checkbox"
           data-section-key="${escapeHtml(choice.key)}"
           data-unsafe="${choice.unsafe ? "true" : "false"}"
+          data-unsupported="${choice.unsupported ? "true" : "false"}"
           ${checked ? "checked" : ""}
         >
         <span>
@@ -2021,7 +2227,11 @@
           <span class="psa-section-key">${escapeHtml(choice.key)}</span>
         </span>
         <span class="psa-section-description">${escapeHtml(choice.description)}</span>
-        ${choice.unsafe ? '<span class="psa-section-badge">注意</span>' : ""}
+        <span class="psa-section-badges">
+          ${choice.unsupported ? '<span class="psa-section-badge">未対応</span>' : ""}
+          ${choice.unsafe ? '<span class="psa-section-badge">注意</span>' : ""}
+          ${choice.inSource === false ? '<span class="psa-section-badge neutral">未設定</span>' : ""}
+        </span>
       </label>
     `;
   }

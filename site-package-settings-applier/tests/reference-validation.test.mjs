@@ -199,18 +199,64 @@ test("section selector metadata uses Japanese labels for package keys", () => {
     EditorColumnHash: {},
     Notifications: []
   });
+  const byKey = new Map(sections.map((section) => [section.key, section]));
 
-  assert.deepEqual(
-    sections.map((section) => [section.key, section.label, section.unsafe]),
-    [
-      ["Views", "表示", false],
-      ["Columns", "項目設定", false],
-      ["EditorColumnHash", "エディタ", false],
-      ["Notifications", "通知", true]
-    ]
-  );
+  assert.equal(byKey.get("Views").label, "ビュー");
+  assert.equal(byKey.get("Columns").label, "項目設定");
+  assert.equal(byKey.get("EditorColumnHash").label, "エディタ");
+  assert.equal(byKey.get("Notifications").label, "通知");
+  assert.equal(byKey.get("Notifications").unsafe, true);
+  assert.equal(byKey.get("LinkColumns").label, "リンク項目");
+  assert.equal(byKey.get("FilterColumns").label, "フィルタ項目");
+  assert.equal(byKey.get("Summaries").label, "サマリ");
   assert.deepEqual(applier.parseSections("すべて"), ["all"]);
   assert.equal(applier.sectionLabel("Comments"), "コメント");
+});
+
+test("section selector exposes all management tab aliases", () => {
+  const applier = loadApplier({});
+  const aliases = [
+    ["全般", "Site.Body"],
+    ["ガイド", "Site.GridGuide"],
+    ["サイト画像", "Site.SiteImage"],
+    ["一覧", "GridColumns"],
+    ["フィルタ", "FilterColumns"],
+    ["集計", "Aggregations"],
+    ["エディタ", "EditorColumnHash"],
+    ["リンク", "LinkColumns"],
+    ["履歴", "HistoryColumns"],
+    ["移動", "MoveTargets"],
+    ["サマリ", "Summaries"],
+    ["計算式", "Formulas"],
+    ["プロセス", "Processes"],
+    ["状況による制御", "StatusControls"],
+    ["ビュー", "Views"],
+    ["通知", "Notifications"],
+    ["リマインダー", "Reminders"],
+    ["インポート", "Imports"],
+    ["エクスポート", "Exports"],
+    ["カレンダー", "Calendar"],
+    ["クロス集計", "Crosstab"],
+    ["時系列チャート", "TimeSeries"],
+    ["分析チャート", "Analy"],
+    ["カンバン", "Kamban"],
+    ["画像ライブラリ", "ImageLib"],
+    ["検索", "Search"],
+    ["メール", "Mail"],
+    ["サイト統合", "SiteIntegration"],
+    ["スタイル", "Styles"],
+    ["スクリプト", "Scripts"],
+    ["HTML", "Htmls"],
+    ["サーバスクリプト", "ServerScripts"],
+    ["サイトのアクセス制御", "Package.Permissions"],
+    ["レコードのアクセス制御", "PermissionForUpdating"],
+    ["項目のアクセス制御", "UpdateColumnAccessControls"],
+    ["変更履歴の一覧", "ChangeHistoryList"]
+  ];
+
+  for (const [label, key] of aliases) {
+    assert.deepEqual(applier.parseSections(label), [key], label);
+  }
 });
 
 test("site management fields including comments can be selected and planned", async () => {
@@ -285,4 +331,62 @@ test("site package comparison includes selected site management fields", () => {
     ["Site.Body", "Site.Comments"]
   );
   assert.deepEqual(applier.parseSections("コメント"), ["Site.Comments"]);
+});
+
+test("replace mode can delete selected settings that are absent from source package", async () => {
+  const applier = loadApplier({
+    LinkColumns: ["Title"],
+    Views: [{ Name: "一覧" }]
+  });
+  const sitePackage = {
+    Sites: [
+      {
+        SiteSettings: {
+          Views: [{ Name: "一覧" }]
+        }
+      }
+    ]
+  };
+
+  const result = await applier.applySiteSettings(sitePackage, {
+    apiKey: "dummy",
+    tenantId: 1,
+    targetSiteId: 3,
+    sections: "リンク",
+    mode: "replace",
+    dryRun: true
+  });
+
+  assert.deepEqual(result.plan.sections, ["LinkColumns"]);
+  assert.equal(result.plan.nextSettings.LinkColumns, undefined);
+  assert.ok(result.plan.operations.some((operation) => (
+    operation.type === "delete" &&
+    operation.section === "LinkColumns"
+  )));
+});
+
+test("top-level package permission sections are visible but skipped by updatesite", async () => {
+  const applier = loadApplier({});
+  const sitePackage = {
+    Permissions: [{ Name: "Owners" }],
+    PermissionIdList: [1],
+    Sites: [{ SiteSettings: {} }]
+  };
+
+  const result = await applier.applySiteSettings(sitePackage, {
+    apiKey: "dummy",
+    tenantId: 1,
+    targetSiteId: 3,
+    sections: "サイトのアクセス制御",
+    mode: "merge",
+    dryRun: true,
+    allowUnsafeSections: true
+  });
+
+  assert.deepEqual(result.plan.sections, ["Package.Permissions"]);
+  assert.ok(result.plan.operations.some((operation) => (
+    operation.type === "skip" &&
+    operation.section === "Package.Permissions" &&
+    operation.reason.includes("not applied by updatesite")
+  )));
 });
