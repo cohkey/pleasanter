@@ -213,6 +213,51 @@ test("section selector metadata uses Japanese labels for package keys", () => {
   assert.equal(applier.sectionLabel("Comments"), "コメント");
 });
 
+test("dry-run operation rows are localized for console output", () => {
+  const applier = loadApplier({});
+  const rows = applier.formatOperationRows([
+    {
+      type: "skip",
+      section: "Notifications",
+      key: "Notifications",
+      reason: "Notifications is unsafe and was not changed. Set allowUnsafeSections:true to apply it."
+    },
+    {
+      type: "skip",
+      section: "Columns",
+      key: "Columns.ClassB.DefaultInput",
+      reason: "default value is not in ChoicesText: 999"
+    },
+    {
+      type: "skip",
+      section: "Package.Permissions",
+      key: "Package.Permissions",
+      reason: "Package.Permissions is a top-level site-package section and is not applied by updatesite."
+    }
+  ]);
+
+  assert.deepEqual(rows, [
+    {
+      "処理": "スキップ",
+      "設定": "通知 (Notifications)",
+      "キー": "Notifications",
+      "理由": "通知 (Notifications) は安全確認が必要なため変更しませんでした。適用するには allowUnsafeSections:true を指定してください。"
+    },
+    {
+      "処理": "スキップ",
+      "設定": "項目設定 (Columns)",
+      "キー": "Columns.ClassB.DefaultInput",
+      "理由": "既定値が選択肢に存在しないため除外しました: 999"
+    },
+    {
+      "処理": "スキップ",
+      "設定": "サイトのアクセス制御 (Package.Permissions)",
+      "キー": "Package.Permissions",
+      "理由": "サイトのアクセス制御 (Package.Permissions) はサイトパッケージ最上位の情報のため、updatesite では適用しません。"
+    }
+  ]);
+});
+
 test("section selector exposes all management tab aliases", () => {
   const applier = loadApplier({});
   const aliases = [

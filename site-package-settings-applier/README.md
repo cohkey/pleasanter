@@ -190,7 +190,7 @@ await PleasanterLocalJsLoader.pickAndRun();
 5. 対象設定を選択
 6. `merge` / `replace` を選択
 7. dry-run を実行
-8. dry-run 結果を `console.table` に表示
+8. dry-run 結果を `console.table` に表示（処理、設定、理由は日本語表示）
 9. 適用してよいか確認
 10. OK なら API で適用
 11. 再取得して反映結果を確認

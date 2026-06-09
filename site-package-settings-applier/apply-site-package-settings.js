@@ -2278,14 +2278,74 @@
       sections: plan.sections,
       summary: plan.summary
     });
-    console.table(
-      plan.operations.map((operation) => ({
-        type: operation.type,
-        section: operation.section,
-        key: operation.key,
-        reason: operation.reason || ""
-      }))
-    );
+    console.table(formatOperationRows(plan.operations));
+  }
+
+  function formatOperationRows(operations) {
+    return operations.map((operation) => ({
+      "処理": operationTypeLabel(operation.type),
+      "設定": formatSectionForLog(operation.section),
+      "キー": operation.key,
+      "理由": reasonLabel(operation.reason, operation)
+    }));
+  }
+
+  function operationTypeLabel(type) {
+    return {
+      create: "作成",
+      update: "更新",
+      delete: "削除",
+      skip: "スキップ"
+    }[type] || type || "";
+  }
+
+  function formatSectionForLog(section) {
+    const label = sectionLabel(section);
+    return label === section ? label : `${label} (${section})`;
+  }
+
+  function reasonLabel(reason, operation = {}) {
+    if (!reason) return "";
+    const section = operation.section;
+    const sectionText = formatSectionForLog(section);
+
+    if (reason.includes("is unsafe and was preserved")) {
+      return `${sectionText} は安全確認が必要なため保持しました。削除するには allowUnsafeSections:true を指定してください。`;
+    }
+    if (reason.includes("is unsafe and was not changed")) {
+      return `${sectionText} は安全確認が必要なため変更しませんでした。適用するには allowUnsafeSections:true を指定してください。`;
+    }
+    if (reason.includes("is not in source settings")) {
+      return `${sectionText} は適用元の SiteSettings に存在しません。`;
+    }
+    if (reason.includes("is not in source site")) {
+      return `${sectionText} は適用元のサイト情報に存在しません。`;
+    }
+    if (reason.includes("is a top-level site-package section and is not applied by updatesite")) {
+      return `${sectionText} はサイトパッケージ最上位の情報のため、updatesite では適用しません。`;
+    }
+    if (reason.includes("is not an array")) {
+      return `${sectionText} は配列形式ではないため適用しません。`;
+    }
+    if (reason.includes("is not an object")) {
+      return `${sectionText} はオブジェクト形式ではないため適用しません。`;
+    }
+    if (reason === "column reference does not exist in the target table") {
+      return "適用先テーブルに存在しない項目を参照しているため除外しました。";
+    }
+    if (reason === "column does not exist in the target table") {
+      return "適用先テーブルに存在しない項目のため除外しました。";
+    }
+    if (reason.startsWith("default value is not in ChoicesText:")) {
+      return `既定値が選択肢に存在しないため除外しました: ${reason.split(":").slice(1).join(":").trim()}`;
+    }
+    if (reason === "value is not available in the target UI options") {
+      return "適用先の画面で選択できない値のため除外しました。";
+    }
+    if (reason === "RTEditor requires a valid FieldCss; normalized to field-rte") {
+      return "リッチテキストエディタには有効な表示形式が必要なため、field-rte に補正しました。";
+    }
+    return reason;
   }
 
   function pickFile(accept) {
@@ -2336,6 +2396,7 @@
     runWizard,
     parseSections,
     sectionLabel,
+    formatOperationRows,
     selectableSections
   };
 
