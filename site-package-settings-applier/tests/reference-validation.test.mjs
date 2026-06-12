@@ -7,7 +7,7 @@ const script = fs.readFileSync(
   "utf8"
 );
 
-function loadApplier(currentSettings) {
+function loadApplier(currentSettings, currentSite = {}) {
   globalThis.window = globalThis;
   globalThis.location = { origin: "http://localhost:50001" };
   globalThis.fetch = async () =>
@@ -17,6 +17,7 @@ function loadApplier(currentSettings) {
           Data: {
             Title: "Target",
             ReferenceType: "Results",
+            ...currentSite,
             SiteSettings: currentSettings
           }
         }
@@ -30,7 +31,7 @@ function loadApplier(currentSettings) {
   return globalThis.PleasanterSitePackageApplier;
 }
 
-test("dry-run rejects invalid field CSS, default choices, and missing columns", async () => {
+test("dry-run preserves valid field CSS and rejects invalid choices and missing columns", async () => {
   const currentSettings = {
     Columns: [
       { ColumnName: "Title", FieldCss: "field-title" },
@@ -90,38 +91,10 @@ test("dry-run rejects invalid field CSS, default choices, and missing columns", 
   assert.deepEqual(reasons, [
     {
       type: "skip",
-      key: "Columns.Title.FieldCss",
-      before: "field-title",
-      after: undefined,
-      reason: "value is not available in the target UI options"
-    },
-    {
-      type: "skip",
-      key: "Columns.ClassB.FieldCss",
-      before: "field-radio",
-      after: undefined,
-      reason: "value is not available in the target UI options"
-    },
-    {
-      type: "skip",
       key: "Columns.ClassB.DefaultInput",
       before: "999",
       after: undefined,
       reason: "default value is not in ChoicesText: 999"
-    },
-    {
-      type: "skip",
-      key: "Columns.DescriptionC.FieldCss",
-      before: "field-rte",
-      after: undefined,
-      reason: "value is not available in the target UI options"
-    },
-    {
-      type: "update",
-      key: "Columns.DescriptionC.FieldCss",
-      before: undefined,
-      after: "field-wide",
-      reason: "RTEditor requires a valid FieldCss; normalized to field-wide"
     },
     {
       type: "skip",
@@ -139,10 +112,10 @@ test("dry-run rejects invalid field CSS, default choices, and missing columns", 
     }
   ]);
 
-  assert.equal(result.plan.nextSettings.Columns[0].FieldCss, undefined);
-  assert.equal(result.plan.nextSettings.Columns[1].FieldCss, undefined);
+  assert.equal(result.plan.nextSettings.Columns[0].FieldCss, "field-title");
+  assert.equal(result.plan.nextSettings.Columns[1].FieldCss, "field-radio");
   assert.equal(result.plan.nextSettings.Columns[1].DefaultInput, undefined);
-  assert.equal(result.plan.nextSettings.Columns[2].FieldCss, "field-wide");
+  assert.equal(result.plan.nextSettings.Columns[2].FieldCss, "field-rte");
   assert.deepEqual(result.plan.nextSettings.EditorColumnHash.General, ["Title"]);
   assert.deepEqual(result.plan.nextSettings.Exports[0].Columns, []);
 });
@@ -179,4 +152,344 @@ test("site package comparison reports editor column order differences", () => {
   assert.equal(result.differences[0].section, "EditorColumnHash");
   assert.deepEqual(result.differences[0].source.General, ["Title", "ClassA", "ClassB"]);
   assert.deepEqual(result.differences[0].target.General, ["Title", "ClassB", "ClassA"]);
+});
+
+test("Japanese section names can be used instead of comma-separated English keys", async () => {
+  const applier = loadApplier({
+    Columns: [{ ColumnName: "Title", LabelText: "旧タイトル" }],
+    Views: []
+  });
+  const sitePackage = {
+    Sites: [
+      {
+        SiteSettings: {
+          Columns: [{ ColumnName: "Title", LabelText: "タイトル" }],
+          Views: [{ Name: "一覧", GridColumns: ["Title"] }],
+          Notifications: [{ Name: "通知" }]
+        }
+      }
+    ]
+  };
+
+  const result = await applier.applySiteSettings(sitePackage, {
+    apiKey: "dummy",
+    tenantId: 1,
+    targetSiteId: 3,
+    sections: "項目設定、表示\n通知",
+    mode: "merge",
+    dryRun: true
+  });
+
+  assert.deepEqual(result.plan.sections, ["Columns", "Views", "Notifications"]);
+  assert.equal(result.plan.nextSettings.Columns[0].LabelText, "タイトル");
+  assert.equal(result.plan.nextSettings.Views[0].Name, "一覧");
+  assert.equal(result.plan.nextSettings.Notifications, undefined);
+  assert.ok(result.plan.operations.some((operation) => (
+    operation.type === "skip" &&
+    operation.section === "Notifications" &&
+    operation.reason.includes("unsafe")
+  )));
+});
+
+test("section selector metadata uses Japanese labels for package keys", () => {
+  const applier = loadApplier({});
+  const sections = applier.selectableSections({
+    Views: [],
+    Columns: [],
+    EditorColumnHash: {},
+    Notifications: []
+  });
+  const byKey = new Map(sections.map((section) => [section.key, section]));
+
+  assert.equal(byKey.get("Views").label, "ビュー");
+  assert.equal(byKey.get("Columns").label, "項目設定");
+  assert.equal(byKey.get("EditorColumnHash").label, "エディタ");
+  assert.equal(byKey.get("Notifications").label, "通知");
+  assert.equal(byKey.get("Notifications").unsafe, true);
+  assert.equal(byKey.get("LinkColumns").label, "リンク項目");
+  assert.equal(byKey.get("FilterColumns").label, "フィルタ項目");
+  assert.equal(byKey.get("Summaries").label, "サマリ");
+  assert.equal(
+    applier.selectableSections({ Sites: [{ Comments: [], SiteSettings: {} }] })
+      .find((section) => section.key === "Site.Comments")
+      .unsupported,
+    true
+  );
+  assert.deepEqual(applier.parseSections("すべて"), ["all"]);
+  assert.equal(applier.sectionLabel("Comments"), "コメント");
+});
+
+test("dry-run operation rows are localized for console output", () => {
+  const applier = loadApplier({});
+  const rows = applier.formatOperationRows([
+    {
+      type: "skip",
+      section: "Notifications",
+      key: "Notifications",
+      reason: "Notifications is unsafe and was not changed. Set allowUnsafeSections:true to apply it."
+    },
+    {
+      type: "skip",
+      section: "Columns",
+      key: "Columns.ClassB.DefaultInput",
+      reason: "default value is not in ChoicesText: 999"
+    },
+    {
+      type: "skip",
+      section: "Package.Permissions",
+      key: "Package.Permissions",
+      reason: "Package.Permissions is a top-level site-package section and is not applied by updatesite."
+    }
+  ]);
+
+  assert.deepEqual(rows, [
+    {
+      "処理": "スキップ",
+      "設定": "通知 (Notifications)",
+      "キー": "Notifications",
+      "理由": "通知 (Notifications) は安全確認が必要なため変更しませんでした。適用するには allowUnsafeSections:true を指定してください。"
+    },
+    {
+      "処理": "スキップ",
+      "設定": "項目設定 (Columns)",
+      "キー": "Columns.ClassB.DefaultInput",
+      "理由": "既定値が選択肢に存在しないため除外しました: 999"
+    },
+    {
+      "処理": "スキップ",
+      "設定": "サイトのアクセス制御 (Package.Permissions)",
+      "キー": "Package.Permissions",
+      "理由": "サイトのアクセス制御 (Package.Permissions) はサイトパッケージ最上位の情報のため、updatesite では適用しません。"
+    }
+  ]);
+});
+
+test("preflight comparison recommends source differences and flags replace delete risks", () => {
+  const applier = loadApplier({});
+  const sourcePackage = {
+    Sites: [
+      {
+        Title: "Source title",
+        Comments: [{ Body: "source comment" }],
+        SiteSettings: {
+          Views: [{ Name: "Source view", GridColumns: ["Title"] }],
+          Styles: [{ Name: "Source style", Css: ".x{}" }]
+        }
+      }
+    ]
+  };
+  const targetSite = {
+    Title: "Target title",
+    Comments: [],
+    SiteSettings: {
+      Views: [{ Name: "Target view", GridColumns: ["Title"] }],
+      Columns: [{ ColumnName: "Title", LabelText: "Title" }],
+      EditorColumnHash: { General: ["Title"] }
+    }
+  };
+
+  const preflight = applier.buildPreflightComparison(sourcePackage, targetSite, { mode: "replace" });
+  const rows = applier.formatPreflightRows(preflight.rows);
+  const bySection = new Map(preflight.rows.map((row) => [row.section, row]));
+
+  assert.deepEqual(
+    preflight.recommendedSections.sort(),
+    ["Site.Title", "Styles", "Views"].sort()
+  );
+  assert.deepEqual(
+    preflight.deleteRiskSections.sort(),
+    ["Columns", "EditorColumnHash"].sort()
+  );
+  assert.equal(bySection.get("Views").status, "変更あり");
+  assert.equal(bySection.get("Site.Comments").status, "未対応");
+  assert.equal(bySection.get("Site.Comments").recommended, false);
+  assert.equal(bySection.get("Columns").status, "replaceで削除候補");
+  assert.equal(bySection.get("Columns").recommended, false);
+  assert.ok(rows.some((row) => (
+    row["設定"] === "項目設定 (Columns)" &&
+    row["状態"] === "replaceで削除候補" &&
+    row["推奨"] === "未選択"
+  )));
+});
+
+test("section selector exposes all management tab aliases", () => {
+  const applier = loadApplier({});
+  const aliases = [
+    ["全般", "Site.Body"],
+    ["ガイド", "Site.GridGuide"],
+    ["サイト画像", "Site.SiteImage"],
+    ["一覧", "GridColumns"],
+    ["フィルタ", "FilterColumns"],
+    ["集計", "Aggregations"],
+    ["エディタ", "EditorColumnHash"],
+    ["リンク", "LinkColumns"],
+    ["履歴", "HistoryColumns"],
+    ["移動", "MoveTargets"],
+    ["サマリ", "Summaries"],
+    ["計算式", "Formulas"],
+    ["プロセス", "Processes"],
+    ["状況による制御", "StatusControls"],
+    ["ビュー", "Views"],
+    ["通知", "Notifications"],
+    ["リマインダー", "Reminders"],
+    ["インポート", "Imports"],
+    ["エクスポート", "Exports"],
+    ["カレンダー", "Calendar"],
+    ["クロス集計", "Crosstab"],
+    ["時系列チャート", "TimeSeries"],
+    ["分析チャート", "Analy"],
+    ["カンバン", "Kamban"],
+    ["画像ライブラリ", "ImageLib"],
+    ["検索", "Search"],
+    ["メール", "Mail"],
+    ["サイト統合", "SiteIntegration"],
+    ["スタイル", "Styles"],
+    ["スクリプト", "Scripts"],
+    ["HTML", "Htmls"],
+    ["サーバスクリプト", "ServerScripts"],
+    ["サイトのアクセス制御", "Package.Permissions"],
+    ["レコードのアクセス制御", "PermissionForUpdating"],
+    ["項目のアクセス制御", "UpdateColumnAccessControls"],
+    ["変更履歴の一覧", "ChangeHistoryList"]
+  ];
+
+  for (const [label, key] of aliases) {
+    assert.deepEqual(applier.parseSections(label), [key], label);
+  }
+});
+
+test("site management fields including comments can be selected and planned", async () => {
+  const applier = loadApplier(
+    { Views: [] },
+    {
+      Body: "old body",
+      GridGuide: "old guide",
+      Comments: []
+    }
+  );
+  const sitePackage = {
+    Sites: [
+      {
+        Title: "Source",
+        Body: "new body",
+        GridGuide: "new guide",
+        Comments: [{ Body: "管理画面コメント" }],
+        SiteSettings: {
+          Views: []
+        }
+      }
+    ]
+  };
+
+  const result = await applier.applySiteSettings(sitePackage, {
+    apiKey: "dummy",
+    tenantId: 1,
+    targetSiteId: 3,
+    sections: "内容、一覧の説明、管理コメント",
+    mode: "merge",
+    dryRun: true
+  });
+
+  assert.deepEqual(result.plan.sections, ["Site.Body", "Site.GridGuide", "Site.Comments"]);
+  assert.deepEqual(result.plan.nextSiteProperties, {
+    Body: "new body",
+    GridGuide: "new guide"
+  });
+  assert.ok(result.plan.operations.some((operation) => (
+    operation.type === "skip" &&
+    operation.section === "Site.Comments" &&
+    operation.reason.includes("not applied by updatesite")
+  )));
+  assert.deepEqual(result.plan.nextSettings.Views, []);
+});
+
+test("site package comparison includes selected site management fields", () => {
+  const applier = loadApplier({});
+  const source = {
+    Sites: [
+      {
+        Body: "new body",
+        Comments: [{ Body: "管理画面コメント" }],
+        SiteSettings: {}
+      }
+    ]
+  };
+  const target = {
+    Sites: [
+      {
+        Body: "old body",
+        Comments: [],
+        SiteSettings: {}
+      }
+    ]
+  };
+
+  const result = applier.compareSitePackages(source, target, {
+    sections: "内容,管理コメント"
+  });
+
+  assert.equal(result.equal, false);
+  assert.deepEqual(
+    result.differences.map((difference) => difference.section),
+    ["Site.Body", "Site.Comments"]
+  );
+  assert.deepEqual(applier.parseSections("コメント"), ["Site.Comments"]);
+});
+
+test("replace mode can delete selected settings that are absent from source package", async () => {
+  const applier = loadApplier({
+    LinkColumns: ["Title"],
+    Views: [{ Name: "一覧" }]
+  });
+  const sitePackage = {
+    Sites: [
+      {
+        SiteSettings: {
+          Views: [{ Name: "一覧" }]
+        }
+      }
+    ]
+  };
+
+  const result = await applier.applySiteSettings(sitePackage, {
+    apiKey: "dummy",
+    tenantId: 1,
+    targetSiteId: 3,
+    sections: "リンク",
+    mode: "replace",
+    dryRun: true
+  });
+
+  assert.deepEqual(result.plan.sections, ["LinkColumns"]);
+  assert.equal(result.plan.nextSettings.LinkColumns, undefined);
+  assert.ok(result.plan.operations.some((operation) => (
+    operation.type === "delete" &&
+    operation.section === "LinkColumns"
+  )));
+});
+
+test("top-level package permission sections are visible but skipped by updatesite", async () => {
+  const applier = loadApplier({});
+  const sitePackage = {
+    Permissions: [{ Name: "Owners" }],
+    PermissionIdList: [1],
+    Sites: [{ SiteSettings: {} }]
+  };
+
+  const result = await applier.applySiteSettings(sitePackage, {
+    apiKey: "dummy",
+    tenantId: 1,
+    targetSiteId: 3,
+    sections: "サイトのアクセス制御",
+    mode: "merge",
+    dryRun: true,
+    allowUnsafeSections: true
+  });
+
+  assert.deepEqual(result.plan.sections, ["Package.Permissions"]);
+  assert.ok(result.plan.operations.some((operation) => (
+    operation.type === "skip" &&
+    operation.section === "Package.Permissions" &&
+    operation.reason.includes("not applied by updatesite")
+  )));
 });
