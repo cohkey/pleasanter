@@ -221,7 +221,7 @@
     { key: "InheritPermission", label: "権限継承", group: "全般", description: "権限の継承設定" },
     { key: "Publish", label: "公開", group: "全般", description: "公開設定" },
     { key: "DisableCrossSearch", label: "横断検索を無効化", group: "検索", description: "横断検索の対象外にする設定" },
-    { key: "Comments", label: "管理コメント", group: "全般", description: "管理画面のコメント欄。レコードコメント本文ではありません。" }
+    { key: "Comments", label: "管理コメント", group: "全般", description: "管理画面のコメント欄。updatesite では適用しません。", unsupported: true }
   ];
   const packageSectionCatalog = [
     { key: "Package.Permissions", label: "サイトのアクセス制御", group: "サイトのアクセス制御", description: "サイトパッケージ最上位の権限情報。updatesite では適用しません。", unsupported: true },
@@ -657,16 +657,18 @@
       const targetHas = sectionExists(section, targetProperties, targetSettings);
       const targetOnly = !sourceHas && targetHas;
       const deleteRisk = targetOnly && !isSiteSection(section);
+      const unsupported = isUnsupportedSection(section);
       return {
         section,
         label: sectionLabel(section),
         type: difference.type,
-        status: preflightStatusLabel(difference.type, deleteRisk),
+        status: preflightStatusLabel(difference.type, deleteRisk, unsupported),
         source: sourceHas ? "あり" : "なし",
         target: targetHas ? "あり" : "なし",
-        recommended: sourceHas,
+        recommended: sourceHas && !unsupported,
         deleteRisk,
-        reason: preflightReason(difference.type, section, deleteRisk)
+        unsupported,
+        reason: preflightReason(difference.type, section, deleteRisk, unsupported)
       };
     });
 
@@ -687,7 +689,8 @@
     return Object.prototype.hasOwnProperty.call(settings || {}, section);
   }
 
-  function preflightStatusLabel(type, deleteRisk) {
+  function preflightStatusLabel(type, deleteRisk, unsupported) {
+    if (unsupported) return "未対応";
     if (deleteRisk) return "replaceで削除候補";
     return {
       different: "変更あり",
@@ -696,7 +699,8 @@
     }[type] || type || "";
   }
 
-  function preflightReason(type, section, deleteRisk) {
+  function preflightReason(type, section, deleteRisk, unsupported) {
+    if (unsupported) return `${sectionLabel(section)} は updatesite では適用しません。`;
     if (deleteRisk) return "適用元JSONにないため、replaceで選ぶと適用先から削除されます。";
     if (type === "different") return "適用元と適用先の値が異なります。";
     if (type === "missing") return "適用元JSONにあり、適用先にはありません。";
@@ -834,10 +838,7 @@
   function extractSiteProperties(site) {
     const source = extractSite(site) || {};
     const properties = {};
-    const keys = uniqueStrings([
-      ...sitePropertyCatalog.map((property) => property.key),
-      ...Object.keys(source)
-    ]);
+    const keys = sitePropertyCatalog.map((property) => property.key);
 
     for (const key of keys) {
       if (excludedSitePropertyKeys.has(key)) continue;
@@ -996,6 +997,15 @@
 
     for (const section of sections) {
       const key = sitePropertyKey(section);
+      if (isUnsupportedSection(section)) {
+        operations.push({
+          type: "skip",
+          section,
+          key: section,
+          reason: `${section} is not applied by updatesite.`
+        });
+        continue;
+      }
       if (isUnsafeSection(section, ctx)) {
         if (Object.prototype.hasOwnProperty.call(currentProperties, key)) {
           nextSiteProperties[key] = clone(currentProperties[key]);
@@ -1530,6 +1540,12 @@
     return unsafeSectionKeys.has(section) && ctx.allowUnsafeSections !== true;
   }
 
+  function isUnsupportedSection(section) {
+    if (isSiteSection(section)) return sitePropertyDefinitionByKey.get(section)?.unsupported === true;
+    if (isPackageSection(section)) return packageSectionDefinitionByKey.get(section)?.unsupported === true;
+    return sectionDefinitionByKey.get(section)?.unsupported === true;
+  }
+
   function ctxMergeItem(currentItem, normalizedSource, section, mode) {
     if (mode === "replace") return clone(normalizedSource);
     if (isObjectItem(currentItem) && isObjectItem(normalizedSource)) {
@@ -1905,6 +1921,7 @@
         group: sectionGroup(sectionKey),
         description: sectionDescription(sectionKey),
         unsafe: unsafeSectionKeys.has(sectionKey),
+        unsupported: isUnsupportedSection(sectionKey),
         known: sitePropertyDefinitionByKey.has(sectionKey),
         inSource: Object.prototype.hasOwnProperty.call(siteProperties, key),
         order: siteOrder.has(sectionKey) ? siteOrder.get(sectionKey) : Number.MAX_SAFE_INTEGER
@@ -1917,6 +1934,7 @@
         group: sectionGroup(key),
         description: sectionDescription(key),
         unsafe: unsafeSectionKeys.has(key),
+        unsupported: isUnsupportedSection(key),
         known: sectionDefinitionByKey.has(key),
         inSource: Object.prototype.hasOwnProperty.call(settings || {}, key),
         order: 1000 + (catalogOrder.has(key) ? catalogOrder.get(key) : Number.MAX_SAFE_INTEGER)
@@ -1927,7 +1945,7 @@
       group: sectionGroup(key),
       description: sectionDescription(key),
       unsafe: true,
-      unsupported: true,
+      unsupported: isUnsupportedSection(key),
       known: packageSectionDefinitionByKey.has(key),
       inSource: Object.prototype.hasOwnProperty.call(packageSections || {}, key),
       order: 2000 + (packageOrder.has(key) ? packageOrder.get(key) : Number.MAX_SAFE_INTEGER)
@@ -2049,7 +2067,7 @@
           if (allMode()) allMode().checked = false;
         }
         if (action === "safe") {
-          setChecked((key) => !unsafeSectionKeys.has(key) && !packageSectionDefinitionByKey.has(key));
+          setChecked((key) => !unsafeSectionKeys.has(key) && !isUnsupportedSection(key));
           if (allMode()) allMode().checked = false;
         }
         if (action === "changed") {
@@ -2490,6 +2508,9 @@
     }
     if (reason.includes("is a top-level site-package section and is not applied by updatesite")) {
       return `${sectionText} はサイトパッケージ最上位の情報のため、updatesite では適用しません。`;
+    }
+    if (reason.includes("is not applied by updatesite")) {
+      return `${sectionText} は updatesite では適用しません。`;
     }
     if (reason.includes("is not an array")) {
       return `${sectionText} は配列形式ではないため適用しません。`;

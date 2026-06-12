@@ -209,6 +209,12 @@ test("section selector metadata uses Japanese labels for package keys", () => {
   assert.equal(byKey.get("LinkColumns").label, "リンク項目");
   assert.equal(byKey.get("FilterColumns").label, "フィルタ項目");
   assert.equal(byKey.get("Summaries").label, "サマリ");
+  assert.equal(
+    applier.selectableSections({ Sites: [{ Comments: [], SiteSettings: {} }] })
+      .find((section) => section.key === "Site.Comments")
+      .unsupported,
+    true
+  );
   assert.deepEqual(applier.parseSections("すべて"), ["all"]);
   assert.equal(applier.sectionLabel("Comments"), "コメント");
 });
@@ -264,6 +270,7 @@ test("preflight comparison recommends source differences and flags replace delet
     Sites: [
       {
         Title: "Source title",
+        Comments: [{ Body: "source comment" }],
         SiteSettings: {
           Views: [{ Name: "Source view", GridColumns: ["Title"] }],
           Styles: [{ Name: "Source style", Css: ".x{}" }]
@@ -273,6 +280,7 @@ test("preflight comparison recommends source differences and flags replace delet
   };
   const targetSite = {
     Title: "Target title",
+    Comments: [],
     SiteSettings: {
       Views: [{ Name: "Target view", GridColumns: ["Title"] }],
       Columns: [{ ColumnName: "Title", LabelText: "Title" }],
@@ -293,6 +301,8 @@ test("preflight comparison recommends source differences and flags replace delet
     ["Columns", "EditorColumnHash"].sort()
   );
   assert.equal(bySection.get("Views").status, "変更あり");
+  assert.equal(bySection.get("Site.Comments").status, "未対応");
+  assert.equal(bySection.get("Site.Comments").recommended, false);
   assert.equal(bySection.get("Columns").status, "replaceで削除候補");
   assert.equal(bySection.get("Columns").recommended, false);
   assert.ok(rows.some((row) => (
@@ -383,9 +393,13 @@ test("site management fields including comments can be selected and planned", as
   assert.deepEqual(result.plan.sections, ["Site.Body", "Site.GridGuide", "Site.Comments"]);
   assert.deepEqual(result.plan.nextSiteProperties, {
     Body: "new body",
-    GridGuide: "new guide",
-    Comments: [{ Body: "管理画面コメント" }]
+    GridGuide: "new guide"
   });
+  assert.ok(result.plan.operations.some((operation) => (
+    operation.type === "skip" &&
+    operation.section === "Site.Comments" &&
+    operation.reason.includes("not applied by updatesite")
+  )));
   assert.deepEqual(result.plan.nextSettings.Views, []);
 });
 
