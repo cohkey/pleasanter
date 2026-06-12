@@ -258,6 +258,50 @@ test("dry-run operation rows are localized for console output", () => {
   ]);
 });
 
+test("preflight comparison recommends source differences and flags replace delete risks", () => {
+  const applier = loadApplier({});
+  const sourcePackage = {
+    Sites: [
+      {
+        Title: "Source title",
+        SiteSettings: {
+          Views: [{ Name: "Source view", GridColumns: ["Title"] }],
+          Styles: [{ Name: "Source style", Css: ".x{}" }]
+        }
+      }
+    ]
+  };
+  const targetSite = {
+    Title: "Target title",
+    SiteSettings: {
+      Views: [{ Name: "Target view", GridColumns: ["Title"] }],
+      Columns: [{ ColumnName: "Title", LabelText: "Title" }],
+      EditorColumnHash: { General: ["Title"] }
+    }
+  };
+
+  const preflight = applier.buildPreflightComparison(sourcePackage, targetSite, { mode: "replace" });
+  const rows = applier.formatPreflightRows(preflight.rows);
+  const bySection = new Map(preflight.rows.map((row) => [row.section, row]));
+
+  assert.deepEqual(
+    preflight.recommendedSections.sort(),
+    ["Site.Title", "Styles", "Views"].sort()
+  );
+  assert.deepEqual(
+    preflight.deleteRiskSections.sort(),
+    ["Columns", "EditorColumnHash"].sort()
+  );
+  assert.equal(bySection.get("Views").status, "変更あり");
+  assert.equal(bySection.get("Columns").status, "replaceで削除候補");
+  assert.equal(bySection.get("Columns").recommended, false);
+  assert.ok(rows.some((row) => (
+    row["設定"] === "項目設定 (Columns)" &&
+    row["状態"] === "replaceで削除候補" &&
+    row["推奨"] === "未選択"
+  )));
+});
+
 test("section selector exposes all management tab aliases", () => {
   const applier = loadApplier({});
   const aliases = [

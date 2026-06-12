@@ -187,14 +187,17 @@ await PleasanterLocalJsLoader.pickAndRun();
 2. TenantId を入力
 3. 適用先 SiteId を入力
 4. API キーを入力
-5. 対象設定を選択
-6. `merge` / `replace` を選択
-7. dry-run を実行
-8. dry-run 結果を `console.table` に表示（処理、設定、理由は日本語表示）
-9. 適用してよいか確認
-10. OK なら API で適用
-11. 再取得して反映結果を確認
-12. 適用予定の `SiteSettings` と再取得した `SiteSettings` を比較し、差分があれば `Post-apply compare` に表示
+5. `merge` / `replace` を選択
+6. 適用先設定を API で取得し、サイトパッケージ JSON と事前比較
+7. 差分がある設定を初期選択した状態で、対象設定を選択
+8. dry-run を実行
+9. dry-run 結果を `console.table` に表示（処理、設定、理由は日本語表示）
+10. 適用してよいか確認
+11. OK なら API で適用
+12. 再取得して反映結果を確認
+13. 適用予定の `SiteSettings` と再取得した `SiteSettings` を比較し、差分があれば `Post-apply compare` に表示
+
+事前比較では、適用元 JSON に存在して適用先と差分がある設定だけを初期選択します。適用先にしか存在しない設定は `replaceで削除候補` として表示しますが、自動選択はしません。削除したい場合だけ手動で選ぶか、`完全同期(all)` を使ってください。
 
 `Notifications`、`Reminders` などの安全確認が必要な設定が対象に含まれる場合は、dry-run 前に追加確認が出ます。Pleasanter 標準 UI からエクスポートした JSON であることを確認できている場合だけ OK を選んでください。
 

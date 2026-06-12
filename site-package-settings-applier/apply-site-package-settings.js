@@ -491,19 +491,37 @@
       sessionStorage.setItem("PleasanterViewPackageApplier.apiKey", apiKey);
     }
 
-    const sections = await pickSections({ site: sourceSite, settings: sourceSettings }, defaults.sections || detectedSections);
-
-    const replace = confirm(
-      [
-        "適用モードを選んでください。",
-        "",
-        "OK: replace（JSONに合わせる。対象にしかない設定は削除対象）",
-        "キャンセル: merge（追加・更新のみ。既存設定は残す）",
-        "",
-        "通常はキャンセルを選んで merge にしてください。"
-      ].join("\n")
+    const mode = defaults.mode || (
+      confirm(
+        [
+          "適用モードを選んでください。",
+          "",
+          "OK: replace（JSONに合わせる。対象にしかない設定は削除対象）",
+          "キャンセル: merge（追加・更新のみ。既存設定は残す）",
+          "",
+          "通常はキャンセルを選んで merge にしてください。"
+        ].join("\n")
+      ) ? "replace" : "merge"
     );
-    const mode = defaults.mode || (replace ? "replace" : "merge");
+    const preflightCtx = normalizeOptions({
+      baseUrl: defaults.baseUrl,
+      apiKey,
+      tenantId,
+      targetSiteId,
+      sections: "all",
+      mode,
+      dryRun: true,
+      allowUnsafeSections: true
+    });
+    const targetSite = defaults.targetSite || await getSite(preflightCtx);
+    const preflight = buildPreflightComparison(picked.package, targetSite, { mode });
+    logPreflightComparison("Preflight comparison", picked.fileName, preflight, mode);
+
+    const sections = await pickSections(
+      { site: sourceSite, settings: sourceSettings },
+      defaults.sections == null ? preflight.recommendedSections : defaults.sections,
+      { preflight, mode }
+    );
     const unsafeSections = expandRequestedSections(sections, extractSiteProperties(sourceSite), sourceSettings)
       .filter((section) => unsafeSectionKeys.has(section));
     const allowUnsafeSections = defaults.allowUnsafeSections === true || (
@@ -620,6 +638,74 @@
       sections: [...siteCompare.sections, ...settingsCompare.sections],
       differences
     };
+  }
+
+  function buildPreflightComparison(sourcePackage, targetSite, options = {}) {
+    const sourceSite = extractSite(sourcePackage);
+    const sourceSettings = extractSiteSettings(sourcePackage);
+    const targetSettings = targetSite?.SiteSettings || {};
+    const sourceProperties = extractSiteProperties(sourceSite);
+    const targetProperties = extractSiteProperties(targetSite || {});
+    const compare = compareSitePackages(
+      { Site: { ...sourceSite, SiteSettings: sourceSettings } },
+      { Site: { ...(targetSite || {}), SiteSettings: targetSettings } },
+      { sections: "all" }
+    );
+    const rows = compare.differences.map((difference) => {
+      const section = difference.section;
+      const sourceHas = sectionExists(section, sourceProperties, sourceSettings);
+      const targetHas = sectionExists(section, targetProperties, targetSettings);
+      const targetOnly = !sourceHas && targetHas;
+      const deleteRisk = targetOnly && !isSiteSection(section);
+      return {
+        section,
+        label: sectionLabel(section),
+        type: difference.type,
+        status: preflightStatusLabel(difference.type, deleteRisk),
+        source: sourceHas ? "あり" : "なし",
+        target: targetHas ? "あり" : "なし",
+        recommended: sourceHas,
+        deleteRisk,
+        reason: preflightReason(difference.type, section, deleteRisk)
+      };
+    });
+
+    return {
+      mode: options.mode || "merge",
+      compare,
+      rows,
+      recommendedSections: rows.filter((row) => row.recommended).map((row) => row.section),
+      deleteRiskSections: rows.filter((row) => row.deleteRisk).map((row) => row.section),
+      targetOnlySections: rows.filter((row) => !row.recommended).map((row) => row.section)
+    };
+  }
+
+  function sectionExists(section, siteProperties, settings) {
+    if (isSiteSection(section)) {
+      return Object.prototype.hasOwnProperty.call(siteProperties || {}, sitePropertyKey(section));
+    }
+    return Object.prototype.hasOwnProperty.call(settings || {}, section);
+  }
+
+  function preflightStatusLabel(type, deleteRisk) {
+    if (deleteRisk) return "replaceで削除候補";
+    return {
+      different: "変更あり",
+      missing: "適用元のみ",
+      extra: "適用先のみ"
+    }[type] || type || "";
+  }
+
+  function preflightReason(type, section, deleteRisk) {
+    if (deleteRisk) return "適用元JSONにないため、replaceで選ぶと適用先から削除されます。";
+    if (type === "different") return "適用元と適用先の値が異なります。";
+    if (type === "missing") return "適用元JSONにあり、適用先にはありません。";
+    if (type === "extra") {
+      return isSiteSection(section)
+        ? "適用先にだけあります。サイト本体項目は自動削除しません。"
+        : "適用先にだけあります。mergeでは残ります。";
+    }
+    return "";
   }
 
   function compareSiteSettings(sourceSettings, targetSettings, options = {}) {
@@ -1851,19 +1937,24 @@
       .sort((a, b) => a.order - b.order || a.group.localeCompare(b.group, "ja") || a.label.localeCompare(b.label, "ja") || a.key.localeCompare(b.key));
   }
 
-  async function pickSections(sourceSettings, defaultSections) {
-    const choices = selectableSections(sourceSettings);
+  async function pickSections(sourceSettings, defaultSections, options = {}) {
+    const choices = decorateSectionChoices(selectableSections(sourceSettings), options.preflight);
+    const hasDefaultSections = defaultSections != null;
     const initialSections = parseSections(defaultSections);
     const defaultText = initialSections.includes("all")
       ? "all"
-      : (initialSections.length > 0 ? initialSections : choices.map((choice) => choice.key)).join(",");
+      : (initialSections.length > 0
+          ? initialSections
+          : (hasDefaultSections ? [] : choices.map((choice) => choice.key))
+        ).join(",");
 
     if (!global.document?.body) {
       const sectionsText = promptWithDefault(
         [
           "対象設定を入力してください。",
           "日本語名、英語キー、カンマ、読点、改行区切りが使えます。",
-          `JSON内の設定: ${formatSectionNames(choices.map((choice) => choice.key))}`,
+          `差分ありの推奨設定: ${formatSectionNames(choices.filter((choice) => choice.recommended).map((choice) => choice.key)) || "なし"}`,
+          `replaceで削除候補: ${formatSectionNames(choices.filter((choice) => choice.deleteRisk).map((choice) => choice.key)) || "なし"}`,
           "例: 表示,項目設定,エディタ または all"
         ].join("\n"),
         defaultText
@@ -1871,17 +1962,38 @@
       return parseSections(sectionsText);
     }
 
-    return showSectionPickerDialog(choices, initialSections);
+    return showSectionPickerDialog(choices, initialSections, options);
   }
 
-  function showSectionPickerDialog(choices, initialSections) {
+  function decorateSectionChoices(choices, preflight) {
+    if (!preflight) return choices;
+    const bySection = new Map(preflight.rows.map((row) => [row.section, row]));
+    return choices.map((choice) => {
+      const row = bySection.get(choice.key);
+      return row
+        ? {
+            ...choice,
+            diffStatus: row.status,
+            diffReason: row.reason,
+            recommended: row.recommended,
+            deleteRisk: row.deleteRisk
+          }
+        : {
+            ...choice,
+            recommended: false,
+            deleteRisk: false
+          };
+    });
+  }
+
+  function showSectionPickerDialog(choices, initialSections, options = {}) {
     return new Promise((resolve, reject) => {
       const initialSet = initialSections.includes("all")
         ? new Set(choices.map((choice) => choice.key))
         : new Set(initialSections);
       const overlay = document.createElement("div");
       overlay.className = "psa-section-picker";
-      overlay.innerHTML = sectionPickerHtml(choices, initialSet, initialSections.includes("all"));
+      overlay.innerHTML = sectionPickerHtml(choices, initialSet, initialSections.includes("all"), options.preflight);
 
       const cleanup = () => {
         document.removeEventListener("keydown", onKeyDown);
@@ -1900,7 +2012,7 @@
       const summary = () => overlay.querySelector("[data-summary]");
       const setChecked = (predicate) => {
         checkboxItems().forEach((checkbox) => {
-          checkbox.checked = predicate(checkbox.dataset.sectionKey);
+          checkbox.checked = predicate(checkbox.dataset.sectionKey, checkbox);
         });
         updateSummary();
       };
@@ -1908,8 +2020,9 @@
         const selected = checkboxItems().filter((checkbox) => checkbox.checked);
         const unsafeCount = selected.filter((checkbox) => checkbox.dataset.unsafe === "true").length;
         const unsupportedCount = selected.filter((checkbox) => checkbox.dataset.unsupported === "true").length;
+        const deleteRiskCount = selected.filter((checkbox) => checkbox.dataset.deleteRisk === "true").length;
         const allText = allMode()?.checked ? " / 完全同期(all)" : "";
-        summary().textContent = `${selected.length}件を選択中${unsafeCount ? ` / 注意 ${unsafeCount}件` : ""}${unsupportedCount ? ` / 未対応 ${unsupportedCount}件` : ""}${allText}`;
+        summary().textContent = `${selected.length}件を選択中${deleteRiskCount ? ` / 削除候補 ${deleteRiskCount}件` : ""}${unsafeCount ? ` / 注意 ${unsafeCount}件` : ""}${unsupportedCount ? ` / 未対応 ${unsupportedCount}件` : ""}${allText}`;
       };
       const applyFilter = () => {
         const term = String(overlay.querySelector("[data-search]")?.value || "").trim().toLowerCase();
@@ -1937,6 +2050,10 @@
         }
         if (action === "safe") {
           setChecked((key) => !unsafeSectionKeys.has(key) && !packageSectionDefinitionByKey.has(key));
+          if (allMode()) allMode().checked = false;
+        }
+        if (action === "changed") {
+          setChecked((key, checkbox) => checkbox.dataset.recommended === "true");
           if (allMode()) allMode().checked = false;
         }
         if (action === "none") {
@@ -1971,7 +2088,7 @@
     });
   }
 
-  function sectionPickerHtml(choices, initialSet, allMode) {
+  function sectionPickerHtml(choices, initialSet, allMode, preflight) {
     const groups = [];
     for (const choice of choices) {
       let group = groups.find((item) => item.name === choice.group);
@@ -1987,6 +2104,13 @@
         ${group.choices.map((choice) => sectionPickerRowHtml(choice, initialSet.has(choice.key))).join("")}
       </section>
     `).join("");
+
+    const preflightText = preflight
+      ? [
+          `差分あり ${preflight.recommendedSections.length}件`,
+          `replace削除候補 ${preflight.deleteRiskSections.length}件`
+        ].join(" / ")
+      : "適用対象を選択してください。";
 
     return `
       <style>
@@ -2144,6 +2268,16 @@
           color: #64748b;
           border-color: #e2e8f0;
         }
+        .psa-section-badge.changed {
+          background: #eff6ff;
+          color: #1d4ed8;
+          border-color: #bfdbfe;
+        }
+        .psa-section-badge.danger {
+          background: #fef2f2;
+          color: #b91c1c;
+          border-color: #fecaca;
+        }
         .psa-section-footer {
           display: grid;
           grid-template-columns: minmax(220px, 1fr) auto;
@@ -2174,11 +2308,12 @@
       <div class="psa-section-dialog" role="dialog" aria-modal="true" aria-label="対象設定を選択">
         <header class="psa-section-header">
           <h2>対象設定を選択</h2>
-          <p>サイトパッケージ JSON に含まれている設定だけを表示しています。注意マークの設定は dry-run 前に追加確認します。</p>
+          <p>適用先の現在設定と比較し、差分がある設定を初期選択しています。${escapeHtml(preflightText)}。</p>
         </header>
         <div class="psa-section-toolbar">
           <input class="psa-section-search" data-search type="search" placeholder="設定名、英語キー、説明で絞り込み">
           <div class="psa-section-actions">
+            <button class="psa-section-button" type="button" data-action="changed">差分ありだけ</button>
             <button class="psa-section-button" type="button" data-action="all">全選択</button>
             <button class="psa-section-button" type="button" data-action="safe">安全な設定だけ</button>
             <button class="psa-section-button" type="button" data-action="none">解除</button>
@@ -2191,7 +2326,7 @@
             <p data-summary></p>
             <label class="psa-section-allmode">
               <input type="checkbox" data-all-mode ${allMode ? "checked" : ""}>
-              <span>all として適用する。replace の場合、JSONに存在しない設定も削除対象になります。</span>
+              <span>all として適用する。replace の場合、JSONに存在しない設定も削除対象になります。削除候補は必ずdry-runで確認してください。</span>
             </label>
           </div>
           <div class="psa-section-footer-actions">
@@ -2211,7 +2346,10 @@
       choice.description,
       choice.unsafe ? "注意 unsafe" : "",
       choice.unsupported ? "未対応 unsupported" : "",
-      choice.inSource === false ? "未設定 not-in-source" : ""
+      choice.inSource === false ? "未設定 not-in-source" : "",
+      choice.diffStatus || "",
+      choice.diffReason || "",
+      choice.deleteRisk ? "削除候補 delete-risk" : ""
     ].join(" ").toLowerCase();
     return `
       <label class="psa-section-row" data-section-row data-search-text="${escapeHtml(searchText)}">
@@ -2220,6 +2358,8 @@
           data-section-key="${escapeHtml(choice.key)}"
           data-unsafe="${choice.unsafe ? "true" : "false"}"
           data-unsupported="${choice.unsupported ? "true" : "false"}"
+          data-recommended="${choice.recommended ? "true" : "false"}"
+          data-delete-risk="${choice.deleteRisk ? "true" : "false"}"
           ${checked ? "checked" : ""}
         >
         <span>
@@ -2228,6 +2368,7 @@
         </span>
         <span class="psa-section-description">${escapeHtml(choice.description)}</span>
         <span class="psa-section-badges">
+          ${choice.diffStatus ? `<span class="psa-section-badge ${choice.deleteRisk ? "danger" : "changed"}">${escapeHtml(choice.diffStatus)}</span>` : ""}
           ${choice.unsupported ? '<span class="psa-section-badge">未対応</span>' : ""}
           ${choice.unsafe ? '<span class="psa-section-badge">注意</span>' : ""}
           ${choice.inSource === false ? '<span class="psa-section-badge neutral">未設定</span>' : ""}
@@ -2279,6 +2420,32 @@
       summary: plan.summary
     });
     console.table(formatOperationRows(plan.operations));
+  }
+
+  function logPreflightComparison(label, fileName, preflight, mode) {
+    console.log(label, {
+      fileName,
+      mode,
+      changedSections: preflight.recommendedSections,
+      deleteRiskSections: preflight.deleteRiskSections,
+      summary: preflight.compare.summary
+    });
+    if (preflight.rows.length > 0) {
+      console.table(formatPreflightRows(preflight.rows));
+    } else {
+      console.log("Preflight comparison: 差分はありません。");
+    }
+  }
+
+  function formatPreflightRows(rows) {
+    return rows.map((row) => ({
+      "状態": row.status,
+      "設定": formatSectionForLog(row.section),
+      "適用元": row.source,
+      "適用先": row.target,
+      "推奨": row.recommended ? "選択" : "未選択",
+      "理由": row.reason
+    }));
   }
 
   function formatOperationRows(operations) {
@@ -2388,6 +2555,7 @@
     applyEditorColumnsInCurrentPage,
     compareSitePackages,
     compareSiteSettings,
+    buildPreflightComparison,
     planSiteSettings,
     applySiteSettings,
     pickPackageFile,
@@ -2396,6 +2564,7 @@
     runWizard,
     parseSections,
     sectionLabel,
+    formatPreflightRows,
     formatOperationRows,
     selectableSections
   };
