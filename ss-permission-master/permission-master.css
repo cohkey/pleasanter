@@ -17,8 +17,11 @@ body {
 
 .permission-target-grid > [id$="Field"] {
   display: grid;
+  float: none !important;
   grid-template-columns: max-content minmax(0, 1fr);
   align-items: center;
+  width: 100% !important;
+  max-width: none !important;
   min-width: 0;
   margin: 0 !important;
   padding: 12px 14px !important;
@@ -56,6 +59,9 @@ body {
 .permission-matrix {
   display: grid;
   grid-template-columns: minmax(170px, 0.8fr) minmax(320px, 1.7fr);
+  clear: both;
+  max-width: none;
+  min-width: 0;
   overflow: hidden;
   border: 1px solid #cfd4dc;
   border-radius: 6px;
@@ -114,7 +120,11 @@ body {
 }
 
 .permission-matrix__cell > [id$="Field"] {
+  display: block !important;
+  float: none !important;
   width: 100%;
+  max-width: none !important;
+  min-width: 0 !important;
   margin: 0 !important;
   padding: 0 !important;
   border: 0 !important;
@@ -126,12 +136,18 @@ body {
 }
 
 .permission-matrix__cell .field-control {
+  display: block !important;
   width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
   margin: 0 !important;
 }
 
-.permission-matrix__cell select {
-  width: 100%;
+.permission-matrix__cell select,
+.permission-matrix__cell .ui-selectmenu-button {
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
   min-width: 0;
 }
 
