@@ -42,9 +42,12 @@ body {
 }
 
 .permission-target-grid .field-control {
+  display: block !important;
   width: auto !important;
+  max-width: none !important;
   min-width: 0;
   margin: 0 !important;
+  padding: 0 !important;
 }
 
 .permission-target-grid .field-control input[type="text"] {
@@ -115,7 +118,7 @@ body {
   display: flex;
   align-items: center;
   min-height: 62px;
-  padding: 8px 12px;
+  padding: 8px 10px;
   background: #fff;
 }
 
@@ -141,6 +144,16 @@ body {
   max-width: none !important;
   min-width: 0 !important;
   margin: 0 !important;
+  padding: 0 !important;
+}
+
+.permission-target-grid .container-normal,
+.permission-matrix__cell .container-normal {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 .permission-matrix__cell select,
@@ -149,6 +162,7 @@ body {
   width: 100% !important;
   max-width: none !important;
   min-width: 0;
+  margin: 0 !important;
 }
 
 .permission-matrix__cell select:focus {
