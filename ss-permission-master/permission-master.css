@@ -1,20 +1,17 @@
-DO $$
-DECLARE
-  orange_style text := $css$
 body {
   --primaryColor: #eb9151;
 }
 
 .permission-target-grid,
 .permission-matrix {
+  box-sizing: border-box;
+  width: 100%;
   margin: 8px 0 20px;
 }
 
 .permission-target-grid {
-  width: 100%;
-  max-width: 1040px;
   display: grid;
-  grid-template-columns: minmax(360px, 1.2fr) minmax(320px, 1fr) max-content;
+  grid-template-columns: minmax(260px, 2fr) minmax(220px, 1.4fr) minmax(140px, 0.7fr);
   gap: 12px;
 }
 
@@ -22,10 +19,10 @@ body {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   align-items: center;
-  column-gap: 12px;
   min-width: 0;
   margin: 0 !important;
   padding: 12px 14px !important;
+  column-gap: 12px;
   border: 1px solid #d7dbe1;
   border-radius: 6px;
   background: #fff;
@@ -54,15 +51,11 @@ body {
 .permission-target-grid .permission-enabled {
   grid-template-columns: max-content max-content;
   justify-content: start;
-  border-color: #d7dbe1;
-  background: #fff !important;
 }
 
 .permission-matrix {
-  width: 100%;
-  max-width: 720px;
   display: grid;
-  grid-template-columns: 180px minmax(320px, 1fr);
+  grid-template-columns: minmax(170px, 0.8fr) minmax(320px, 1.7fr);
   overflow: hidden;
   border: 1px solid #cfd4dc;
   border-radius: 6px;
@@ -177,58 +170,3 @@ body {
     overflow-x: auto;
   }
 }
-$css$;
-  organization_choices text := E'0,許可しない\n1,通常社員のみ\n2,全社員（派遣社員を含む）';
-  user_choices text := E'0,組織設定に従う\n1,このユーザを許可\n2,このユーザを拒否';
-  site_rec record;
-  settings jsonb;
-  columns jsonb;
-BEGIN
-  FOR site_rec IN
-    SELECT
-      "SiteId",
-      "Title",
-      "SiteSettings"::jsonb AS settings
-      FROM "Implem.Pleasanter"."Sites"
-     WHERE "Title" IN ('SS権限管理_組織単位', 'SS権限管理_ユーザ単位')
-     ORDER BY "SiteId"
-  LOOP
-    settings := site_rec.settings;
-
-    SELECT jsonb_agg(
-      CASE
-        WHEN col->>'ColumnName' IN ('ClassB', 'ClassC', 'ClassD', 'ClassE') THEN
-          col || jsonb_build_object(
-            'ChoicesText', CASE
-              WHEN site_rec."Title" = 'SS権限管理_組織単位' THEN organization_choices
-              ELSE user_choices
-            END
-          )
-        ELSE col
-      END
-    )
-    INTO columns
-    FROM jsonb_array_elements(settings->'Columns') AS col;
-
-    settings := jsonb_set(settings, '{Columns}', columns, true);
-    settings := jsonb_set(
-      settings,
-      '{Styles}',
-      jsonb_build_array(
-        jsonb_build_object(
-          'Id', 1,
-          'Title', 'SS権限管理 コンパクト横配置',
-          'All', true,
-          'Body', orange_style
-        )
-      ),
-      true
-    );
-
-    UPDATE "Implem.Pleasanter"."Sites"
-       SET "SiteSettings" = settings::text,
-           "UpdatedTime" = CURRENT_TIMESTAMP,
-           "Updator" = 1
-     WHERE "SiteId" = site_rec."SiteId";
-  END LOOP;
-END $$;
