@@ -26,9 +26,9 @@ body {
   margin: 0 !important;
   padding: 12px 14px !important;
   column-gap: 12px;
-  border: 1px solid #d7dbe1;
+  border: 1px solid #f0d2bb;
   border-radius: 6px;
-  background: #fff;
+  background: #fff8f2;
 }
 
 .permission-target-grid .field-label {
