@@ -59,6 +59,15 @@ body {
   justify-content: start;
 }
 
+.permission-target-grid .permission-enabled .container-normal {
+  align-items: center;
+}
+
+.permission-target-grid .permission-enabled input[type="checkbox"] {
+  float: none;
+  margin: 0 !important;
+}
+
 .permission-matrix {
   display: grid;
   grid-template-columns: minmax(170px, 0.8fr) minmax(320px, 1.7fr);

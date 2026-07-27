@@ -80,8 +80,33 @@
     buildPermissionMatrix();
   }
 
+  function observeEditorChanges() {
+    if (!document.body || typeof MutationObserver === "undefined") return;
+
+    var scheduled = false;
+    var observer = new MutationObserver(function () {
+      var fieldsExist = field("Title") || field(rows[0].column);
+      var targetMissing = !document.querySelector(".permission-target-grid");
+      var matrixMissing = !document.querySelector(".permission-matrix");
+
+      if (!fieldsExist || (!targetMissing && !matrixMissing) || scheduled) return;
+
+      scheduled = true;
+      window.setTimeout(function () {
+        scheduled = false;
+        buildLayout();
+      }, 0);
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+
   function ready() {
     buildLayout();
+    observeEditorChanges();
     window.setTimeout(buildLayout, 250);
   }
 
