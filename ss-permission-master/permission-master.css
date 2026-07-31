@@ -26,9 +26,9 @@ body {
   margin: 0 !important;
   padding: 12px 14px !important;
   column-gap: 12px;
-  border: 1px solid #f0d2bb;
+  border: 1px solid #d5d9df;
   border-radius: 6px;
-  background: #fff8f2;
+  background: #fff;
 }
 
 .permission-target-grid .field-label {
@@ -57,6 +57,8 @@ body {
 .permission-target-grid .permission-enabled {
   grid-template-columns: max-content max-content;
   justify-content: start;
+  border-color: #b9dcc4;
+  background: #eef8f1;
 }
 
 .permission-target-grid .permission-enabled .container-normal {
@@ -66,6 +68,7 @@ body {
 .permission-target-grid .permission-enabled input[type="checkbox"] {
   float: none;
   margin: 0 !important;
+  accent-color: #2f7d4a;
 }
 
 .permission-matrix {
