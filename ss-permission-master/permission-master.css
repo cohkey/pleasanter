@@ -2,6 +2,11 @@ body {
   --primaryColor: #eb9151;
 }
 
+.field-section {
+  color: #6d3f22;
+  background-color: #f3cfb4;
+}
+
 .permission-target-grid,
 .permission-matrix {
   box-sizing: border-box;
