@@ -57,8 +57,8 @@ body {
 .permission-target-grid .permission-enabled {
   grid-template-columns: max-content max-content;
   justify-content: start;
-  border-color: #b9dcc4;
-  background: #eef8f1;
+  border-color: #cad9bd;
+  background: #f1f6ec;
 }
 
 .permission-target-grid .permission-enabled .container-normal {
@@ -68,7 +68,7 @@ body {
 .permission-target-grid .permission-enabled input[type="checkbox"] {
   float: none;
   margin: 0 !important;
-  accent-color: #2f7d4a;
+  accent-color: #617a4a;
 }
 
 .permission-matrix {
