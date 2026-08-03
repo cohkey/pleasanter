@@ -7,13 +7,6 @@
     { label: "レコード更新", column: "ClassD" },
     { label: "レコード削除", column: "ClassE" }
   ];
-  const requiredColumns = [
-    "Title",
-    "ClassA",
-    "CheckA",
-    ...permissionRows.map(({ column }) => column)
-  ];
-
   const field = (columnName) =>
     document.getElementById(`Results_${columnName}Field`);
 
@@ -87,46 +80,7 @@
     buildPermissionMatrix();
   };
 
-  const fieldsAreReady = () =>
-    requiredColumns.every((columnName) => field(columnName));
-
-  const layoutIsMissing = () =>
-    !document.querySelector(".permission-target-grid") ||
-    !document.querySelector(".permission-matrix");
-
-  const observeEditorChanges = () => {
-    if (!document.body || typeof MutationObserver === "undefined") return;
-
-    let scheduled = false;
-    const scheduleBuild = () => {
-      if (scheduled) return;
-      scheduled = true;
-      window.setTimeout(() => {
-        scheduled = false;
-        buildLayout();
-      }, 0);
-    };
-
-    const observer = new MutationObserver(() => {
-      if (fieldsAreReady() && layoutIsMissing()) {
-        scheduleBuild();
-      }
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  };
-
-  const ready = () => {
-    buildLayout();
-    observeEditorChanges();
-  };
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", ready, { once: true });
-  } else {
-    ready();
+  if (window.$p?.events) {
+    $p.events.on_editor_load = buildLayout;
   }
 })();
