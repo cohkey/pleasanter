@@ -5,6 +5,9 @@
  * 前提:
  * - common/logger に ClientScriptLogger が定義されている
  * - common/logger に getClientSiteId / getClientRecordId / getClientUserId / getClientDeptId が定義されている
+ *
+ * 変更履歴:
+ * - 2026-08-24: operationName / includeServerLog を追加し、SS画面表示系ログをCS側の1操作ログへ集約できるようにした。
  */
 
 /**

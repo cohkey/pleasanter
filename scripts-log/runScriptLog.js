@@ -2,6 +2,9 @@
  * スクリプトログテーブル側
  * サイト設定の読み込み時
  * UserData のログ依頼を受け取り、ログレコードを作成する。
+ *
+ * 変更履歴:
+ * - 2026-08-24: ClassHash / DescriptionHash / NumHash / DateHash も設定し、SSログ詳細をDescriptionBへ保存できるようにした。
  */
 
 const RUN_SCRIPT_LOG_CONFIG = {

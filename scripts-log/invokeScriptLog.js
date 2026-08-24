@@ -8,6 +8,9 @@
  * - event側では runEvent を呼ぶ
  * - 各処理関数は logger を受け取り、logger.info / warn / error に追記する
  * - group は console.group と同じように使う
+ *
+ * 変更履歴:
+ * - 2026-08-24: deferToClient を追加し、画面表示系SSイベントをCS側の1操作ログへ渡せるようにした。
  */
 
 const SCRIPT_LOG_CONFIG = {
