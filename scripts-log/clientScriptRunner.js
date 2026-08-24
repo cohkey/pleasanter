@@ -25,6 +25,8 @@
  * @param {number|string} [options.sourceRecordId] 実行元レコードID
  * @param {string|number} [options.userId] ユーザーID
  * @param {string|number} [options.deptId] 部署ID
+ * @param {string} [options.operationName] ログレコード上の処理名。複数イベントを1操作に束ねる場合に指定する
+ * @param {boolean} [options.includeServerLog=false] Pleasanterが画面へ渡したSSログを詳細ログに取り込むか
  * @param {boolean} [options.enableConsoleLog=true] consoleへ出力するか
  * @param {boolean} [options.enableApiSave=true] ログテーブルへ保存するか
  * @returns {Promise<ClientScriptLogger>}
@@ -43,6 +45,8 @@ async function runClientEvent(eventName, steps, options) {
             deptId: logger.deptId || '',
             url: location.href
         }));
+
+        appendServerLogToClientLogger(logger, options);
 
         for (let i = 0; i < steps.length; i++) {
             await runClientStep(logger, steps[i]);
@@ -204,13 +208,61 @@ function createClientEventLogger(eventName, options) {
     return new ClientScriptLogger({
         sourceApp: options.sourceApp || getClientSiteId(),
         sourceSiteId: options.sourceSiteId || getClientSiteId(),
-        processName: eventName,
+        processName: options.operationName || eventName,
         sourceRecordId: options.sourceRecordId || getClientRecordId(),
         userId: options.userId || getClientUserId(),
         deptId: options.deptId || getClientDeptId(),
         enableConsoleLog: options.enableConsoleLog,
         enableApiSave: options.enableApiSave
     });
+}
+
+/**
+ * Pleasanterが画面へ渡したSSログをCSログに取り込む。
+ * SS側で runEvent(..., { deferToClient: true }) を使った画面表示系ログを、
+ * CS側の on_editor_load などで1操作ログに束ねるための処理。
+ *
+ * @param {ClientScriptLogger} logger ロガー
+ * @param {Object} options ログオプション
+ */
+function appendServerLogToClientLogger(logger, options) {
+    options = options || {};
+
+    if (options.includeServerLog !== true) {
+        return;
+    }
+
+    const serverLog = getPleasanterServerLogText();
+
+    if (!serverLog) {
+        logger.info('server log is empty');
+        return;
+    }
+
+    logger.info('server log');
+    logger.group('server_display_events - SS画面表示系イベント');
+    logger.info(serverLog);
+    logger.groupEnd();
+}
+
+/**
+ * Pleasanterがhidden項目 Log に出力したSSログを取得する。
+ *
+ * @returns {string} SSログ文字列
+ */
+function getPleasanterServerLogText() {
+    const log = document.getElementById('Log');
+
+    if (!log || !log.value) {
+        return '';
+    }
+
+    try {
+        const parsed = JSON.parse(log.value);
+        return parsed && parsed.Log ? String(parsed.Log) : '';
+    } catch (e) {
+        return String(log.value || '');
+    }
 }
 
 /**
