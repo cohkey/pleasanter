@@ -5,6 +5,7 @@
  *
  * 変更履歴:
  * - 2026-08-24: ClassHash / DescriptionHash / NumHash / DateHash も設定し、SSログ詳細をDescriptionBへ保存できるようにした。
+ * - 2026-08-26: ファイル名をserverScriptLogReceiver.jsへ変更し、ログテーブル側の受信処理であることを明確化した。
  */
 
 const RUN_SCRIPT_LOG_CONFIG = {
@@ -12,14 +13,14 @@ const RUN_SCRIPT_LOG_CONFIG = {
     triggerKey: 'run-script-log'
 };
 
-runScriptLogBySiteLoad(context);
+receiveScriptLogBySiteLoad(context);
 
 /**
  * ログ依頼を受け取り、ログレコードを作成する。
  *
  * @param {Object} context サーバスクリプトのcontext
  */
-function runScriptLogBySiteLoad(context) {
+function receiveScriptLogBySiteLoad(context) {
     const request = getScriptLogRequest(context);
 
     if (!request) {

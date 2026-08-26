@@ -11,6 +11,8 @@
  *
  * 変更履歴:
  * - 2026-08-24: deferToClient を追加し、画面表示系SSイベントをCS側の1操作ログへ渡せるようにした。
+ * - 2026-08-26: イベント単位の開始/終了境界線を追加し、統合ログ内でSSイベントを見分けやすくした。
+ * - 2026-08-26: ファイル名をserverScriptLogger.jsへ変更し、SS側ログ部品であることを明確化した。
  */
 
 const SCRIPT_LOG_CONFIG = {
@@ -29,7 +31,7 @@ const SCRIPT_LOG_CONFIG = {
  * @param {string} options.detail 詳細ログ
  * @param {number|string} [options.sourceRecordId] 実行元レコードID
  */
-function invokeScriptLogBySiteLoad(context, options) {
+function requestScriptLogSaveBySiteLoad(context, options) {
     context.UserData.ScriptLogRequest = {
         triggerKey: SCRIPT_LOG_CONFIG.triggerKey,
         sourceApp: options.sourceApp || context.SiteId || '',
@@ -186,6 +188,60 @@ class ScriptLogger {
     }
 
     /**
+     * イベントやログ取り込み単位の境界線を追加する。
+     *
+     * @param {string} type start / end / abnormalEnd
+     * @param {string} label 境界名
+     * @param {string} [suffix] 末尾文言
+     */
+    section(type, label, suffix) {
+        let status = '開始';
+
+        if (type === 'end') {
+            status = '終了';
+        } else if (type === 'abnormalEnd') {
+            status = '異常終了';
+        }
+
+        const line =
+            '===== ' +
+            status +
+            ': ' +
+            label +
+            (suffix ? ' ' + suffix : '') +
+            ' ' +
+            this.getLogMetaText() +
+            ' =====';
+
+        this.details.push(line);
+
+        if (this.enableConsoleLog) {
+            this.context.Log(line);
+        }
+
+        this.lastLogAtMs = Date.now();
+    }
+
+    /**
+     * 境界線の開始を追加する。
+     *
+     * @param {string} label 境界名
+     */
+    sectionStart(label) {
+        this.section('start', label);
+    }
+
+    /**
+     * 境界線の終了を追加する。
+     *
+     * @param {string} label 境界名
+     * @param {string} [suffix] 末尾文言
+     */
+    sectionEnd(label, suffix) {
+        this.section('end', label, suffix);
+    }
+
+    /**
      * 未終了のグループをすべて異常終了として閉じる。
      * エラー発生時のログ崩れ防止用。
      */
@@ -231,7 +287,7 @@ class ScriptLogger {
             return;
         }
 
-        invokeScriptLogBySiteLoad(this.context, {
+        requestScriptLogSaveBySiteLoad(this.context, {
             sourceApp: this.sourceApp,
             processName: this.processName,
             level: this.level,
@@ -380,8 +436,11 @@ function runEvent(context, eventName, steps, options) {
         sourceRecordId: options.sourceRecordId || context.Id,
         enableConsoleLog: options.enableConsoleLog
     });
+    const eventSectionLabel = 'SSイベント: ' + eventName;
+    let eventSectionClosed = false;
 
     try {
+        logger.sectionStart(eventSectionLabel);
         logger.info(eventName + '処理を開始します');
         logger.info('実行元情報 ' + JSON.stringify({
             siteId: context.SiteId || '',
@@ -394,6 +453,8 @@ function runEvent(context, eventName, steps, options) {
         }
 
         logger.info(eventName + '処理を終了します');
+        logger.sectionEnd(eventSectionLabel);
+        eventSectionClosed = true;
 
     } catch (e) {
         /*
@@ -402,6 +463,11 @@ function runEvent(context, eventName, steps, options) {
          */
         logger.error(e.stack);
         logger.closeAllGroups();
+
+        if (!eventSectionClosed) {
+            logger.section('abnormalEnd', eventSectionLabel);
+            eventSectionClosed = true;
+        }
 
         context.AddResponse(
             'Message',
