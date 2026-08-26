@@ -11,10 +11,16 @@
  * - 2026-08-26: SSログをCSイベント開始前の独立ブロックとして取り込み、CSログの階層に混ざらないようにした。
  * - 2026-08-26: SS統合時のconsole出力順を詳細ログと合わせ、SS/CSイベント境界を明確化した。
  * - 2026-08-26: 更新/削除の送信前CSログをsessionStorageへ保留し、次の画面表示ログへ束ねられるようにした。
+ * - 2026-08-26: 次画面表示へ保留するCSログは、画面遷移前にsessionStorageへ保存するようにした。
+ * - 2026-08-26: CS側で取り込んだSSログをhidden Logから消し、Pleasanter本体のconsole再出力を抑止した。
+ * - 2026-08-26: Ajax応答でPleasanter本体がconsole出力するSSログを捕捉し、次の統合ログへ束ねるようにした。
  */
 
 const CLIENT_SCRIPT_LOG_PENDING_KEY = 'PleasanterScriptLog.PendingClientLogs';
+const CLIENT_SCRIPT_LOG_PENDING_SERVER_KEY = 'PleasanterScriptLog.PendingServerLogs';
 const CLIENT_SCRIPT_LOG_PENDING_TTL_MS = 5 * 60 * 1000;
+
+installPleasanterServerLogConsoleCapture();
 
 /**
  * クライアントイベント処理を実行する。
@@ -90,13 +96,15 @@ async function runClientEvent(eventName, steps, options) {
             logger.enableApiSave = false;
         }
 
-        await logger.save({
+        const savePromise = logger.save({
             flushConsoleLog: !shouldDeferToNextLoad
         });
 
         if (shouldDeferToNextLoad) {
             savePendingClientLog(logger, options);
         }
+
+        await savePromise;
     }
 
     return logger;
@@ -344,16 +352,23 @@ function appendServerLogToClientLogger(logger, options) {
         return;
     }
 
+    const serverLogs = takePendingServerLogs(logger);
     const serverLog = normalizeServerLogText(getPleasanterServerLogText());
+    clearPleasanterServerLogText();
 
-    if (!serverLog) {
+    if (serverLog) {
+        serverLogs.push(serverLog);
+    }
+
+    if (serverLogs.length === 0) {
         return;
     }
 
-    const serverLogLabel = options.serverLogLabel || detectServerLogLabel(serverLog);
+    const serverLogDetail = serverLogs.join('\n');
+    const serverLogLabel = options.serverLogLabel || detectServerLogLabel(serverLogDetail);
 
     logger.details.push('===== 開始: ' + serverLogLabel + ' =====');
-    logger.details.push(serverLog);
+    logger.details.push(serverLogDetail);
     logger.details.push('===== 終了: ' + serverLogLabel + ' =====');
 }
 
@@ -364,11 +379,11 @@ function appendServerLogToClientLogger(logger, options) {
  * @returns {string} ブロックラベル
  */
 function detectServerLogLabel(serverLog) {
-    if (/SSイベント: .*削除/.test(serverLog)) {
+    if (/SSイベント: .*(delete|削除)|ss-(before|after)-delete/i.test(serverLog)) {
         return 'SS削除・画面表示系イベント';
     }
 
-    if (/SSイベント: .*更新/.test(serverLog)) {
+    if (/SSイベント: .*(update|更新)|ss-(before|after)-update/i.test(serverLog)) {
         return 'SS更新・画面表示系イベント';
     }
 
@@ -406,6 +421,161 @@ function getPleasanterServerLogText() {
     } catch (e) {
         return String(log.value || '');
     }
+}
+
+/**
+ * Pleasanter本体のdocument ready処理によるSSログのconsole再出力を抑止する。
+ */
+function clearPleasanterServerLogText() {
+    const log = document.getElementById('Log');
+
+    if (!log) {
+        return;
+    }
+
+    log.value = JSON.stringify({ Log: '' });
+}
+
+/**
+ * Ajax応答経由でPleasanter本体がconsole出力するSSログを捕捉する。
+ * 画面表示時のhidden Logでは拾えない更新/削除SSログを、
+ * 次のon_editor_loadなどの統合ログへ束ねるための処理。
+ */
+function installPleasanterServerLogConsoleCapture() {
+    if (
+        typeof window === 'undefined' ||
+        !window.console ||
+        window.console.__pleasanterScriptLogCaptureInstalled
+    ) {
+        return;
+    }
+
+    const originalLog = window.console.log.bind(window.console);
+
+    window.console.__pleasanterScriptLogCaptureInstalled = true;
+    window.console.__pleasanterScriptLogOriginalLog = originalLog;
+    window.console.log = function () {
+        if (
+            arguments.length === 1 &&
+            isPleasanterServerScriptLog(arguments[0])
+        ) {
+            savePendingServerLog(arguments[0]);
+            return;
+        }
+
+        return originalLog.apply(window.console, arguments);
+    };
+}
+
+/**
+ * console出力値がスクリプトログ用SSログかを判定する。
+ *
+ * @param {*} value console.logに渡された値
+ * @returns {boolean} true: 捕捉対象
+ */
+function isPleasanterServerScriptLog(value) {
+    const text = normalizeServerLogText(value);
+    return /^(=====|-----) 開始: SSイベント:/.test(text);
+}
+
+/**
+ * Ajax応答由来のSSログを保留する。
+ *
+ * @param {string} serverLog SSログ文字列
+ */
+function savePendingServerLog(serverLog) {
+    if (!window.sessionStorage) {
+        return;
+    }
+
+    const sourceSiteId = getClientSiteId();
+    const sourceRecordId = getClientRecordId();
+    const pendingLogs = loadPendingServerLogs();
+
+    pendingLogs.push({
+        sourceSiteId: String(sourceSiteId || ''),
+        sourceRecordId: String(sourceRecordId || ''),
+        createdAt: Date.now(),
+        detail: normalizeServerLogText(serverLog)
+    });
+
+    storePendingServerLogs(pendingLogs);
+}
+
+/**
+ * 現在のログ対象に一致する保留中SSログを取り出す。
+ *
+ * @param {ClientScriptLogger} logger ロガー
+ * @returns {Array<string>} 保留中SSログ本文
+ */
+function takePendingServerLogs(logger) {
+    const pendingLogs = loadPendingServerLogs();
+    const matchedLogs = [];
+    const remainingLogs = [];
+
+    for (let i = 0; i < pendingLogs.length; i++) {
+        if (isSamePendingClientLogTarget(pendingLogs[i], logger)) {
+            matchedLogs.push(pendingLogs[i].detail || '');
+        } else {
+            remainingLogs.push(pendingLogs[i]);
+        }
+    }
+
+    storePendingServerLogs(remainingLogs);
+
+    return matchedLogs.filter(function (detail) {
+        return detail;
+    });
+}
+
+/**
+ * 保留中SSログを読み込む。
+ *
+ * @returns {Array<Object>} 保留中SSログ
+ */
+function loadPendingServerLogs() {
+    if (!window.sessionStorage) {
+        return [];
+    }
+
+    try {
+        const raw = sessionStorage.getItem(CLIENT_SCRIPT_LOG_PENDING_SERVER_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+
+        if (!Array.isArray(parsed)) {
+            return [];
+        }
+
+        const nowMs = Date.now();
+
+        return parsed.filter(function (pendingLog) {
+            return !pendingLog.createdAt ||
+                nowMs - pendingLog.createdAt <= CLIENT_SCRIPT_LOG_PENDING_TTL_MS;
+        });
+    } catch (e) {
+        return [];
+    }
+}
+
+/**
+ * 保留中SSログを保存する。
+ *
+ * @param {Array<Object>} pendingLogs 保留中SSログ
+ */
+function storePendingServerLogs(pendingLogs) {
+    if (!window.sessionStorage) {
+        return;
+    }
+
+    if (pendingLogs.length === 0) {
+        sessionStorage.removeItem(CLIENT_SCRIPT_LOG_PENDING_SERVER_KEY);
+        return;
+    }
+
+    sessionStorage.setItem(
+        CLIENT_SCRIPT_LOG_PENDING_SERVER_KEY,
+        JSON.stringify(pendingLogs.slice(-10))
+    );
 }
 
 /**
