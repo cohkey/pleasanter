@@ -2,6 +2,9 @@
  * スクリプトログテーブル側
  * サイト設定の読み込み時
  * UserData のログ依頼を受け取り、ログレコードを作成する。
+ *
+ * 変更履歴:
+ * - 2026-08-24: ClassHash / DescriptionHash / NumHash / DateHash も設定し、SSログ詳細をDescriptionBへ保存できるようにした。
  */
 
 const RUN_SCRIPT_LOG_CONFIG = {
@@ -59,20 +62,42 @@ function getScriptLogRequest(context) {
  */
 function buildScriptLogItem(request) {
     const item = items.NewResult();
+    const classHash = {
+        ClassA: String(request.sourceApp || ''),
+        ClassB: request.level || 'info',
+        ClassC: String(request.userId || ''),
+        ClassD: String(request.deptId || '')
+    };
+    const descriptionHash = {
+        DescriptionA: request.processName || '',
+        DescriptionB: request.detail || ''
+    };
+    const numHash = {
+        NumA: toNumberOrNull(request.sourceSiteId),
+        NumB: toNumberOrNull(request.sourceRecordId)
+    };
+    const dateHash = {
+        DateA: getCurrentTimestamp()
+    };
 
     item.Title = buildLogTitle(request);
-    item.ClassA = String(request.sourceApp || '');
-    item.ClassB = request.level || 'info';
-    item.ClassC = toNumberOrNull(request.userId);
-    item.ClassD = toNumberOrNull(request.deptId);
 
-    item.DescriptionA = request.processName || '';
-    item.DescriptionB = request.detail || '';
+    item.ClassA = classHash.ClassA;
+    item.ClassB = classHash.ClassB;
+    item.ClassC = classHash.ClassC;
+    item.ClassD = classHash.ClassD;
+    item.ClassHash = classHash;
 
-    item.NumA = toNumberOrNull(request.sourceSiteId);
-    item.NumB = toNumberOrNull(request.sourceRecordId);
+    item.DescriptionA = descriptionHash.DescriptionA;
+    item.DescriptionB = descriptionHash.DescriptionB;
+    item.DescriptionHash = descriptionHash;
 
-    item.DateA = getCurrentTimestamp();
+    item.NumA = numHash.NumA;
+    item.NumB = numHash.NumB;
+    item.NumHash = numHash;
+
+    item.DateA = dateHash.DateA;
+    item.DateHash = dateHash;
 
     return item;
 }

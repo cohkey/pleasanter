@@ -3,10 +3,14 @@
  * ScriptLogger でログ内容を蓄積し、最後にログテーブルへ保存依頼を出す。
  *
  * 方針:
- * - 1イベント処理につき、1ログレコードを作成する
+ * - 原則は1イベント処理につき、1ログレコードを作成する
+ * - 画面表示系イベントは deferToClient を使い、CS側で1操作ログに束ねる
  * - event側では runEvent を呼ぶ
  * - 各処理関数は logger を受け取り、logger.info / warn / error に追記する
  * - group は console.group と同じように使う
+ *
+ * 変更履歴:
+ * - 2026-08-24: deferToClient を追加し、画面表示系SSイベントをCS側の1操作ログへ渡せるようにした。
  */
 
 const SCRIPT_LOG_CONFIG = {
@@ -208,8 +212,13 @@ class ScriptLogger {
 
     /**
      * 現在のログ内容を保存する。
+     *
+     * @param {Object} [options] 保存オプション
+     * @param {boolean} [options.deferToClient=false] trueの場合はログレコードを作成せず、context.Log経由でCS側に渡す
      */
-    save() {
+    save(options) {
+        options = options || {};
+
         /*
          * 念のため、閉じ忘れたgroupを閉じる。
          */
@@ -217,6 +226,10 @@ class ScriptLogger {
 
         const totalMs = Date.now() - this.startedAtMs;
         this.details.push('総処理時間: ' + totalMs + 'ms');
+
+        if (options.deferToClient) {
+            return;
+        }
 
         invokeScriptLogBySiteLoad(this.context, {
             sourceApp: this.sourceApp,
@@ -346,6 +359,7 @@ class ScriptLogger {
 /**
  * イベント処理を実行する。
  * 1イベント処理につき、1件のログレコードを作成する想定。
+ * 画面表示系イベントをCS側で1操作ログに束ねる場合は options.deferToClient をtrueにする。
  *
  * @param {Object} context サーバスクリプトのcontext
  * @param {string} eventName イベント名
@@ -354,6 +368,7 @@ class ScriptLogger {
  * @param {string|number} [options.sourceApp] 実行元アプリID
  * @param {number|string} [options.sourceRecordId] 実行元レコードID
  * @param {boolean} [options.enableConsoleLog=true] context.Logへ出力するか
+ * @param {boolean} [options.deferToClient=false] trueの場合はSS側では保存せず、CS側の操作ログへ束ねる
  * @returns {ScriptLogger} logger
  */
 function runEvent(context, eventName, steps, options) {
@@ -394,7 +409,9 @@ function runEvent(context, eventName, steps, options) {
         );
 
     } finally {
-        logger.save();
+        logger.save({
+            deferToClient: options.deferToClient === true
+        });
     }
 
     return logger;
