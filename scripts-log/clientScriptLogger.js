@@ -11,6 +11,7 @@
  * 変更履歴:
  * - 2026-08-26: SS統合ログではconsole出力を最後にまとめ、詳細ログと同じ順序で表示できるようにした。
  * - 2026-08-26: イベント単位の開始/終了境界線を追加できるようにした。
+ * - 2026-08-26: 次画面表示へ保留するCSログでは、console出力も保留できるようにした。
  */
 
 const CLIENT_SCRIPT_LOG_CONFIG = {
@@ -241,15 +242,21 @@ class ClientScriptLogger {
     /**
      * 現在のログ内容を保存する。
      *
+     * @param {Object} [options] 保存オプション
+     * @param {boolean} [options.flushConsoleLog=true] 遅延console出力をここで出すか
      * @returns {Promise<void>}
      */
-    save() {
+    save(options) {
+        options = options || {};
+
         this.closeAllGroups();
 
         const totalMs = Date.now() - this.startedAtMs;
         this.details.push('Total: ' + totalMs + 'ms');
 
-        this.flushDeferredConsoleLog();
+        if (options.flushConsoleLog !== false) {
+            this.flushDeferredConsoleLog();
+        }
 
         if (!this.enableApiSave || !CLIENT_SCRIPT_LOG_CONFIG.enableApiSave) {
             return Promise.resolve();

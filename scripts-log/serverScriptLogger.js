@@ -13,6 +13,8 @@
  * - 2026-08-24: deferToClient を追加し、画面表示系SSイベントをCS側の1操作ログへ渡せるようにした。
  * - 2026-08-26: イベント単位の開始/終了境界線を追加し、統合ログ内でSSイベントを見分けやすくした。
  * - 2026-08-26: ファイル名をserverScriptLogger.jsへ変更し、SS側ログ部品であることを明確化した。
+ * - 2026-08-26: deferToClient指定時でもエラー時は即時保存し、更新失敗ログを失わないようにした。
+ * - 2026-08-26: SSイベント内の境界線を-----に変更し、CS側の操作単位境界と区別しやすくした。
  */
 
 const SCRIPT_LOG_CONFIG = {
@@ -204,14 +206,14 @@ class ScriptLogger {
         }
 
         const line =
-            '===== ' +
+            '----- ' +
             status +
             ': ' +
             label +
             (suffix ? ' ' + suffix : '') +
             ' ' +
             this.getLogMetaText() +
-            ' =====';
+            ' -----';
 
         this.details.push(line);
 
@@ -283,7 +285,7 @@ class ScriptLogger {
         const totalMs = Date.now() - this.startedAtMs;
         this.details.push('総処理時間: ' + totalMs + 'ms');
 
-        if (options.deferToClient) {
+        if (options.deferToClient && this.level !== 'error') {
             return;
         }
 
