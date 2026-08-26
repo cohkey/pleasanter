@@ -10,7 +10,11 @@
  * - 2026-08-24: operationName / includeServerLog を追加し、SS画面表示系ログをCS側の1操作ログへ集約できるようにした。
  * - 2026-08-26: SSログをCSイベント開始前の独立ブロックとして取り込み、CSログの階層に混ざらないようにした。
  * - 2026-08-26: SS統合時のconsole出力順を詳細ログと合わせ、SS/CSイベント境界を明確化した。
+ * - 2026-08-26: 更新送信前CSログをsessionStorageへ保留し、次の画面表示ログへ束ねられるようにした。
  */
+
+const CLIENT_SCRIPT_LOG_PENDING_KEY = 'PleasanterScriptLog.PendingClientLogs';
+const CLIENT_SCRIPT_LOG_PENDING_TTL_MS = 5 * 60 * 1000;
 
 /**
  * クライアントイベント処理を実行する。
@@ -32,6 +36,10 @@
  * @param {string|number} [options.deptId] 部署ID
  * @param {string} [options.operationName] ログレコード上の処理名。複数イベントを1操作に束ねる場合に指定する
  * @param {boolean} [options.includeServerLog=false] Pleasanterが画面へ渡したSSログを詳細ログに取り込むか
+ * @param {boolean} [options.includePendingClientLog=false] 直前操作で保留したCSログを詳細ログに取り込むか
+ * @param {boolean} [options.deferToNextLoad=false] trueの場合はログレコードを作成せず、次の画面表示ログへ束ねる
+ * @param {string} [options.nextOperationName] deferToNextLoad時に次のログレコードへ引き継ぐ処理名
+ * @param {string} [options.serverLogLabel] SSログ取り込みブロックのラベル
  * @param {boolean} [options.enableConsoleLog=true] consoleへ出力するか
  * @param {boolean} [options.enableApiSave=true] ログテーブルへ保存するか
  * @returns {Promise<ClientScriptLogger>}
@@ -42,6 +50,7 @@ async function runClientEvent(eventName, steps, options) {
     const logger = createClientEventLogger(eventName, options);
 
     try {
+        appendPendingClientLogToClientLogger(logger, options);
         appendServerLogToClientLogger(logger, options);
 
         logger.sectionStart('CSイベント: ' + eventName);
@@ -72,7 +81,21 @@ async function runClientEvent(eventName, steps, options) {
         console.error(e);
 
     } finally {
-        await logger.save();
+        const shouldDeferToNextLoad =
+            options.deferToNextLoad === true &&
+            logger.level !== 'error';
+
+        if (shouldDeferToNextLoad) {
+            logger.enableApiSave = false;
+        }
+
+        await logger.save({
+            flushConsoleLog: !shouldDeferToNextLoad
+        });
+
+        if (shouldDeferToNextLoad) {
+            savePendingClientLog(logger, options);
+        }
     }
 
     return logger;
@@ -220,15 +243,64 @@ function createClientEventLogger(eventName, options) {
     return new ClientScriptLogger({
         sourceApp: options.sourceApp || getClientSiteId(),
         sourceSiteId: options.sourceSiteId || getClientSiteId(),
-        processName: options.operationName || eventName,
+        processName: resolveClientEventProcessName(eventName, options),
         sourceRecordId: options.sourceRecordId || getClientRecordId(),
         userId: options.userId || getClientUserId(),
         deptId: options.deptId || getClientDeptId(),
         enableConsoleLog: options.enableConsoleLog,
         enableApiSave: options.enableApiSave,
         deferConsoleLog: options.deferConsoleLog === true ||
-            options.includeServerLog === true
+            options.includeServerLog === true ||
+            options.deferToNextLoad === true
     });
+}
+
+/**
+ * CSイベントの処理名を決定する。
+ * 保留中のCSログを取り込む場合は、前操作から引き継いだ処理名を優先する。
+ *
+ * @param {string} eventName イベント名
+ * @param {Object} options ログオプション
+ * @returns {string} 処理名
+ */
+function resolveClientEventProcessName(eventName, options) {
+    const pendingOperationName =
+        options.includePendingClientLog === true
+            ? getPendingClientLogOperationName({
+                sourceSiteId: options.sourceSiteId || getClientSiteId(),
+                sourceRecordId: options.sourceRecordId || getClientRecordId()
+            })
+            : '';
+
+    return pendingOperationName || options.operationName || eventName;
+}
+
+/**
+ * 直前操作で保留したCSログをCSログに取り込む。
+ *
+ * @param {ClientScriptLogger} logger ロガー
+ * @param {Object} options ログオプション
+ */
+function appendPendingClientLogToClientLogger(logger, options) {
+    options = options || {};
+
+    if (options.includePendingClientLog !== true) {
+        return;
+    }
+
+    const pendingLogs = takePendingClientLogs(logger);
+
+    if (pendingLogs.length === 0) {
+        return;
+    }
+
+    logger.details.push('===== 開始: CS更新送信前イベント =====');
+
+    for (let i = 0; i < pendingLogs.length; i++) {
+        logger.details.push(pendingLogs[i].detail || '');
+    }
+
+    logger.details.push('===== 終了: CS更新送信前イベント =====');
 }
 
 /**
@@ -254,9 +326,25 @@ function appendServerLogToClientLogger(logger, options) {
         return;
     }
 
-    logger.details.push('===== 開始: SS画面表示系イベント =====');
+    const serverLogLabel = options.serverLogLabel || detectServerLogLabel(serverLog);
+
+    logger.details.push('===== 開始: ' + serverLogLabel + ' =====');
     logger.details.push(serverLog);
-    logger.details.push('===== 終了: SS画面表示系イベント =====');
+    logger.details.push('===== 終了: ' + serverLogLabel + ' =====');
+}
+
+/**
+ * SSログ本文から取り込みブロックのラベルを決定する。
+ *
+ * @param {string} serverLog SSログ文字列
+ * @returns {string} ブロックラベル
+ */
+function detectServerLogLabel(serverLog) {
+    if (/SSイベント: .*更新/.test(serverLog)) {
+        return 'SS更新・画面表示系イベント';
+    }
+
+    return 'SS画面表示系イベント';
 }
 
 /**
@@ -290,6 +378,164 @@ function getPleasanterServerLogText() {
     } catch (e) {
         return String(log.value || '');
     }
+}
+
+/**
+ * 現在のCSログを次の画面表示ログへ束ねるために保留する。
+ *
+ * @param {ClientScriptLogger} logger ロガー
+ * @param {Object} options ログオプション
+ */
+function savePendingClientLog(logger, options) {
+    if (!window.sessionStorage) {
+        return;
+    }
+
+    const pendingLogs = loadPendingClientLogs().filter(function (pendingLog) {
+        return !isSamePendingClientLogTarget(pendingLog, logger);
+    });
+
+    pendingLogs.push({
+        operationName: options.nextOperationName ||
+            options.operationName ||
+            logger.processName ||
+            '',
+        sourceSiteId: String(logger.sourceSiteId || ''),
+        sourceRecordId: String(logger.sourceRecordId || ''),
+        createdAt: Date.now(),
+        detail: logger.getDetailText()
+    });
+
+    sessionStorage.setItem(
+        CLIENT_SCRIPT_LOG_PENDING_KEY,
+        JSON.stringify(pendingLogs.slice(-10))
+    );
+}
+
+/**
+ * 保留中CSログの処理名を返す。
+ *
+ * @param {Object} target 現在のログ対象
+ * @param {string|number} [target.sourceSiteId] 現在のサイトID
+ * @param {string|number} [target.sourceRecordId] 現在のレコードID
+ * @returns {string} 処理名
+ */
+function getPendingClientLogOperationName(target) {
+    const pendingLogs = loadPendingClientLogs();
+    const loggerLike = {
+        sourceSiteId: target.sourceSiteId || '',
+        sourceApp: target.sourceSiteId || '',
+        sourceRecordId: target.sourceRecordId || ''
+    };
+
+    for (let i = pendingLogs.length - 1; i >= 0; i--) {
+        if (
+            pendingLogs[i].operationName &&
+            isSamePendingClientLogTarget(pendingLogs[i], loggerLike)
+        ) {
+            return pendingLogs[i].operationName;
+        }
+    }
+
+    return '';
+}
+
+/**
+ * 現在のログ対象に一致する保留中CSログを取り出す。
+ *
+ * @param {ClientScriptLogger} logger ロガー
+ * @returns {Array<Object>} 保留中CSログ
+ */
+function takePendingClientLogs(logger) {
+    const pendingLogs = loadPendingClientLogs();
+    const matchedLogs = [];
+    const remainingLogs = [];
+
+    for (let i = 0; i < pendingLogs.length; i++) {
+        if (isSamePendingClientLogTarget(pendingLogs[i], logger)) {
+            matchedLogs.push(pendingLogs[i]);
+        } else {
+            remainingLogs.push(pendingLogs[i]);
+        }
+    }
+
+    storePendingClientLogs(remainingLogs);
+
+    return matchedLogs;
+}
+
+/**
+ * 保留中CSログを読み込む。
+ *
+ * @returns {Array<Object>} 保留中CSログ
+ */
+function loadPendingClientLogs() {
+    if (!window.sessionStorage) {
+        return [];
+    }
+
+    try {
+        const raw = sessionStorage.getItem(CLIENT_SCRIPT_LOG_PENDING_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+
+        if (!Array.isArray(parsed)) {
+            return [];
+        }
+
+        const nowMs = Date.now();
+
+        return parsed.filter(function (pendingLog) {
+            return !pendingLog.createdAt ||
+                nowMs - pendingLog.createdAt <= CLIENT_SCRIPT_LOG_PENDING_TTL_MS;
+        });
+    } catch (e) {
+        return [];
+    }
+}
+
+/**
+ * 保留中CSログを保存する。
+ *
+ * @param {Array<Object>} pendingLogs 保留中CSログ
+ */
+function storePendingClientLogs(pendingLogs) {
+    if (!window.sessionStorage) {
+        return;
+    }
+
+    if (pendingLogs.length === 0) {
+        sessionStorage.removeItem(CLIENT_SCRIPT_LOG_PENDING_KEY);
+        return;
+    }
+
+    sessionStorage.setItem(
+        CLIENT_SCRIPT_LOG_PENDING_KEY,
+        JSON.stringify(pendingLogs.slice(-10))
+    );
+}
+
+/**
+ * 保留中CSログが現在のログ対象と同じかを判定する。
+ *
+ * @param {Object} pendingLog 保留中CSログ
+ * @param {ClientScriptLogger} logger ロガー
+ * @returns {boolean} true: 同じ対象
+ */
+function isSamePendingClientLogTarget(pendingLog, logger) {
+    const pendingSiteId = String(pendingLog.sourceSiteId || '');
+    const currentSiteId = String(logger.sourceSiteId || logger.sourceApp || '');
+    const pendingRecordId = String(pendingLog.sourceRecordId || '');
+    const currentRecordId = String(logger.sourceRecordId || '');
+
+    if (pendingSiteId && currentSiteId && pendingSiteId !== currentSiteId) {
+        return false;
+    }
+
+    if (pendingRecordId && currentRecordId && pendingRecordId !== currentRecordId) {
+        return false;
+    }
+
+    return true;
 }
 
 /**
