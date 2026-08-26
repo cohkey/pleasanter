@@ -10,7 +10,7 @@
  * - 2026-08-24: operationName / includeServerLog を追加し、SS画面表示系ログをCS側の1操作ログへ集約できるようにした。
  * - 2026-08-26: SSログをCSイベント開始前の独立ブロックとして取り込み、CSログの階層に混ざらないようにした。
  * - 2026-08-26: SS統合時のconsole出力順を詳細ログと合わせ、SS/CSイベント境界を明確化した。
- * - 2026-08-26: 更新送信前CSログをsessionStorageへ保留し、次の画面表示ログへ束ねられるようにした。
+ * - 2026-08-26: 更新/削除の送信前CSログをsessionStorageへ保留し、次の画面表示ログへ束ねられるようにした。
  */
 
 const CLIENT_SCRIPT_LOG_PENDING_KEY = 'PleasanterScriptLog.PendingClientLogs';
@@ -39,6 +39,7 @@ const CLIENT_SCRIPT_LOG_PENDING_TTL_MS = 5 * 60 * 1000;
  * @param {boolean} [options.includePendingClientLog=false] 直前操作で保留したCSログを詳細ログに取り込むか
  * @param {boolean} [options.deferToNextLoad=false] trueの場合はログレコードを作成せず、次の画面表示ログへ束ねる
  * @param {string} [options.nextOperationName] deferToNextLoad時に次のログレコードへ引き継ぐ処理名
+ * @param {string} [options.pendingClientLogLabel] 保留CSログ取り込みブロックのラベル
  * @param {string} [options.serverLogLabel] SSログ取り込みブロックのラベル
  * @param {boolean} [options.enableConsoleLog=true] consoleへ出力するか
  * @param {boolean} [options.enableApiSave=true] ログテーブルへ保存するか
@@ -294,13 +295,36 @@ function appendPendingClientLogToClientLogger(logger, options) {
         return;
     }
 
-    logger.details.push('===== 開始: CS更新送信前イベント =====');
+    const pendingLogLabel = detectPendingClientLogLabel(pendingLogs, options);
+
+    logger.details.push('===== 開始: ' + pendingLogLabel + ' =====');
 
     for (let i = 0; i < pendingLogs.length; i++) {
         logger.details.push(pendingLogs[i].detail || '');
     }
 
-    logger.details.push('===== 終了: CS更新送信前イベント =====');
+    logger.details.push('===== 終了: ' + pendingLogLabel + ' =====');
+}
+
+/**
+ * 保留CSログ取り込みブロックのラベルを決定する。
+ *
+ * @param {Array<Object>} pendingLogs 保留中CSログ
+ * @param {Object} options ログオプション
+ * @returns {string} ブロックラベル
+ */
+function detectPendingClientLogLabel(pendingLogs, options) {
+    if (options.pendingClientLogLabel) {
+        return options.pendingClientLogLabel;
+    }
+
+    for (let i = 0; i < pendingLogs.length; i++) {
+        if (pendingLogs[i].label) {
+            return pendingLogs[i].label;
+        }
+    }
+
+    return 'CS送信前イベント';
 }
 
 /**
@@ -340,6 +364,10 @@ function appendServerLogToClientLogger(logger, options) {
  * @returns {string} ブロックラベル
  */
 function detectServerLogLabel(serverLog) {
+    if (/SSイベント: .*削除/.test(serverLog)) {
+        return 'SS削除・画面表示系イベント';
+    }
+
     if (/SSイベント: .*更新/.test(serverLog)) {
         return 'SS更新・画面表示系イベント';
     }
@@ -396,10 +424,9 @@ function savePendingClientLog(logger, options) {
     });
 
     pendingLogs.push({
-        operationName: options.nextOperationName ||
-            options.operationName ||
-            logger.processName ||
-            '',
+        operationName: resolveNextOperationName(logger, options),
+        label: options.pendingClientLogLabel ||
+            detectPendingClientLogLabelFromEvent(logger.processName),
         sourceSiteId: String(logger.sourceSiteId || ''),
         sourceRecordId: String(logger.sourceRecordId || ''),
         createdAt: Date.now(),
@@ -410,6 +437,57 @@ function savePendingClientLog(logger, options) {
         CLIENT_SCRIPT_LOG_PENDING_KEY,
         JSON.stringify(pendingLogs.slice(-10))
     );
+}
+
+/**
+ * 次の画面表示ログへ引き継ぐ処理名を決定する。
+ *
+ * @param {ClientScriptLogger} logger ロガー
+ * @param {Object} options ログオプション
+ * @returns {string} 処理名
+ */
+function resolveNextOperationName(logger, options) {
+    return options.nextOperationName ||
+        options.operationName ||
+        detectOperationNameFromEvent(logger.processName) ||
+        logger.processName ||
+        '';
+}
+
+/**
+ * イベント名から操作名を推定する。
+ *
+ * @param {string} eventName イベント名
+ * @returns {string} 操作名
+ */
+function detectOperationNameFromEvent(eventName) {
+    if (/delete|削除/i.test(eventName || '')) {
+        return 'delete';
+    }
+
+    if (/update|更新/i.test(eventName || '')) {
+        return 'update';
+    }
+
+    return '';
+}
+
+/**
+ * イベント名から保留CSログのラベルを推定する。
+ *
+ * @param {string} eventName イベント名
+ * @returns {string} ブロックラベル
+ */
+function detectPendingClientLogLabelFromEvent(eventName) {
+    if (/delete|削除/i.test(eventName || '')) {
+        return 'CS削除送信前イベント';
+    }
+
+    if (/update|更新/i.test(eventName || '')) {
+        return 'CS更新送信前イベント';
+    }
+
+    return 'CS送信前イベント';
 }
 
 /**
