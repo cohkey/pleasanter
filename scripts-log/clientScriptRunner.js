@@ -9,6 +9,7 @@
  * 変更履歴:
  * - 2026-08-24: operationName / includeServerLog を追加し、SS画面表示系ログをCS側の1操作ログへ集約できるようにした。
  * - 2026-08-26: SSログをCSイベント開始前の独立ブロックとして取り込み、CSログの階層に混ざらないようにした。
+ * - 2026-08-26: SS統合時のconsole出力順を詳細ログと合わせ、SS/CSイベント境界を明確化した。
  */
 
 /**
@@ -43,6 +44,7 @@ async function runClientEvent(eventName, steps, options) {
     try {
         appendServerLogToClientLogger(logger, options);
 
+        logger.sectionStart('CSイベント: ' + eventName);
         logger.info('Start: ' + eventName);
         logger.info('Source ' + JSON.stringify({
             siteId: logger.sourceSiteId || '',
@@ -57,10 +59,12 @@ async function runClientEvent(eventName, steps, options) {
         }
 
         logger.info('End: ' + eventName);
+        logger.sectionEnd('CSイベント: ' + eventName);
 
     } catch (e) {
         logger.error(e.stack);
         logger.closeAllGroups();
+        logger.section('abnormalEnd', 'CSイベント: ' + eventName);
 
         /*
          * CS側は画面を壊さないことを優先して、ここではthrowしない。
@@ -123,6 +127,7 @@ function runClientValidationEvent(eventName, steps, options, args) {
     let validationMessage = '';
 
     try {
+        logger.sectionStart('CS検証イベント: ' + eventName);
         logger.info('Start: ' + eventName);
         logger.info('Source ' + JSON.stringify({
             siteId: logger.sourceSiteId || '',
@@ -149,16 +154,19 @@ function runClientValidationEvent(eventName, steps, options, args) {
             showClientValidationErrorMessage(validationMessage);
 
             logger.info('End: ' + eventName);
+            logger.sectionEnd('CS検証イベント: ' + eventName, 'Validation Failed');
             return false;
         }
 
         logger.info('Validation Passed');
         logger.info('End: ' + eventName);
+        logger.sectionEnd('CS検証イベント: ' + eventName, 'Validation Passed');
         return true;
 
     } catch (e) {
         logger.error(e.stack);
         logger.closeAllGroups();
+        logger.section('abnormalEnd', 'CS検証イベント: ' + eventName);
 
         showClientValidationErrorMessage(
             '更新前チェック中にエラーが発生しました。管理者に連絡してください。'
@@ -217,7 +225,9 @@ function createClientEventLogger(eventName, options) {
         userId: options.userId || getClientUserId(),
         deptId: options.deptId || getClientDeptId(),
         enableConsoleLog: options.enableConsoleLog,
-        enableApiSave: options.enableApiSave
+        enableApiSave: options.enableApiSave,
+        deferConsoleLog: options.deferConsoleLog === true ||
+            options.includeServerLog === true
     });
 }
 
@@ -244,9 +254,9 @@ function appendServerLogToClientLogger(logger, options) {
         return;
     }
 
-    logger.details.push('--- SS画面表示系イベント 開始 ---');
+    logger.details.push('===== 開始: SS画面表示系イベント =====');
     logger.details.push(serverLog);
-    logger.details.push('--- SS画面表示系イベント 終了 ---');
+    logger.details.push('===== 終了: SS画面表示系イベント =====');
 }
 
 /**

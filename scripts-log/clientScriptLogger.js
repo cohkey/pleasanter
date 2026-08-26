@@ -7,6 +7,10 @@
  * - console.group と同じように logger.group() / logger.groupEnd() を使う
  * - CS側では console.log にも出力する
  * - ログ保存は $p.apiCreate で同じログテーブルに直接作成する
+ *
+ * 変更履歴:
+ * - 2026-08-26: SS統合ログではconsole出力を最後にまとめ、詳細ログと同じ順序で表示できるようにした。
+ * - 2026-08-26: イベント単位の開始/終了境界線を追加できるようにした。
  */
 
 const CLIENT_SCRIPT_LOG_CONFIG = {
@@ -29,6 +33,7 @@ class ClientScriptLogger {
      * @param {string|number} [options.deptId] 部署ID
      * @param {boolean} [options.enableConsoleLog=true] consoleへ出力するか
      * @param {boolean} [options.enableApiSave=true] ログテーブルへ保存するか
+     * @param {boolean} [options.deferConsoleLog=false] console出力をsave時まで遅延するか
      */
     constructor(options) {
         options = options || {};
@@ -43,6 +48,8 @@ class ClientScriptLogger {
 
         this.enableConsoleLog = options.enableConsoleLog !== false;
         this.enableApiSave = options.enableApiSave !== false;
+        this.deferConsoleLog = options.deferConsoleLog === true;
+        this.consoleLogFlushed = false;
 
         this.details = [];
         this.level = 'info';
@@ -102,7 +109,7 @@ class ClientScriptLogger {
 
         this.details.push(detailLine);
 
-        if (this.enableConsoleLog && CLIENT_SCRIPT_LOG_CONFIG.enableConsoleLog) {
+        if (this.shouldWriteConsoleImmediately()) {
             this.writeConsole(logLevel, detailLine);
         }
 
@@ -153,6 +160,60 @@ class ClientScriptLogger {
     }
 
     /**
+     * イベントやログ取り込み単位の境界線を追加する。
+     *
+     * @param {string} type start / end / abnormalEnd
+     * @param {string} label 境界名
+     * @param {string} [suffix] 末尾文言
+     */
+    section(type, label, suffix) {
+        let status = '開始';
+
+        if (type === 'end') {
+            status = '終了';
+        } else if (type === 'abnormalEnd') {
+            status = '異常終了';
+        }
+
+        const line =
+            '===== ' +
+            status +
+            ': ' +
+            label +
+            (suffix ? ' ' + suffix : '') +
+            ' ' +
+            this.getLogMetaText() +
+            ' =====';
+
+        this.details.push(line);
+
+        if (this.shouldWriteConsoleImmediately()) {
+            this.writeConsole('info', line);
+        }
+
+        this.lastLogAtMs = Date.now();
+    }
+
+    /**
+     * 境界線の開始を追加する。
+     *
+     * @param {string} label 境界名
+     */
+    sectionStart(label) {
+        this.section('start', label);
+    }
+
+    /**
+     * 境界線の終了を追加する。
+     *
+     * @param {string} label 境界名
+     * @param {string} [suffix] 末尾文言
+     */
+    sectionEnd(label, suffix) {
+        this.section('end', label, suffix);
+    }
+
+    /**
      * 未終了のグループをすべて異常終了として閉じる。
      * エラー発生時のログ崩れ防止用。
      */
@@ -187,6 +248,8 @@ class ClientScriptLogger {
 
         const totalMs = Date.now() - this.startedAtMs;
         this.details.push('Total: ' + totalMs + 'ms');
+
+        this.flushDeferredConsoleLog();
 
         if (!this.enableApiSave || !CLIENT_SCRIPT_LOG_CONFIG.enableApiSave) {
             return Promise.resolve();
@@ -229,11 +292,38 @@ class ClientScriptLogger {
 
         this.details.push(line);
 
-        if (this.enableConsoleLog && CLIENT_SCRIPT_LOG_CONFIG.enableConsoleLog) {
+        if (this.shouldWriteConsoleImmediately()) {
             this.writeConsole('info', line);
         }
 
         this.lastLogAtMs = Date.now();
+    }
+
+    /**
+     * consoleへ即時出力するかを返す。
+     *
+     * @returns {boolean}
+     */
+    shouldWriteConsoleImmediately() {
+        return this.enableConsoleLog &&
+            CLIENT_SCRIPT_LOG_CONFIG.enableConsoleLog &&
+            !this.deferConsoleLog;
+    }
+
+    /**
+     * 遅延したconsole出力を詳細ログと同じ順序でまとめて出す。
+     */
+    flushDeferredConsoleLog() {
+        if (!this.deferConsoleLog || this.consoleLogFlushed) {
+            return;
+        }
+
+        if (!this.enableConsoleLog || !CLIENT_SCRIPT_LOG_CONFIG.enableConsoleLog) {
+            return;
+        }
+
+        this.consoleLogFlushed = true;
+        this.writeConsole(this.level, this.getDetailText());
     }
 
     /**
