@@ -8,6 +8,7 @@
  *
  * 変更履歴:
  * - 2026-08-24: operationName / includeServerLog を追加し、SS画面表示系ログをCS側の1操作ログへ集約できるようにした。
+ * - 2026-08-26: SSログをCSイベント開始前の独立ブロックとして取り込み、CSログの階層に混ざらないようにした。
  */
 
 /**
@@ -40,6 +41,8 @@ async function runClientEvent(eventName, steps, options) {
     const logger = createClientEventLogger(eventName, options);
 
     try {
+        appendServerLogToClientLogger(logger, options);
+
         logger.info('Start: ' + eventName);
         logger.info('Source ' + JSON.stringify({
             siteId: logger.sourceSiteId || '',
@@ -48,8 +51,6 @@ async function runClientEvent(eventName, steps, options) {
             deptId: logger.deptId || '',
             url: location.href
         }));
-
-        appendServerLogToClientLogger(logger, options);
 
         for (let i = 0; i < steps.length; i++) {
             await runClientStep(logger, steps[i]);
@@ -224,6 +225,8 @@ function createClientEventLogger(eventName, options) {
  * Pleasanterが画面へ渡したSSログをCSログに取り込む。
  * SS側で runEvent(..., { deferToClient: true }) を使った画面表示系ログを、
  * CS側の on_editor_load などで1操作ログに束ねるための処理。
+ * SSログはすでに時刻・階層を持つため、CS loggerのinfo/groupでは包まずに
+ * rawブロックとして先頭へ追加する。
  *
  * @param {ClientScriptLogger} logger ロガー
  * @param {Object} options ログオプション
@@ -235,17 +238,28 @@ function appendServerLogToClientLogger(logger, options) {
         return;
     }
 
-    const serverLog = getPleasanterServerLogText();
+    const serverLog = normalizeServerLogText(getPleasanterServerLogText());
 
     if (!serverLog) {
-        logger.info('server log is empty');
         return;
     }
 
-    logger.info('server log');
-    logger.group('server_display_events - SS画面表示系イベント');
-    logger.info(serverLog);
-    logger.groupEnd();
+    logger.details.push('--- SS画面表示系イベント 開始 ---');
+    logger.details.push(serverLog);
+    logger.details.push('--- SS画面表示系イベント 終了 ---');
+}
+
+/**
+ * SSログの改行をCSログ内で扱いやすい形へ揃える。
+ *
+ * @param {string} text SSログ文字列
+ * @returns {string} 正規化後のSSログ文字列
+ */
+function normalizeServerLogText(text) {
+    return String(text || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .replace(/\n+$/g, '');
 }
 
 /**
