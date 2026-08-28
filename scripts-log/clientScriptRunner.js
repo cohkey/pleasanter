@@ -14,6 +14,8 @@
  * - 2026-08-26: 次画面表示へ保留するCSログは、画面遷移前にsessionStorageへ保存するようにした。
  * - 2026-08-26: CS側で取り込んだSSログをhidden Logから消し、Pleasanter本体のconsole再出力を抑止した。
  * - 2026-08-26: Ajax応答でPleasanter本体がconsole出力するSSログを捕捉し、次の統合ログへ束ねるようにした。
+ * - 2026-08-28: 検証CSイベントは成功時だけ次画面表示ログへ保留し、失敗/例外時は即時保存するようにした。
+ * - 2026-08-28: 同一レコードの複数CS保留ログを順番に取り込めるようにした。
  */
 
 const CLIENT_SCRIPT_LOG_PENDING_KEY = 'PleasanterScriptLog.PendingClientLogs';
@@ -149,6 +151,9 @@ async function runClientStep(logger, step) {
  * @param {string} eventName イベント名
  * @param {Array<Object>} steps 実行ステップ一覧
  * @param {Object} [options] ログオプション
+ * @param {boolean} [options.deferToNextLoad=false] trueの場合は検証成功時だけログレコードを作成せず、次の画面表示ログへ束ねる
+ * @param {string} [options.nextOperationName] deferToNextLoad時に次のログレコードへ引き継ぐ処理名
+ * @param {string} [options.pendingClientLogLabel] 保留CSログ取り込みブロックのラベル
  * @param {Object} [args] Pleasanterイベント引数
  * @returns {boolean} true: 続行 / false: キャンセル
  */
@@ -157,6 +162,7 @@ function runClientValidationEvent(eventName, steps, options, args) {
 
     const logger = createClientEventLogger(eventName, options);
     let validationMessage = '';
+    let validationPassed = false;
 
     try {
         logger.sectionStart('CS検証イベント: ' + eventName);
@@ -193,6 +199,7 @@ function runClientValidationEvent(eventName, steps, options, args) {
         logger.info('Validation Passed');
         logger.info('End: ' + eventName);
         logger.sectionEnd('CS検証イベント: ' + eventName, 'Validation Passed');
+        validationPassed = true;
         return true;
 
     } catch (e) {
@@ -209,9 +216,30 @@ function runClientValidationEvent(eventName, steps, options, args) {
     } finally {
         /*
          * validation系イベントでは戻り値が重要なので await しない。
-         * CSログ保存は非同期で投げる。
+         * 検証成功時だけ次の画面表示ログへ保留し、検証失敗/例外時は即時保存する。
          */
-        logger.save();
+        const shouldDeferToNextLoad =
+            options.deferToNextLoad === true &&
+            validationPassed &&
+            logger.level !== 'error';
+
+        if (shouldDeferToNextLoad) {
+            logger.enableApiSave = false;
+        }
+
+        const savePromise = logger.save({
+            flushConsoleLog: !shouldDeferToNextLoad
+        });
+
+        if (shouldDeferToNextLoad) {
+            savePendingClientLog(logger, options);
+        }
+
+        if (savePromise && typeof savePromise.catch === 'function') {
+            savePromise.catch(function (e) {
+                console.error(e);
+            });
+        }
     }
 }
 
@@ -303,15 +331,16 @@ function appendPendingClientLogToClientLogger(logger, options) {
         return;
     }
 
-    const pendingLogLabel = detectPendingClientLogLabel(pendingLogs, options);
-
-    logger.details.push('===== 開始: ' + pendingLogLabel + ' =====');
-
     for (let i = 0; i < pendingLogs.length; i++) {
-        logger.details.push(pendingLogs[i].detail || '');
-    }
+        const pendingLogLabel = detectPendingClientLogLabel(
+            [pendingLogs[i]],
+            options
+        );
 
-    logger.details.push('===== 終了: ' + pendingLogLabel + ' =====');
+        logger.details.push('===== 開始: ' + pendingLogLabel + ' =====');
+        logger.details.push(pendingLogs[i].detail || '');
+        logger.details.push('===== 終了: ' + pendingLogLabel + ' =====');
+    }
 }
 
 /**
@@ -589,9 +618,7 @@ function savePendingClientLog(logger, options) {
         return;
     }
 
-    const pendingLogs = loadPendingClientLogs().filter(function (pendingLog) {
-        return !isSamePendingClientLogTarget(pendingLog, logger);
-    });
+    const pendingLogs = loadPendingClientLogs();
 
     pendingLogs.push({
         operationName: resolveNextOperationName(logger, options),
@@ -651,6 +678,13 @@ function detectOperationNameFromEvent(eventName) {
 function detectPendingClientLogLabelFromEvent(eventName) {
     if (/delete|削除/i.test(eventName || '')) {
         return 'CS削除送信前イベント';
+    }
+
+    if (
+        /validate|検証/i.test(eventName || '') &&
+        /update|更新/i.test(eventName || '')
+    ) {
+        return 'CS更新検証イベント';
     }
 
     if (/update|更新/i.test(eventName || '')) {
