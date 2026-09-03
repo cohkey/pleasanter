@@ -12,10 +12,11 @@
  * - 2026-08-26: SS統合ログではconsole出力を最後にまとめ、詳細ログと同じ順序で表示できるようにした。
  * - 2026-08-26: イベント単位の開始/終了境界線を追加できるようにした。
  * - 2026-08-26: 次画面表示へ保留するCSログでは、console出力も保留できるようにした。
+ * - 2026-09-03: スクリプトログテーブルのサイトIDを外部設定または呼び出しオプションで指定できるようにした。
  */
 
 const CLIENT_SCRIPT_LOG_CONFIG = {
-    logSiteId: 1234,       // ← スクリプトログテーブルのサイトIDに変更
+    logSiteId: 1234,       // 外部指定がない場合の既定スクリプトログテーブルサイトID
     enableApiSave: true,   // false にすると console 出力のみ
     enableConsoleLog: true
 };
@@ -29,6 +30,7 @@ class ClientScriptLogger {
      * @param {string|number} [options.sourceApp] 実行元アプリID
      * @param {string|number} [options.sourceSiteId] 実行元サイトID
      * @param {string} options.processName 処理名
+     * @param {string|number} [options.logSiteId] スクリプトログテーブルのサイトID
      * @param {number|string} [options.sourceRecordId] 実行元レコードID
      * @param {string|number} [options.userId] ユーザーID
      * @param {string|number} [options.deptId] 部署ID
@@ -42,6 +44,7 @@ class ClientScriptLogger {
         this.sourceApp = options.sourceApp || getClientSiteId();
         this.sourceSiteId = options.sourceSiteId || getClientSiteId();
         this.processName = options.processName || '';
+        this.logSiteId = resolveClientScriptLogSiteId(options);
         this.sourceRecordId = options.sourceRecordId || getClientRecordId();
 
         this.userId = options.userId || getClientUserId();
@@ -450,10 +453,13 @@ function createClientScriptLogRecord(logger) {
             return;
         }
 
+        const logSiteId = resolveClientScriptLogSiteId({
+            logSiteId: logger.logSiteId
+        });
         const data = buildClientScriptLogApiData(logger);
 
         $p.apiCreate({
-            id: CLIENT_SCRIPT_LOG_CONFIG.logSiteId,
+            id: logSiteId,
             data: data,
             done: function () {
                 console.log('CSログレコードを作成しました。');
@@ -468,6 +474,71 @@ function createClientScriptLogRecord(logger) {
             }
         });
     });
+}
+
+/**
+ * CSスクリプトログの既定設定を変更する。
+ * アプリ別にログテーブルを切り替える場合は、共通logger読込後に
+ * setClientScriptLogConfig({ logSiteId: 1234 }) の形で呼び出せる。
+ *
+ * @param {Object} options 設定値
+ * @param {string|number} [options.logSiteId] スクリプトログテーブルのサイトID
+ */
+function setClientScriptLogConfig(options) {
+    options = options || {};
+
+    if (options.logSiteId) {
+        CLIENT_SCRIPT_LOG_CONFIG.logSiteId = options.logSiteId;
+    }
+}
+
+/**
+ * CSログ保存先のスクリプトログテーブルサイトIDを決定する。
+ * 優先順:
+ * 1. 呼び出しオプション options.logSiteId
+ * 2. window.PleasanterScriptLogConfig.logSiteId
+ * 3. CLIENT_SCRIPT_LOG_CONFIG.logSiteId
+ *
+ * @param {Object} [options] ログオプション
+ * @returns {string|number} スクリプトログテーブルのサイトID
+ */
+function resolveClientScriptLogSiteId(options) {
+    options = options || {};
+
+    if (options.logSiteId) {
+        return options.logSiteId;
+    }
+
+    const externalConfig = getExternalClientScriptLogConfig();
+
+    if (externalConfig.logSiteId) {
+        return externalConfig.logSiteId;
+    }
+
+    return CLIENT_SCRIPT_LOG_CONFIG.logSiteId;
+}
+
+/**
+ * 外部から指定されたCSスクリプトログ設定を取得する。
+ *
+ * @returns {Object} 外部設定
+ */
+function getExternalClientScriptLogConfig() {
+    if (
+        typeof window !== 'undefined' &&
+        window.PleasanterScriptLogConfig
+    ) {
+        return window.PleasanterScriptLogConfig;
+    }
+
+    if (
+        typeof PleasanterScriptLogConfig !== 'undefined' &&
+        PleasanterScriptLogConfig
+    ) {
+        return PleasanterScriptLogConfig;
+    }
+
+    return {};
 }
 
 /**
