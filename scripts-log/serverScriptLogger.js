@@ -15,12 +15,81 @@
  * - 2026-08-26: ファイル名をserverScriptLogger.jsへ変更し、SS側ログ部品であることを明確化した。
  * - 2026-08-26: deferToClient指定時でもエラー時は即時保存し、更新失敗ログを失わないようにした。
  * - 2026-08-26: SSイベント内の境界線を-----に変更し、CS側の操作単位境界と区別しやすくした。
+ * - 2026-09-03: スクリプトログテーブルのサイトIDを外部設定または呼び出しオプションで指定できるようにした。
  */
 
 const SCRIPT_LOG_CONFIG = {
-    logSiteId: 1234,               // ← スクリプトログテーブルのサイトIDに変更
+    logSiteId: 1234,               // 外部指定がない場合の既定スクリプトログテーブルサイトID
     triggerKey: 'run-script-log'
 };
+
+/**
+ * SSスクリプトログの既定設定を変更する。
+ * 共通logger読込後に setScriptLogConfig({ logSiteId: 1234 }) の形で呼び出せる。
+ *
+ * @param {Object} options 設定値
+ * @param {string|number} [options.logSiteId] スクリプトログテーブルのサイトID
+ */
+function setScriptLogConfig(options) {
+    options = options || {};
+
+    if (options.logSiteId) {
+        SCRIPT_LOG_CONFIG.logSiteId = options.logSiteId;
+    }
+}
+
+/**
+ * SSログ保存先のスクリプトログテーブルサイトIDを決定する。
+ * 優先順:
+ * 1. 呼び出しオプション options.logSiteId
+ * 2. context.UserData.PleasanterScriptLogConfig.logSiteId
+ * 3. PleasanterScriptLogConfig.logSiteId
+ * 4. SCRIPT_LOG_CONFIG.logSiteId
+ *
+ * @param {Object} context サーバスクリプトのcontext
+ * @param {Object} [options] ログオプション
+ * @returns {string|number} スクリプトログテーブルのサイトID
+ */
+function resolveScriptLogSiteId(context, options) {
+    options = options || {};
+
+    if (options.logSiteId) {
+        return options.logSiteId;
+    }
+
+    const externalConfig = getExternalScriptLogConfig(context);
+
+    if (externalConfig.logSiteId) {
+        return externalConfig.logSiteId;
+    }
+
+    return SCRIPT_LOG_CONFIG.logSiteId;
+}
+
+/**
+ * 外部から指定されたSSスクリプトログ設定を取得する。
+ *
+ * @param {Object} context サーバスクリプトのcontext
+ * @returns {Object} 外部設定
+ */
+function getExternalScriptLogConfig(context) {
+    if (
+        context &&
+        context.UserData &&
+        context.UserData.PleasanterScriptLogConfig
+    ) {
+        return context.UserData.PleasanterScriptLogConfig;
+    }
+
+    if (
+        typeof PleasanterScriptLogConfig !== 'undefined' &&
+        PleasanterScriptLogConfig
+    ) {
+        return PleasanterScriptLogConfig;
+    }
+
+    return {};
+}
 
 /**
  * スクリプトログ保存依頼を起動する。
@@ -31,11 +100,15 @@ const SCRIPT_LOG_CONFIG = {
  * @param {string} options.processName 処理名
  * @param {string} options.level ログレベル
  * @param {string} options.detail 詳細ログ
+ * @param {string|number} [options.logSiteId] スクリプトログテーブルのサイトID
  * @param {number|string} [options.sourceRecordId] 実行元レコードID
  */
 function requestScriptLogSaveBySiteLoad(context, options) {
+    const logSiteId = resolveScriptLogSiteId(context, options);
+
     context.UserData.ScriptLogRequest = {
         triggerKey: SCRIPT_LOG_CONFIG.triggerKey,
+        logSiteId: logSiteId,
         sourceApp: options.sourceApp || context.SiteId || '',
         level: options.level || 'info',
         processName: options.processName || '',
@@ -47,7 +120,7 @@ function requestScriptLogSaveBySiteLoad(context, options) {
         detail: options.detail || ''
     };
 
-    items.GetSite(SCRIPT_LOG_CONFIG.logSiteId);
+    items.GetSite(logSiteId);
 
     /*
      * 後続処理への影響防止
@@ -64,6 +137,7 @@ class ScriptLogger {
      * @param {Object} options 共通ログ情報
      * @param {string|number} [options.sourceApp] 実行元アプリID（siteId）
      * @param {string} options.processName 処理名
+     * @param {string|number} [options.logSiteId] スクリプトログテーブルのサイトID
      * @param {number|string} [options.sourceRecordId] 実行元レコードID
      * @param {boolean} [options.enableConsoleLog=true] context.Logへ出力するか
      */
@@ -73,6 +147,7 @@ class ScriptLogger {
         this.context = context;
         this.sourceApp = options.sourceApp || context.SiteId || '';
         this.processName = options.processName || '';
+        this.logSiteId = resolveScriptLogSiteId(context, options);
         this.sourceRecordId = options.sourceRecordId || context.Id || '';
         this.enableConsoleLog = options.enableConsoleLog !== false;
 
@@ -294,6 +369,7 @@ class ScriptLogger {
             processName: this.processName,
             level: this.level,
             detail: this.details.join('\n'),
+            logSiteId: this.logSiteId,
             sourceRecordId: this.sourceRecordId
         });
     }
@@ -424,6 +500,7 @@ class ScriptLogger {
  * @param {Array<Object>} steps 実行ステップ一覧
  * @param {Object} [options] ログオプション
  * @param {string|number} [options.sourceApp] 実行元アプリID
+ * @param {string|number} [options.logSiteId] スクリプトログテーブルのサイトID
  * @param {number|string} [options.sourceRecordId] 実行元レコードID
  * @param {boolean} [options.enableConsoleLog=true] context.Logへ出力するか
  * @param {boolean} [options.deferToClient=false] trueの場合はSS側では保存せず、CS側の操作ログへ束ねる
@@ -435,6 +512,7 @@ function runEvent(context, eventName, steps, options) {
     const logger = new ScriptLogger(context, {
         sourceApp: options.sourceApp || context.SiteId,
         processName: eventName,
+        logSiteId: options.logSiteId,
         sourceRecordId: options.sourceRecordId || context.Id,
         enableConsoleLog: options.enableConsoleLog
     });

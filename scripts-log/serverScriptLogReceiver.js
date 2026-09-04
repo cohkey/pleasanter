@@ -6,10 +6,11 @@
  * 変更履歴:
  * - 2026-08-24: ClassHash / DescriptionHash / NumHash / DateHash も設定し、SSログ詳細をDescriptionBへ保存できるようにした。
  * - 2026-08-26: ファイル名をserverScriptLogReceiver.jsへ変更し、ログテーブル側の受信処理であることを明確化した。
+ * - 2026-09-03: ログ作成先サイトIDは依頼値または配置先ログテーブルのcontext.SiteIdから決定するようにした。
  */
 
 const RUN_SCRIPT_LOG_CONFIG = {
-    logSiteId: 1234,               // ← スクリプトログテーブルのサイトIDに変更
+    logSiteId: 1234,               // context.SiteId が取れない場合の既定スクリプトログテーブルサイトID
     triggerKey: 'run-script-log'
 };
 
@@ -34,7 +35,26 @@ function receiveScriptLogBySiteLoad(context) {
     context.UserData.ScriptLogRequest = null;
 
     const item = buildScriptLogItem(request);
-    items.Create(RUN_SCRIPT_LOG_CONFIG.logSiteId, item);
+    items.Create(resolveReceiverLogSiteId(context, request), item);
+}
+
+/**
+ * ログテーブル側でレコード作成先サイトIDを決定する。
+ *
+ * @param {Object} context サーバスクリプトのcontext
+ * @param {Object} request ログ依頼
+ * @returns {string|number} スクリプトログテーブルのサイトID
+ */
+function resolveReceiverLogSiteId(context, request) {
+    if (request && request.logSiteId) {
+        return request.logSiteId;
+    }
+
+    if (context && context.SiteId) {
+        return context.SiteId;
+    }
+
+    return RUN_SCRIPT_LOG_CONFIG.logSiteId;
 }
 
 /**

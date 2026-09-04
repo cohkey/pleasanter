@@ -16,6 +16,7 @@
  * - 2026-08-26: Ajax応答でPleasanter本体がconsole出力するSSログを捕捉し、次の統合ログへ束ねるようにした。
  * - 2026-08-28: 検証CSイベントは成功時だけ次画面表示ログへ保留し、失敗/例外時は即時保存するようにした。
  * - 2026-08-28: 同一レコードの複数CS保留ログを順番に取り込めるようにした。
+ * - 2026-09-03: スクリプトログテーブルのサイトIDを呼び出しオプションからCS loggerへ渡せるようにした。
  */
 
 const CLIENT_SCRIPT_LOG_PENDING_KEY = 'PleasanterScriptLog.PendingClientLogs';
@@ -39,6 +40,7 @@ installPleasanterServerLogConsoleCapture();
  * @param {Object} [options] ログオプション
  * @param {string|number} [options.sourceApp] 実行元アプリID
  * @param {string|number} [options.sourceSiteId] 実行元サイトID
+ * @param {string|number} [options.logSiteId] スクリプトログテーブルのサイトID
  * @param {number|string} [options.sourceRecordId] 実行元レコードID
  * @param {string|number} [options.userId] ユーザーID
  * @param {string|number} [options.deptId] 部署ID
@@ -281,6 +283,7 @@ function createClientEventLogger(eventName, options) {
         sourceApp: options.sourceApp || getClientSiteId(),
         sourceSiteId: options.sourceSiteId || getClientSiteId(),
         processName: resolveClientEventProcessName(eventName, options),
+        logSiteId: options.logSiteId,
         sourceRecordId: options.sourceRecordId || getClientRecordId(),
         userId: options.userId || getClientUserId(),
         deptId: options.deptId || getClientDeptId(),
