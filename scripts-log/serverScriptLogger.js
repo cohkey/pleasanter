@@ -16,6 +16,7 @@
  * - 2026-08-26: deferToClient指定時でもエラー時は即時保存し、更新失敗ログを失わないようにした。
  * - 2026-08-26: SSイベント内の境界線を-----に変更し、CS側の操作単位境界と区別しやすくした。
  * - 2026-09-03: スクリプトログテーブルのサイトIDを外部設定または呼び出しオプションで指定できるようにした。
+ * - 2026-09-04: 未終了groupの自動クローズをUnclosed表記にし、警告理由を明示するようにした。
  */
 
 const SCRIPT_LOG_CONFIG = {
@@ -319,7 +320,7 @@ class ScriptLogger {
     }
 
     /**
-     * 未終了のグループをすべて異常終了として閉じる。
+     * 未終了のグループをすべて自動クローズする。
      * エラー発生時のログ崩れ防止用。
      */
     closeAllGroups() {
@@ -336,10 +337,13 @@ class ScriptLogger {
             this.addGroupLine(
                 'abnormalEnd',
                 group.label,
-                '異常終了 +' + elapsedMs + 'ms'
+                'Unclosed +' + elapsedMs + 'ms'
             );
 
-            this.raiseLevel('warn');
+            this.warn(
+                'groupEnd未実行のため、未終了groupを自動クローズしました: ' +
+                group.label
+            );
         }
     }
 

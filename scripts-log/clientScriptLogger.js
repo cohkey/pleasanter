@@ -13,6 +13,7 @@
  * - 2026-08-26: イベント単位の開始/終了境界線を追加できるようにした。
  * - 2026-08-26: 次画面表示へ保留するCSログでは、console出力も保留できるようにした。
  * - 2026-09-03: スクリプトログテーブルのサイトIDを外部設定または呼び出しオプションで指定できるようにした。
+ * - 2026-09-04: 未終了groupの自動クローズをUnclosed表記にし、警告理由を明示するようにした。
  */
 
 const CLIENT_SCRIPT_LOG_CONFIG = {
@@ -218,7 +219,7 @@ class ClientScriptLogger {
     }
 
     /**
-     * 未終了のグループをすべて異常終了として閉じる。
+     * 未終了のグループをすべて自動クローズする。
      * エラー発生時のログ崩れ防止用。
      */
     closeAllGroups() {
@@ -235,10 +236,13 @@ class ClientScriptLogger {
             this.addGroupLine(
                 'abnormalEnd',
                 group.label,
-                'Failed +' + elapsedMs + 'ms'
+                'Unclosed +' + elapsedMs + 'ms'
             );
 
-            this.raiseLevel('warn');
+            this.warn(
+                'groupEnd未実行のため、未終了groupを自動クローズしました: ' +
+                group.label
+            );
         }
     }
 

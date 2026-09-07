@@ -17,6 +17,7 @@
  * - 2026-08-28: 検証CSイベントは成功時だけ次画面表示ログへ保留し、失敗/例外時は即時保存するようにした。
  * - 2026-08-28: 同一レコードの複数CS保留ログを順番に取り込めるようにした。
  * - 2026-09-03: スクリプトログテーブルのサイトIDを呼び出しオプションからCS loggerへ渡せるようにした。
+ * - 2026-09-07: 新規作成画面の更新系イベントを自動判定し、処理名をcreateとして引き継ぐようにした。
  */
 
 const CLIENT_SCRIPT_LOG_PENDING_KEY = 'PleasanterScriptLog.PendingClientLogs';
@@ -48,7 +49,7 @@ installPleasanterServerLogConsoleCapture();
  * @param {boolean} [options.includeServerLog=false] Pleasanterが画面へ渡したSSログを詳細ログに取り込むか
  * @param {boolean} [options.includePendingClientLog=false] 直前操作で保留したCSログを詳細ログに取り込むか
  * @param {boolean} [options.deferToNextLoad=false] trueの場合はログレコードを作成せず、次の画面表示ログへ束ねる
- * @param {string} [options.nextOperationName] deferToNextLoad時に次のログレコードへ引き継ぐ処理名
+ * @param {string} [options.nextOperationName] deferToNextLoad時に次のログレコードへ引き継ぐ処理名。省略時は自動判定
  * @param {string} [options.pendingClientLogLabel] 保留CSログ取り込みブロックのラベル
  * @param {string} [options.serverLogLabel] SSログ取り込みブロックのラベル
  * @param {boolean} [options.enableConsoleLog=true] consoleへ出力するか
@@ -154,7 +155,7 @@ async function runClientStep(logger, step) {
  * @param {Array<Object>} steps 実行ステップ一覧
  * @param {Object} [options] ログオプション
  * @param {boolean} [options.deferToNextLoad=false] trueの場合は検証成功時だけログレコードを作成せず、次の画面表示ログへ束ねる
- * @param {string} [options.nextOperationName] deferToNextLoad時に次のログレコードへ引き継ぐ処理名
+ * @param {string} [options.nextOperationName] deferToNextLoad時に次のログレコードへ引き継ぐ処理名。省略時は自動判定
  * @param {string} [options.pendingClientLogLabel] 保留CSログ取り込みブロックのラベル
  * @param {Object} [args] Pleasanterイベント引数
  * @returns {boolean} true: 続行 / false: キャンセル
@@ -647,9 +648,28 @@ function savePendingClientLog(logger, options) {
  * @returns {string} 処理名
  */
 function resolveNextOperationName(logger, options) {
-    return options.nextOperationName ||
-        options.operationName ||
-        detectOperationNameFromEvent(logger.processName) ||
+    const specifiedOperationName =
+        options.nextOperationName || options.operationName || '';
+    const detectedOperationName =
+        detectOperationNameFromEvent(logger.processName);
+
+    /*
+     * 従来の呼び出し側に nextOperationName: 'update' が残っていても、
+     * 新規作成画面では create を優先する。
+     * update以外の明示指定は、任意の業務処理名としてそのまま尊重する。
+     */
+    if (
+        specifiedOperationName &&
+        !(
+            specifiedOperationName === 'update' &&
+            detectedOperationName === 'create'
+        )
+    ) {
+        return specifiedOperationName;
+    }
+
+    return detectedOperationName ||
+        specifiedOperationName ||
         logger.processName ||
         '';
 }
@@ -665,8 +685,32 @@ function detectOperationNameFromEvent(eventName) {
         return 'delete';
     }
 
+    if (/create|新規作成/i.test(eventName || '')) {
+        return 'create';
+    }
+
     if (/update|更新/i.test(eventName || '')) {
-        return 'update';
+        return getClientPageAction() === 'new' ? 'create' : 'update';
+    }
+
+    return '';
+}
+
+/**
+ * Pleasanterの現在画面のアクションを取得する。
+ *
+ * @returns {string} new / edit などのアクション。取得できない場合は空文字
+ */
+function getClientPageAction() {
+    try {
+        if (
+            typeof $p !== 'undefined' &&
+            typeof $p.action === 'function'
+        ) {
+            return String($p.action() || '').toLowerCase();
+        }
+    } catch (e) {
+        return '';
     }
 
     return '';
@@ -683,15 +727,28 @@ function detectPendingClientLogLabelFromEvent(eventName) {
         return 'CS削除送信前イベント';
     }
 
+    const isCreate =
+        /create|新規作成/i.test(eventName || '') ||
+        (
+            /update|更新/i.test(eventName || '') &&
+            getClientPageAction() === 'new'
+        );
+    const isSaveEvent =
+        isCreate || /update|更新/i.test(eventName || '');
+
     if (
         /validate|検証/i.test(eventName || '') &&
-        /update|更新/i.test(eventName || '')
+        isSaveEvent
     ) {
-        return 'CS更新検証イベント';
+        return isCreate
+            ? 'CS新規作成検証イベント'
+            : 'CS更新検証イベント';
     }
 
-    if (/update|更新/i.test(eventName || '')) {
-        return 'CS更新送信前イベント';
+    if (isSaveEvent) {
+        return isCreate
+            ? 'CS新規作成送信前イベント'
+            : 'CS更新送信前イベント';
     }
 
     return 'CS送信前イベント';
