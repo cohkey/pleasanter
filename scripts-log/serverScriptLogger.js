@@ -17,6 +17,7 @@
  * - 2026-08-26: SSイベント内の境界線を-----に変更し、CS側の操作単位境界と区別しやすくした。
  * - 2026-09-03: スクリプトログテーブルのサイトIDを外部設定または呼び出しオプションで指定できるようにした。
  * - 2026-09-04: 未終了groupの自動クローズをUnclosed表記にし、警告理由を明示するようにした。
+ * - 2026-09-08: 新規作成後はmodel/savedの実レコードIDを優先し、context.IdがサイトIDとなる環境でも正しく記録するようにした。
  */
 
 const SCRIPT_LOG_CONFIG = {
@@ -93,6 +94,55 @@ function getExternalScriptLogConfig(context) {
 }
 
 /**
+ * SSログの実行元レコードIDを決定する。
+ * 新規作成後はcontext.Idが作成前の値を保持する環境があるため、
+ * modelまたはsavedに設定された作成済みIDを優先する。
+ *
+ * @param {Object} context サーバスクリプトのcontext
+ * @param {Object} [options] ログオプション
+ * @returns {string|number} 実行元レコードID
+ */
+function resolveServerSourceRecordId(context, options) {
+    options = options || {};
+
+    if (
+        options.sourceRecordId !== undefined &&
+        options.sourceRecordId !== null &&
+        options.sourceRecordId !== ''
+    ) {
+        return options.sourceRecordId;
+    }
+
+    const modelRecordId = getServerModelRecordId(
+        typeof model !== 'undefined' ? model : null
+    );
+
+    if (modelRecordId) {
+        return modelRecordId;
+    }
+
+    const savedRecordId = getServerModelRecordId(
+        typeof saved !== 'undefined' ? saved : null
+    );
+
+    return savedRecordId || context.Id || '';
+}
+
+/**
+ * modelまたはsavedからテーブル種別に応じたレコードIDを取得する。
+ *
+ * @param {Object} value modelまたはsaved
+ * @returns {string|number} レコードID
+ */
+function getServerModelRecordId(value) {
+    if (!value) {
+        return '';
+    }
+
+    return value.ResultId || value.IssueId || '';
+}
+
+/**
  * スクリプトログ保存依頼を起動する。
  *
  * @param {Object} context サーバスクリプトのcontext
@@ -114,7 +164,7 @@ function requestScriptLogSaveBySiteLoad(context, options) {
         level: options.level || 'info',
         processName: options.processName || '',
         sourceSiteId: context.SiteId || '',
-        sourceRecordId: options.sourceRecordId || context.Id || '',
+        sourceRecordId: resolveServerSourceRecordId(context, options),
         userId: context.UserId || '',
         deptId: context.DeptId || '',
         controlId: context.ControlId || '',
@@ -149,7 +199,7 @@ class ScriptLogger {
         this.sourceApp = options.sourceApp || context.SiteId || '';
         this.processName = options.processName || '';
         this.logSiteId = resolveScriptLogSiteId(context, options);
-        this.sourceRecordId = options.sourceRecordId || context.Id || '';
+        this.sourceRecordId = resolveServerSourceRecordId(context, options);
         this.enableConsoleLog = options.enableConsoleLog !== false;
 
         this.details = [];
@@ -517,7 +567,7 @@ function runEvent(context, eventName, steps, options) {
         sourceApp: options.sourceApp || context.SiteId,
         processName: eventName,
         logSiteId: options.logSiteId,
-        sourceRecordId: options.sourceRecordId || context.Id,
+        sourceRecordId: resolveServerSourceRecordId(context, options),
         enableConsoleLog: options.enableConsoleLog
     });
     const eventSectionLabel = 'SSイベント: ' + eventName;
@@ -528,7 +578,7 @@ function runEvent(context, eventName, steps, options) {
         logger.info(eventName + '処理を開始します');
         logger.info('実行元情報 ' + JSON.stringify({
             siteId: context.SiteId || '',
-            recordId: context.Id || '',
+            recordId: logger.sourceRecordId || '',
             userId: context.UserId || ''
         }));
 
