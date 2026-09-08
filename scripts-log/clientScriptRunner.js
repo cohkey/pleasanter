@@ -17,11 +17,14 @@
  * - 2026-08-28: 検証CSイベントは成功時だけ次画面表示ログへ保留し、失敗/例外時は即時保存するようにした。
  * - 2026-08-28: 同一レコードの複数CS保留ログを順番に取り込めるようにした。
  * - 2026-09-03: スクリプトログテーブルのサイトIDを呼び出しオプションからCS loggerへ渡せるようにした。
+ * - 2026-09-08: 新規作成レスポンスから実レコードIDとSSログを取得し、ID反映後の画面表示ログへ確実に束ねるようにした。
  */
 
 const CLIENT_SCRIPT_LOG_PENDING_KEY = 'PleasanterScriptLog.PendingClientLogs';
 const CLIENT_SCRIPT_LOG_PENDING_SERVER_KEY = 'PleasanterScriptLog.PendingServerLogs';
 const CLIENT_SCRIPT_LOG_PENDING_TTL_MS = 5 * 60 * 1000;
+const PRE_CAPTURED_SERVER_LOG_TTL_MS = 10 * 1000;
+const preCapturedServerLogs = [];
 
 installPleasanterServerLogConsoleCapture();
 
@@ -58,11 +61,16 @@ installPleasanterServerLogConsoleCapture();
 async function runClientEvent(eventName, steps, options) {
     options = options || {};
 
+    const createTransition = preparePendingCreateTransition(options);
+    options = createTransition.options;
+
     const logger = createClientEventLogger(eventName, options);
 
     try {
-        appendPendingClientLogToClientLogger(logger, options);
-        appendServerLogToClientLogger(logger, options);
+        if (!createTransition.waitForCreatedRecord) {
+            appendPendingClientLogToClientLogger(logger, options);
+            appendServerLogToClientLogger(logger, options);
+        }
 
         logger.sectionStart('CSイベント: ' + eventName);
         logger.info('Start: ' + eventName);
@@ -93,7 +101,10 @@ async function runClientEvent(eventName, steps, options) {
 
     } finally {
         const shouldDeferToNextLoad =
-            options.deferToNextLoad === true &&
+            (
+                options.deferToNextLoad === true ||
+                createTransition.waitForCreatedRecord
+            ) &&
             logger.level !== 'error';
 
         if (shouldDeferToNextLoad) {
@@ -112,6 +123,54 @@ async function runClientEvent(eventName, steps, options) {
     }
 
     return logger;
+}
+
+/**
+ * 新規作成レスポンスをcreate操作ログとして保留する。
+ * 作成されたレコードIDとレスポンス内のSSログをargsから取得するため、
+ * 画面の#Idやconsole出力順には依存しない。
+ *
+ * 呼び出し例:
+ * $p.events.before_set_Create = function (args) {
+ *     runClientCreateEvent(args);
+ * };
+ *
+ * @param {Object} args Pleasanterのbefore_set_Createイベント引数
+ * @param {Object} [options] ログオプション
+ * @returns {Promise<ClientScriptLogger|null>}
+ */
+function runClientCreateEvent(args, options) {
+    options = options || {};
+
+    const sourceRecordId =
+        options.sourceRecordId || getCreatedRecordIdFromEventArgs(args);
+
+    if (!sourceRecordId) {
+        console.error(
+            '新規作成ログを保留できませんでした。' +
+            'before_set_Createのargsから作成済みレコードIDを取得できません。'
+        );
+        return Promise.resolve(null);
+    }
+
+    const sourceSiteId =
+        options.sourceSiteId || options.sourceApp || getClientSiteId();
+
+    captureServerLogsFromEventArgs(args, {
+        sourceSiteId: sourceSiteId,
+        sourceRecordId: sourceRecordId
+    });
+
+    const createOptions = Object.assign({}, options, {
+        sourceSiteId: sourceSiteId,
+        sourceRecordId: sourceRecordId,
+        deferToNextLoad: true,
+        nextOperationName: options.nextOperationName || 'create',
+        pendingClientLogLabel:
+            options.pendingClientLogLabel || 'CS新規作成応答イベント'
+    });
+
+    return runClientEvent('before_set_Create', [], createOptions);
 }
 
 /**
@@ -296,6 +355,81 @@ function createClientEventLogger(eventName, options) {
 }
 
 /**
+ * 保留中のcreate操作がある場合、作成済みレコードIDをログ対象に使用する。
+ * #Idがまだ旧値の画面表示イベントは保存せず、実ID反映後のイベントまで保留する。
+ *
+ * @param {Object} options ログオプション
+ * @returns {{options: Object, waitForCreatedRecord: boolean}} 作成遷移情報
+ */
+function preparePendingCreateTransition(options) {
+    const preparedOptions = Object.assign({}, options || {});
+
+    if (preparedOptions.includePendingClientLog !== true) {
+        return {
+            options: preparedOptions,
+            waitForCreatedRecord: false
+        };
+    }
+
+    const currentSiteId =
+        preparedOptions.sourceSiteId ||
+        preparedOptions.sourceApp ||
+        getClientSiteId();
+    const currentRecordId =
+        preparedOptions.sourceRecordId || getClientRecordId();
+    const pendingCreateLog = findPendingCreateLog(currentSiteId);
+
+    if (!pendingCreateLog || !pendingCreateLog.sourceRecordId) {
+        return {
+            options: preparedOptions,
+            waitForCreatedRecord: false
+        };
+    }
+
+    preparedOptions.sourceSiteId = currentSiteId;
+    preparedOptions.sourceRecordId = pendingCreateLog.sourceRecordId;
+    preparedOptions.operationName = 'create';
+
+    if (!preparedOptions.pendingClientLogLabel) {
+        preparedOptions.pendingClientLogLabel =
+            'CS新規作成画面反映イベント';
+    }
+
+    return {
+        options: preparedOptions,
+        waitForCreatedRecord:
+            String(currentRecordId || '') !==
+            String(pendingCreateLog.sourceRecordId)
+    };
+}
+
+/**
+ * 同一サイトで保留中のcreate操作を返す。
+ * 作成直後は画面上のIDが旧値のため、ここではレコードIDを照合しない。
+ *
+ * @param {string|number} sourceSiteId 実行元サイトID
+ * @returns {Object|null} 保留中createログ
+ */
+function findPendingCreateLog(sourceSiteId) {
+    const pendingLogs = loadPendingClientLogs();
+    const targetSiteId = String(sourceSiteId || '');
+
+    for (let i = pendingLogs.length - 1; i >= 0; i--) {
+        const pendingSiteId = String(pendingLogs[i].sourceSiteId || '');
+
+        if (
+            pendingLogs[i].operationName === 'create' &&
+            pendingLogs[i].sourceRecordId &&
+            (!targetSiteId || !pendingSiteId || targetSiteId === pendingSiteId)
+        ) {
+            return pendingLogs[i];
+        }
+    }
+
+    return null;
+}
+
+/**
  * CSイベントの処理名を決定する。
  * 保留中のCSログを取り込む場合は、前操作から引き継いだ処理名を優先する。
  *
@@ -389,7 +523,9 @@ function appendServerLogToClientLogger(logger, options) {
     clearPleasanterServerLogText();
 
     if (serverLog) {
-        serverLogs.push(serverLog);
+        if (serverLogs.indexOf(serverLog) === -1) {
+            serverLogs.push(serverLog);
+        }
     }
 
     if (serverLogs.length === 0) {
@@ -491,7 +627,9 @@ function installPleasanterServerLogConsoleCapture() {
             arguments.length === 1 &&
             isPleasanterServerScriptLog(arguments[0])
         ) {
-            savePendingServerLog(arguments[0]);
+            if (!consumePreCapturedServerLog(arguments[0])) {
+                savePendingServerLog(arguments[0]);
+            }
             return;
         }
 
@@ -514,14 +652,19 @@ function isPleasanterServerScriptLog(value) {
  * Ajax応答由来のSSログを保留する。
  *
  * @param {string} serverLog SSログ文字列
+ * @param {Object} [target] 保存対象
+ * @param {string|number} [target.sourceSiteId] 実行元サイトID
+ * @param {string|number} [target.sourceRecordId] 実行元レコードID
  */
-function savePendingServerLog(serverLog) {
+function savePendingServerLog(serverLog, target) {
     if (!window.sessionStorage) {
         return;
     }
 
-    const sourceSiteId = getClientSiteId();
-    const sourceRecordId = getClientRecordId();
+    target = target || {};
+
+    const sourceSiteId = target.sourceSiteId || getClientSiteId();
+    const sourceRecordId = target.sourceRecordId || getClientRecordId();
     const pendingLogs = loadPendingServerLogs();
 
     pendingLogs.push({
@@ -532,6 +675,113 @@ function savePendingServerLog(serverLog) {
     });
 
     storePendingServerLogs(pendingLogs);
+}
+
+/**
+ * before_set_Createのargsに含まれる作成済みレコードIDを取得する。
+ *
+ * @param {Object} args Pleasanterイベント引数
+ * @returns {string|number} 作成済みレコードID
+ */
+function getCreatedRecordIdFromEventArgs(args) {
+    const responseItems = getEventResponseItems(args);
+
+    for (let i = 0; i < responseItems.length; i++) {
+        const item = responseItems[i] || {};
+        const target = String(item.Target || '').replace(/^#/, '');
+
+        if (item.Method === 'Set' && target === 'Id' && item.Value) {
+            return item.Value;
+        }
+    }
+
+    return responseItems[0] && responseItems[0].Value
+        ? responseItems[0].Value
+        : '';
+}
+
+/**
+ * イベント引数からレスポンス要素配列を取得する。
+ *
+ * @param {Object} args Pleasanterイベント引数
+ * @returns {Array<Object>} レスポンス要素
+ */
+function getEventResponseItems(args) {
+    return args && Array.isArray(args.json) ? args.json : [];
+}
+
+/**
+ * before_set_Createの時点でレスポンス内SSログを先取りする。
+ * 後続のconsole.log捕捉時には同じログを消費し、二重登録を防ぐ。
+ *
+ * @param {Object} args Pleasanterイベント引数
+ * @param {Object} target 保存対象
+ */
+function captureServerLogsFromEventArgs(args, target) {
+    const responseItems = getEventResponseItems(args);
+
+    for (let i = 0; i < responseItems.length; i++) {
+        const item = responseItems[i] || {};
+
+        if (item.Method !== 'Log' || !isPleasanterServerScriptLog(item.Value)) {
+            continue;
+        }
+
+        savePendingServerLog(item.Value, target);
+        rememberPreCapturedServerLog(item.Value);
+    }
+}
+
+/**
+ * argsから先取りしたSSログを一時記憶する。
+ *
+ * @param {string} serverLog SSログ文字列
+ */
+function rememberPreCapturedServerLog(serverLog) {
+    const nowMs = Date.now();
+
+    removeExpiredPreCapturedServerLogs(nowMs);
+    preCapturedServerLogs.push({
+        detail: normalizeServerLogText(serverLog),
+        createdAt: nowMs
+    });
+}
+
+/**
+ * consoleへ到達したSSログがargsから先取り済みなら、その記憶を消費する。
+ *
+ * @param {string} serverLog SSログ文字列
+ * @returns {boolean} true: 先取り済み
+ */
+function consumePreCapturedServerLog(serverLog) {
+    removeExpiredPreCapturedServerLogs(Date.now());
+
+    const detail = normalizeServerLogText(serverLog);
+
+    for (let i = 0; i < preCapturedServerLogs.length; i++) {
+        if (preCapturedServerLogs[i].detail === detail) {
+            preCapturedServerLogs.splice(i, 1);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * 期限切れの先取り済みSSログを破棄する。
+ *
+ * @param {number} nowMs 現在時刻
+ */
+function removeExpiredPreCapturedServerLogs(nowMs) {
+    for (let i = preCapturedServerLogs.length - 1; i >= 0; i--) {
+        if (
+            nowMs - preCapturedServerLogs[i].createdAt >
+            PRE_CAPTURED_SERVER_LOG_TTL_MS
+        ) {
+            preCapturedServerLogs.splice(i, 1);
+        }
+    }
 }
 
 /**
