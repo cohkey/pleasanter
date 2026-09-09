@@ -1,93 +1,86 @@
-(function () {
+(() => {
   "use strict";
 
-  var rows = [
+  const permissionRows = [
     { label: "アプリ利用", column: "ClassB" },
     { label: "レコード作成", column: "ClassC" },
     { label: "レコード更新", column: "ClassD" },
     { label: "レコード削除", column: "ClassE" }
   ];
+  const field = (columnName) =>
+    document.getElementById(`Results_${columnName}Field`);
 
-  function field(columnName) {
-    return document.getElementById("Results_" + columnName + "Field");
-  }
-
-  function createCell(className, text) {
-    var element = document.createElement("div");
+  const createCell = (className, text) => {
+    const element = document.createElement("div");
     element.className = className;
     if (text) element.textContent = text;
     return element;
-  }
+  };
 
-  function move(parent, child) {
+  const move = (parent, child) => {
     if (child && child.parentElement !== parent) {
       parent.appendChild(child);
     }
-  }
+  };
 
-  function buildTargetGrid() {
+  const buildTargetGrid = () => {
     if (document.querySelector(".permission-target-grid")) return true;
 
-    var title = field("Title");
-    var key = field("ClassA");
-    var enabled = field("CheckA");
+    const title = field("Title");
+    const key = field("ClassA");
+    const enabled = field("CheckA");
     if (!title || !key || !enabled) return false;
 
-    var grid = createCell("permission-target-grid");
+    const grid = createCell("permission-target-grid");
     enabled.classList.add("permission-enabled");
     title.parentNode.insertBefore(grid, title);
-    move(grid, title);
-    move(grid, key);
-    move(grid, enabled);
+    [title, key, enabled].forEach((targetField) => move(grid, targetField));
     return true;
-  }
+  };
 
-  function matrixHeader(firstField) {
-    var label = firstField.querySelector(".field-label");
-    var labelText = label ? label.textContent : "";
-    return labelText.indexOf("個別") >= 0 ? "個別設定" : "適用範囲";
-  }
+  const matrixHeader = (firstField) => {
+    const labelText =
+      firstField.querySelector(".field-label")?.textContent ?? "";
+    return labelText.includes("個別") ? "個別設定" : "適用範囲";
+  };
 
-  function buildPermissionMatrix() {
+  const buildPermissionMatrix = () => {
     if (document.querySelector(".permission-matrix")) return true;
 
-    var first = field(rows[0].column);
-    if (!first) return false;
+    const rows = permissionRows.map((row) => ({
+      ...row,
+      permissionField: field(row.column)
+    }));
+    if (rows.some(({ permissionField }) => !permissionField)) return false;
 
-    var matrix = createCell("permission-matrix");
+    const matrix = createCell("permission-matrix");
     matrix.appendChild(createCell("permission-matrix__corner", "権限"));
     matrix.appendChild(
-      createCell("permission-matrix__header", matrixHeader(first))
+      createCell(
+        "permission-matrix__header",
+        matrixHeader(rows[0].permissionField)
+      )
     );
-    first.parentNode.insertBefore(matrix, first);
+    rows[0].permissionField.parentNode.insertBefore(
+      matrix,
+      rows[0].permissionField
+    );
 
-    rows.forEach(function (row) {
-      var permissionField = field(row.column);
-      if (!permissionField) return;
-
-      var permissionCell = createCell("permission-matrix__cell");
-      matrix.appendChild(
-        createCell("permission-matrix__row-label", row.label)
-      );
+    rows.forEach(({ label, permissionField }) => {
+      const permissionCell = createCell("permission-matrix__cell");
+      matrix.appendChild(createCell("permission-matrix__row-label", label));
       matrix.appendChild(permissionCell);
       move(permissionCell, permissionField);
     });
     return true;
-  }
+  };
 
-  function buildLayout() {
+  const buildLayout = () => {
     buildTargetGrid();
     buildPermissionMatrix();
-  }
+  };
 
-  function ready() {
-    buildLayout();
-    window.setTimeout(buildLayout, 250);
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", ready, { once: true });
-  } else {
-    ready();
+  if (window.$p?.events) {
+    $p.events.on_editor_load = buildLayout;
   }
 })();
