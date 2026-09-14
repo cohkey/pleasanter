@@ -145,21 +145,22 @@ await PleasanterSitePackageApplier.applyEditorColumnsInCurrentPage(picked.packag
 1. Pleasanter にログインします。
 2. 対象テーブル、または同じ Pleasanter 内の任意ページを開きます。
 3. DevTools Console を開きます。
-4. `load-local-js-from-file.js` の中身を Console に貼り付けます。
-5. 次を実行します。
+4. `load-local-js-from-file.js` の中身を Console に貼り付けて Enter を押します。
+5. 画面に表示される「Pleasanter 設定適用ランチャー」で `1. メインJSを選択` を押し、`apply-site-package-settings.js` を選択します。
+6. `2. JSONを選択して開始` を押し、サイトパッケージ JSON を選択します。
+7. ウィザードに従って、TenantId、SiteId、API キー、対象設定、適用モードを指定します。対象設定は日本語名のチェックボックスで選択できます。
+
+Console で覚える必要がある操作は、基本的に `load-local-js-from-file.js` を貼り付けるところまでです。Chrome の仕様上、ファイル選択ダイアログはユーザーのクリックが必要なため、ランチャー上のボタンを押して進めます。
+
+従来どおり Console から直接実行する場合は、次も使えます。
 
 ```js
 await PleasanterLocalJsLoader.pickAndRun();
 ```
 
-6. ファイル選択ダイアログで `apply-site-package-settings.js` を選択します。
-7. 次を実行します。
-
 ```js
 await PleasanterSitePackageApplier.runWizard();
 ```
-
-8. ウィザードに従って、サイトパッケージ JSON、TenantId、SiteId、API キー、対象設定、適用モードを指定します。対象設定は日本語名のチェックボックスで選択できます。
 
 ## 専用 UI の使い方
 
@@ -369,6 +370,6 @@ samples/site-package.comprehensive-settings.sample.json
 
 ブラウザはローカルファイルパスを文字列指定して勝手に読み込めません。ユーザーがファイル選択ダイアログで選んだファイルだけ読み込めます。
 
-また、Chrome では 1つの JavaScript 実行中に 2回目のファイル選択を自動で開こうとすると、ユーザー操作ではないとしてブロックされることがあります。その場合は、ローダー読み込みと `runWizard()` 実行を分けてください。
+また、Chrome では 1つの JavaScript 実行中に 2回目のファイル選択を自動で開こうとすると、ユーザー操作ではないとしてブロックされることがあります。`load-local-js-from-file.js` はこの制約を避けるため、貼り付け後にランチャーを表示し、メインJS選択とJSON選択をそれぞれボタンクリックで進める形にしています。
 
 Pleasanter が出力するサイトパッケージ JSON には UTF-8 BOM が付く場合があります。このツールでは読み込み時に BOM を除去してから JSON として解析します。
