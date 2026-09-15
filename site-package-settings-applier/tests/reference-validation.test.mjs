@@ -264,6 +264,92 @@ test("dry-run operation rows are localized for console output", () => {
   ]);
 });
 
+test("script comparison reports CS and SS differences by script and property", () => {
+  const applier = loadApplier({});
+  const source = {
+    SiteSettings: {
+      Scripts: [
+        { Title: "共通CS", Body: "$p.set($p.id(), 'source');", All: true, Id: 1 },
+        { Title: "追加CS", Body: "console.log('new');" }
+      ],
+      ServerScripts: [
+        { Title: "承認SS", Body: "context.Log('source');", TryCatch: true }
+      ]
+    }
+  };
+  const target = {
+    SiteSettings: {
+      Scripts: [
+        { Title: "共通CS", Body: "$p.set($p.id(), 'target');", All: true, Id: 99 },
+        { Title: "削除CS", Body: "console.log('old');" }
+      ],
+      ServerScripts: [
+        { Title: "承認SS", Body: "context.Log('source');", TryCatch: false }
+      ]
+    }
+  };
+
+  const result = applier.compareScriptSettings(source, target);
+  const rows = applier.formatScriptComparisonRows(result);
+
+  assert.equal(result.equal, false);
+  assert.deepEqual(result.summary, {
+    create: 1,
+    update: 2,
+    delete: 1,
+    skip: 0
+  });
+  assert.deepEqual(
+    result.differences.map((difference) => [
+      difference.type,
+      difference.section,
+      difference.scriptName,
+      difference.propertyPath
+    ]),
+    [
+      ["update", "Scripts", "共通CS", "Body"],
+      ["create", "Scripts", "追加CS", ""],
+      ["delete", "Scripts", "削除CS", ""],
+      ["update", "ServerScripts", "承認SS", "TryCatch"]
+    ]
+  );
+  assert.deepEqual(
+    rows.map((row) => [row["処理"], row["種類"], row["名前"], row["差分箇所"]]),
+    [
+      ["更新", "CS（クライアントスクリプト）", "共通CS", "本文"],
+      ["作成", "CS（クライアントスクリプト）", "追加CS", "スクリプト全体"],
+      ["削除", "CS（クライアントスクリプト）", "削除CS", "スクリプト全体"],
+      ["更新", "SS（サーバスクリプト）", "承認SS", "Try-Catch"]
+    ]
+  );
+});
+
+test("script comparison ignores volatile script metadata", () => {
+  const applier = loadApplier({});
+  const source = {
+    SiteSettings: {
+      Scripts: [{ Title: "同一CS", Body: "console.log('same');", Id: 1, UpdatedTime: "2026-01-01" }]
+    }
+  };
+  const target = {
+    SiteSettings: {
+      Scripts: [{ Title: "同一CS", Body: "console.log('same');", Id: 999, UpdatedTime: "2026-09-15" }]
+    }
+  };
+
+  const result = applier.compareScriptSettings(source, target);
+
+  assert.equal(result.equal, true);
+  assert.deepEqual(result.summary, {
+    create: 0,
+    update: 0,
+    delete: 0,
+    skip: 0
+  });
+  assert.deepEqual(result.differences, []);
+  assert.equal(result.scripts[0].type, "skip");
+});
+
 test("preflight comparison recommends source differences and flags replace delete risks", () => {
   const applier = loadApplier({});
   const sourcePackage = {

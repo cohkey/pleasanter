@@ -36,6 +36,7 @@
   ];
   const objectSettingKeys = ["EditorColumnHash"];
   const supportedSettingKeys = [...arraySettingKeys, ...objectSettingKeys];
+  const scriptCompareSections = ["Scripts", "ServerScripts"];
   const defaultCompareIgnoreKeys = ["Timestamp"];
   const pseudoColumnNames = new Set(["TitleBody", "SiteTitle"]);
   const systemColumnNames = new Set([
@@ -228,6 +229,18 @@
     { key: "Package.PermissionIdList", label: "権限ID一覧", group: "サイトのアクセス制御", description: "サイトパッケージ最上位の権限ID一覧。updatesite では適用しません。", unsupported: true },
     { key: "Package.Data", label: "レコードデータ", group: "データ", description: "サイトパッケージ内のレコードデータ。設定同期の対象外です。", unsupported: true }
   ];
+  const scriptPropertyLabels = new Map([
+    ["Title", "タイトル"],
+    ["Name", "名前"],
+    ["Body", "本文"],
+    ["All", "全画面"],
+    ["Disabled", "無効"],
+    ["WhenloadingSiteSettings", "サイト設定読込時"],
+    ["TryCatch", "Try-Catch"],
+    ["Condition", "条件"],
+    ["ColumnName", "項目名"],
+    ["Description", "説明"]
+  ]);
   const excludedSitePropertyKeys = new Set(["TenantId", "SiteId", "SiteSettings"]);
   const sectionDefinitionByKey = new Map(sectionCatalog.map((section) => [section.key, section]));
   const sitePropertyDefinitionByKey = new Map(sitePropertyCatalog.map((section) => [`Site.${section.key}`, {
@@ -638,6 +651,466 @@
       sections: [...siteCompare.sections, ...settingsCompare.sections],
       differences
     };
+  }
+
+  function compareScriptSettings(sourcePackage, targetPackage, options = {}) {
+    const requested = parseSections(options.sections || scriptCompareSections);
+    const sections = requested.includes("all")
+      ? scriptCompareSections
+      : requested.filter((section) => scriptCompareSections.includes(section));
+    const sourceSettings = extractSiteSettings(sourcePackage);
+    const targetSettings = extractSiteSettings(targetPackage);
+    const differences = [];
+    const scripts = [];
+
+    for (const section of sections) {
+      const result = compareScriptSection(
+        section,
+        Array.isArray(sourceSettings[section]) ? sourceSettings[section] : [],
+        Array.isArray(targetSettings[section]) ? targetSettings[section] : [],
+        options
+      );
+      differences.push(...result.differences);
+      scripts.push(...result.scripts);
+    }
+
+    return {
+      equal: differences.length === 0,
+      summary: summarize(differences),
+      sections,
+      scripts,
+      differences
+    };
+  }
+
+  function compareScriptSection(section, sourceItems, targetItems, options = {}) {
+    const sourceMap = indexScriptItems(sourceItems, section);
+    const targetMap = indexScriptItems(targetItems, section);
+    const keys = [
+      ...sourceMap.keys(),
+      ...Array.from(targetMap.keys()).filter((key) => !sourceMap.has(key))
+    ];
+    const differences = [];
+    const scripts = [];
+
+    for (const key of keys) {
+      const sourceEntry = sourceMap.get(key);
+      const targetEntry = targetMap.get(key);
+      const sourceItem = sourceEntry?.item;
+      const targetItem = targetEntry?.item;
+      const displayName = sourceEntry?.displayName || targetEntry?.displayName || key;
+      const beforeCount = differences.length;
+
+      if (!sourceEntry && targetEntry) {
+        differences.push(scriptDifference("delete", section, key, displayName, "", undefined, targetItem));
+      } else if (sourceEntry && !targetEntry) {
+        differences.push(scriptDifference("create", section, key, displayName, "", sourceItem, undefined));
+      } else {
+        diffScriptValue(
+          "",
+          normalizeScriptItem(sourceItem),
+          normalizeScriptItem(targetItem),
+          differences,
+          { section, key, displayName, maxArrayDetail: options.maxArrayDetail || 0 }
+        );
+      }
+
+      const itemDifferences = differences.slice(beforeCount);
+      scripts.push({
+        type: itemDifferences.length === 0 ? "skip" : scriptSummaryType(itemDifferences),
+        section,
+        scriptType: scriptTypeLabel(section),
+        key,
+        name: displayName,
+        differenceCount: itemDifferences.length,
+        differences: itemDifferences
+      });
+    }
+
+    return { scripts, differences };
+  }
+
+  function indexScriptItems(items, section) {
+    const counts = new Map();
+    const entries = new Map();
+
+    items.forEach((item, index) => {
+      const normalized = normalizeScriptItem(item);
+      const baseKey = stableKey(normalized, section) || `#${index + 1}`;
+      const count = (counts.get(baseKey) || 0) + 1;
+      counts.set(baseKey, count);
+      const key = count === 1 ? baseKey : `${baseKey}#${count}`;
+      entries.set(key, {
+        item: normalized,
+        displayName: scriptDisplayName(normalized, key),
+        index
+      });
+    });
+
+    return entries;
+  }
+
+  function normalizeScriptItem(item) {
+    return normalizeItem(item || {});
+  }
+
+  function scriptDisplayName(item, key) {
+    return String(item?.Title || item?.Name || item?.DisplayName || item?.Guid || key || "");
+  }
+
+  function scriptSummaryType(differences) {
+    const types = new Set(differences.map((difference) => difference.type));
+    if (types.size === 1) return [...types][0];
+    return "update";
+  }
+
+  function diffScriptValue(path, source, target, differences, ctx) {
+    if (sameValue(source, target)) return;
+
+    if (isPlainObject(source) && isPlainObject(target)) {
+      const keys = [...new Set([...Object.keys(source), ...Object.keys(target)])].sort();
+      for (const key of keys) {
+        if (volatileKeys.has(key)) continue;
+        const nextPath = path ? `${path}.${key}` : key;
+        const sourceHas = Object.prototype.hasOwnProperty.call(source, key);
+        const targetHas = Object.prototype.hasOwnProperty.call(target, key);
+        if (sourceHas && !targetHas) {
+          differences.push(scriptDifference("create", ctx.section, ctx.key, ctx.displayName, nextPath, source[key], undefined));
+        } else if (!sourceHas && targetHas) {
+          differences.push(scriptDifference("delete", ctx.section, ctx.key, ctx.displayName, nextPath, undefined, target[key]));
+        } else {
+          diffScriptValue(nextPath, source[key], target[key], differences, ctx);
+        }
+      }
+      return;
+    }
+
+    if (
+      Array.isArray(source) &&
+      Array.isArray(target) &&
+      ctx.maxArrayDetail > 0 &&
+      source.length <= ctx.maxArrayDetail &&
+      target.length <= ctx.maxArrayDetail
+    ) {
+      const max = Math.max(source.length, target.length);
+      for (let index = 0; index < max; index += 1) {
+        const nextPath = `${path}[${index}]`;
+        const sourceHas = index < source.length;
+        const targetHas = index < target.length;
+        if (sourceHas && !targetHas) {
+          differences.push(scriptDifference("create", ctx.section, ctx.key, ctx.displayName, nextPath, source[index], undefined));
+        } else if (!sourceHas && targetHas) {
+          differences.push(scriptDifference("delete", ctx.section, ctx.key, ctx.displayName, nextPath, undefined, target[index]));
+        } else {
+          diffScriptValue(nextPath, source[index], target[index], differences, ctx);
+        }
+      }
+      return;
+    }
+
+    differences.push(scriptDifference("update", ctx.section, ctx.key, ctx.displayName, path, source, target));
+  }
+
+  function scriptDifference(type, section, key, displayName, propertyPath, source, target) {
+    return {
+      type,
+      section,
+      scriptType: scriptTypeLabel(section),
+      scriptKey: key,
+      scriptName: displayName,
+      propertyPath,
+      propertyLabel: scriptPropertyLabel(propertyPath),
+      path: [section, key, propertyPath].filter(Boolean).join("."),
+      source: clone(source),
+      target: clone(target)
+    };
+  }
+
+  function scriptTypeLabel(section) {
+    return section === "ServerScripts" ? "SS（サーバスクリプト）" : "CS（クライアントスクリプト）";
+  }
+
+  function scriptPropertyLabel(path) {
+    if (!path) return "スクリプト全体";
+    return path.split(".").map((part) => {
+      const normalized = part.replace(/\[\d+\]$/, "");
+      const suffix = part.slice(normalized.length);
+      return `${scriptPropertyLabels.get(normalized) || normalized}${suffix}`;
+    }).join(" / ");
+  }
+
+  async function runScriptCompareWizard(defaults = {}) {
+    const picked = defaults.sourcePackage && defaults.targetPackage
+      ? {
+          source: {
+            fileName: defaults.sourceFileName || "source-site-package.json",
+            package: defaults.sourcePackage
+          },
+          target: {
+            fileName: defaults.targetFileName || "target-site-package.json",
+            package: defaults.targetPackage
+          }
+        }
+      : await pickScriptComparePackages();
+    const result = compareScriptSettings(picked.source.package, picked.target.package, defaults);
+
+    logScriptComparison("CS/SS comparison", picked, result);
+    return {
+      sourceFileName: picked.source.fileName,
+      targetFileName: picked.target.fileName,
+      ...result
+    };
+  }
+
+  async function pickScriptComparePackages() {
+    if (global.document?.body) {
+      return showScriptCompareDialog();
+    }
+    const source = await pickPackageFile();
+    const target = await pickPackageFile();
+    return { source, target };
+  }
+
+  function showScriptCompareDialog() {
+    return new Promise((resolve, reject) => {
+      let source = null;
+      let target = null;
+      const overlay = document.createElement("div");
+      overlay.className = "psa-script-compare";
+      overlay.innerHTML = scriptCompareDialogHtml();
+
+      const cleanup = () => {
+        document.removeEventListener("keydown", onKeyDown);
+        overlay.remove();
+      };
+      const setStatus = (message, kind = "") => {
+        const status = overlay.querySelector("[data-compare-status]");
+        status.textContent = message;
+        status.dataset.kind = kind;
+      };
+      const update = () => {
+        overlay.querySelector("[data-source-name]").textContent = source?.fileName || "未選択";
+        overlay.querySelector("[data-target-name]").textContent = target?.fileName || "未選択";
+        overlay.querySelector("[data-action='compare']").disabled = !(source && target);
+      };
+      const cancel = () => {
+        cleanup();
+        reject(new Error("Canceled."));
+      };
+      const onKeyDown = (event) => {
+        if (event.key === "Escape") cancel();
+      };
+
+      overlay.addEventListener("click", async (event) => {
+        const action = event.target?.closest?.("[data-action]")?.dataset.action;
+        if (!action) return;
+        try {
+          if (action === "cancel") {
+            cancel();
+          } else if (action === "source") {
+            setStatus("比較元のサイトパッケージJSONを選択してください。");
+            source = await pickPackageFile();
+            setStatus(`比較元を読み込みました: ${source.fileName}`, "ok");
+            update();
+          } else if (action === "target") {
+            setStatus("比較先のサイトパッケージJSONを選択してください。");
+            target = await pickPackageFile();
+            setStatus(`比較先を読み込みました: ${target.fileName}`, "ok");
+            update();
+          } else if (action === "compare") {
+            if (!source || !target) {
+              setStatus("比較元と比較先の両方を選択してください。", "error");
+              update();
+              return;
+            }
+            cleanup();
+            resolve({ source, target });
+          }
+        } catch (error) {
+          setStatus(error?.message || String(error), "error");
+          update();
+        }
+      });
+
+      document.addEventListener("keydown", onKeyDown);
+      document.body.appendChild(overlay);
+      update();
+    });
+  }
+
+  function scriptCompareDialogHtml() {
+    return `
+      <style>
+        .psa-script-compare {
+          position: fixed;
+          inset: 0;
+          z-index: 2147483647;
+          display: grid;
+          place-items: center;
+          background: rgba(20, 25, 33, 0.38);
+          color: #1f2937;
+          font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif;
+        }
+        .psa-script-compare-dialog {
+          width: min(620px, calc(100vw - 40px));
+          background: #f7f8fa;
+          border: 1px solid #d6dbe3;
+          border-radius: 14px;
+          box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+          overflow: hidden;
+        }
+        .psa-script-compare-header,
+        .psa-script-compare-body,
+        .psa-script-compare-footer {
+          padding: 16px 20px;
+        }
+        .psa-script-compare-header {
+          background: rgba(255, 255, 255, 0.9);
+          border-bottom: 1px solid #e2e6ed;
+        }
+        .psa-script-compare-header h2 {
+          margin: 0 0 4px;
+          font-size: 20px;
+        }
+        .psa-script-compare-header p,
+        .psa-script-compare-note {
+          margin: 0;
+          color: #5f6b7a;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+        .psa-script-compare-body {
+          display: grid;
+          gap: 12px;
+        }
+        .psa-script-compare-row {
+          display: grid;
+          grid-template-columns: 180px minmax(0, 1fr);
+          gap: 12px;
+          align-items: stretch;
+        }
+        .psa-script-compare-button {
+          border: 1px solid #c9d1dc;
+          border-radius: 8px;
+          background: #fff;
+          color: #263241;
+          padding: 10px 12px;
+          font: inherit;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .psa-script-compare-button.primary {
+          border-color: #2563eb;
+          background: #2563eb;
+          color: #fff;
+        }
+        .psa-script-compare-button:disabled {
+          opacity: .45;
+          cursor: not-allowed;
+        }
+        .psa-script-compare-file {
+          border: 1px solid #d8dbe2;
+          border-radius: 8px;
+          background: #fff;
+          padding: 10px 12px;
+          min-width: 0;
+        }
+        .psa-script-compare-file strong {
+          display: block;
+          font-size: 13px;
+        }
+        .psa-script-compare-file span {
+          display: block;
+          margin-top: 2px;
+          color: #6e6e73;
+          font-size: 12px;
+          overflow-wrap: anywhere;
+        }
+        .psa-script-compare-status {
+          min-height: 40px;
+          border: 1px solid #d8dbe2;
+          border-radius: 8px;
+          background: #fff;
+          padding: 10px 12px;
+          font-size: 13px;
+        }
+        .psa-script-compare-status[data-kind="ok"] {
+          border-color: #9ad0a2;
+          background: #f1faf2;
+        }
+        .psa-script-compare-status[data-kind="error"] {
+          border-color: #f2b8b5;
+          background: #fff4f2;
+          color: #b42318;
+        }
+        .psa-script-compare-footer {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          align-items: center;
+          border-top: 1px solid #e2e6ed;
+          background: rgba(255, 255, 255, 0.9);
+        }
+        .psa-script-compare-actions {
+          display: flex;
+          gap: 8px;
+        }
+        @media (max-width: 700px) {
+          .psa-script-compare-row,
+          .psa-script-compare-footer {
+            grid-template-columns: 1fr;
+            display: grid;
+          }
+          .psa-script-compare-actions {
+            justify-content: flex-start;
+          }
+        }
+      </style>
+      <div class="psa-script-compare-dialog" role="dialog" aria-modal="true" aria-label="CS/SS差分比較">
+        <header class="psa-script-compare-header">
+          <h2>CS / SS 差分比較</h2>
+          <p>2つのサイトパッケージJSONから、クライアントスクリプトとサーバスクリプトの差分を検出します。</p>
+        </header>
+        <main class="psa-script-compare-body">
+          <div class="psa-script-compare-row">
+            <button class="psa-script-compare-button primary" type="button" data-action="source">比較元JSONを選択</button>
+            <div class="psa-script-compare-file">
+              <strong>比較元</strong>
+              <span data-source-name>未選択</span>
+            </div>
+          </div>
+          <div class="psa-script-compare-row">
+            <button class="psa-script-compare-button primary" type="button" data-action="target">比較先JSONを選択</button>
+            <div class="psa-script-compare-file">
+              <strong>比較先</strong>
+              <span data-target-name>未選択</span>
+            </div>
+          </div>
+          <div class="psa-script-compare-status" data-compare-status>比較元と比較先のJSONを選択してください。</div>
+        </main>
+        <footer class="psa-script-compare-footer">
+          <p class="psa-script-compare-note">結果は Console に日本語の表で表示します。</p>
+          <div class="psa-script-compare-actions">
+            <button class="psa-script-compare-button" type="button" data-action="cancel">キャンセル</button>
+            <button class="psa-script-compare-button primary" type="button" data-action="compare">比較する</button>
+          </div>
+        </footer>
+      </div>
+    `;
+  }
+
+  function logScriptComparison(label, picked, result) {
+    console.log(label, {
+      sourceFileName: picked.source.fileName,
+      targetFileName: picked.target.fileName,
+      equal: result.equal,
+      summary: result.summary
+    });
+    if (result.differences.length > 0) {
+      console.table(formatScriptComparisonRows(result));
+    } else {
+      console.log("CS/SS comparison: 差分はありません。");
+    }
   }
 
   function buildPreflightComparison(sourcePackage, targetSite, options = {}) {
@@ -2475,6 +2948,19 @@
     }));
   }
 
+  function formatScriptComparisonRows(input) {
+    const rows = Array.isArray(input) ? input : input?.differences || [];
+    return rows.map((difference) => ({
+      "処理": operationTypeLabel(difference.type),
+      "種類": difference.scriptType,
+      "名前": difference.scriptName,
+      "差分箇所": difference.propertyLabel || scriptPropertyLabel(difference.propertyPath),
+      "パス": difference.path,
+      "比較元": formatValueForLog(difference.source),
+      "比較先": formatValueForLog(difference.target)
+    }));
+  }
+
   function operationTypeLabel(type) {
     return {
       create: "作成",
@@ -2482,6 +2968,15 @@
       delete: "削除",
       skip: "スキップ"
     }[type] || type || "";
+  }
+
+  function formatValueForLog(value) {
+    if (value === undefined) return "なし";
+    if (value === null) return "null";
+    const text = typeof value === "string" ? value : JSON.stringify(value);
+    return String(text)
+      .replace(/\s+/g, " ")
+      .slice(0, 180) + (String(text).replace(/\s+/g, " ").length > 180 ? "..." : "");
   }
 
   function formatSectionForLog(section) {
@@ -2576,6 +3071,7 @@
     applyEditorColumnsInCurrentPage,
     compareSitePackages,
     compareSiteSettings,
+    compareScriptSettings,
     buildPreflightComparison,
     planSiteSettings,
     applySiteSettings,
@@ -2583,10 +3079,12 @@
     pickPackageAndPlan,
     pickPackageAndApply,
     runWizard,
+    runScriptCompareWizard,
     parseSections,
     sectionLabel,
     formatPreflightRows,
     formatOperationRows,
+    formatScriptComparisonRows,
     selectableSections
   };
 

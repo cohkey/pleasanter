@@ -299,6 +299,27 @@ console.table(diff.differences.map(x => ({
 
 `diff.equal` が `true` なら、比較対象の `SiteSettings` は一致しています。`false` の場合は `differences` の `section` を見て、どの設定が違うか確認してください。
 
+## CS / SS の差分比較
+
+2つのサイトパッケージ JSON から、クライアントスクリプト（`Scripts`）とサーバスクリプト（`ServerScripts`）だけを比較できます。
+
+ランチャーを使う場合は、`load-local-js-from-file.js` を Console に貼り付け、`apply-site-package-settings.js` を読み込んだあと、`CS/SS差分比較` を押してください。比較元 JSON と比較先 JSON は別々のボタンで選べるため、別フォルダにあるファイルでも比較できます。
+
+Console から直接実行する場合も、ファイル選択用の小さい画面を出す次の形が安全です。
+
+```js
+await PleasanterSitePackageApplier.runScriptCompareWizard();
+```
+
+すでに2つのサイトパッケージを JavaScript オブジェクトとして持っている場合は、直接比較できます。
+
+```js
+const result = PleasanterSitePackageApplier.compareScriptSettings(sourcePackage, targetPackage);
+console.table(PleasanterSitePackageApplier.formatScriptComparisonRows(result));
+```
+
+結果は `処理`、`種類`、`名前`、`差分箇所`、`比較元`、`比較先` の表で出ます。`Id`、`SiteId`、`CreatedTime`、`UpdatedTime` などの移行時に変わりやすい値は比較から除外します。
+
 適用直後の戻り値にも `postApplyCompare` が入ります。`postApplyCompare.equal` が `false` の場合は、API が保存時に値を正規化したか、適用対象に含まれていない設定が残っています。エディタ項目の並び順も配列として比較するため、同じ項目でも順番が違えば差分になります。
 
 ## ブラウザE2E確認メモ

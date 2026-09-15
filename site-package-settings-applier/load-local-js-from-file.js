@@ -134,6 +134,13 @@
       wizardButton.disabled ? "待機中" : "開始できます",
       wizardButton.disabled ? "先にメインJSを読み込んでください。" : "サイトパッケージJSONを選ぶとウィザードが始まります。"
     );
+    const compareButton = makeButton("CS/SS差分比較", "secondary");
+    compareButton.disabled = !compareApi();
+    syncButtonState(compareButton);
+    const compareInfo = makeInfo(
+      compareButton.disabled ? "待機中" : "比較できます",
+      compareButton.disabled ? "先にメインJSを読み込んでください。" : "比較元JSONと比較先JSONを選んで、CS/SSの差分を確認できます。"
+    );
 
     const status = document.createElement("div");
     status.style.cssText = [
@@ -164,10 +171,16 @@
         scriptInfo.detail.textContent = `${result.size.toLocaleString()} bytes を読み込みました。`;
         wizardButton.disabled = !wizardApi();
         syncButtonState(wizardButton);
+        compareButton.disabled = !compareApi();
+        syncButtonState(compareButton);
         wizardInfo.title.textContent = wizardButton.disabled ? "読み込み失敗" : "開始できます";
         wizardInfo.detail.textContent = wizardButton.disabled
           ? "選択したJSに runWizard() がありません。apply-site-package-settings.js を選び直してください。"
           : "次にサイトパッケージJSONを選んでください。";
+        compareInfo.title.textContent = compareButton.disabled ? "比較不可" : "比較できます";
+        compareInfo.detail.textContent = compareButton.disabled
+          ? "選択したJSに runScriptCompareWizard() がありません。最新版の apply-site-package-settings.js を選び直してください。"
+          : "CS/SSだけを比較したい場合に使えます。";
         setStatus(status, `読み込み完了: ${result.fileName}`, "ok");
       } catch (error) {
         setStatus(status, errorMessage(error), "error");
@@ -193,11 +206,31 @@
       }
     });
 
+    compareButton.addEventListener("click", async () => {
+      try {
+        const api = compareApi();
+        if (!api) throw new Error("先に最新版の apply-site-package-settings.js を読み込んでください。");
+        setStatus(status, "比較元JSONと比較先JSONを選択してください。", "normal");
+        const result = await api.runScriptCompareWizard(options.compareDefaults || {});
+        setStatus(
+          status,
+          result.equal
+            ? "CS/SSの差分はありません。"
+            : `CS/SSの差分を検出しました。Consoleの表を確認してください。差分: ${result.differences.length}件`,
+          result.equal ? "ok" : "normal"
+        );
+        root.dispatchEvent(new CustomEvent("pleasanter-local-loader-script-compare-result", { detail: result }));
+      } catch (error) {
+        setStatus(status, errorMessage(error), "error");
+      }
+    });
+
     closeButton.addEventListener("click", closeLauncher);
 
     steps.append(
       makeStep(scriptButton, scriptInfo),
-      makeStep(wizardButton, wizardInfo)
+      makeStep(wizardButton, wizardInfo),
+      makeStep(compareButton, compareInfo)
     );
     footer.append(note, closeButton);
     body.append(steps, status, footer);
@@ -218,6 +251,11 @@
       : global.PleasanterViewPackageApplier?.runWizard
         ? global.PleasanterViewPackageApplier
         : null;
+  }
+
+  function compareApi() {
+    const api = global.PleasanterSitePackageApplier || global.PleasanterViewPackageApplier;
+    return api?.runScriptCompareWizard ? api : null;
   }
 
   function makeStep(button, info) {
