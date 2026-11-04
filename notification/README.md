@@ -1,46 +1,56 @@
-# 写真から転記した通知コード（原本）
+# レコード更新時のメール通知
 
-`sk-realtime-notification.js` は、提供されたIMG_9877〜IMG_9893（IMG_9880を除く16枚）に写っているコードを順につなぎ、転記したものです。インデントと空行は整えています。処理の改善や前回コードとの統合は行っていません。
+`sk-realtime-notification.js` は、提供された16枚の写真から転記したコードを基準に、`sendRealtimeNotification` の処理を関数へ分割したPleasanterのサーバスクリプトです。Ccログの表記を `CC` から `Cc` に統一しています。
 
-## 転記範囲
+## 処理の構成
 
-| 写真 | 主な内容 |
+`sendRealtimeNotification()` は、変更情報を読み、候補ルールの条件を判定し、成立したルールの通知処理を呼び出します。
+
+| 関数 | 役割 |
 | --- | --- |
-| IMG_9877 | SITE_IDS、getNotificationFields / getChangedFields |
-| IMG_9878〜9879 | getNotificationRules、getRelatedConditions |
-| IMG_9881〜9882 | getNotificationConditions、evaluateCondition |
-| IMG_9883 | evaluateConditions |
-| IMG_9884〜9885 | getNotificationTargets、getOrganizationCodes |
-| IMG_9885〜9886 | MAIL_SETTING_FIELDS、getMailRecipients |
-| IMG_9887 | parseNotificationUsers、parseMailAddresses |
-| IMG_9888 | createRecipientAddresses、removeDuplicateRecipients |
-| IMG_9889〜9893 | sendRealtimeNotification、テンプレート、送信処理 |
+| readNotificationChanges | context.UserDataから変更情報を読む |
+| getCandidateNotificationRules | 関連条件から有効な候補ルールを取得する |
+| matchesNotificationRule | ルールの条件を取得・評価し、判定を記録する |
+| processNotificationRule | 通知対象の有無を確認し、宛先・メール作成と送信を呼び出す |
+| getTargetRecipientAddresses | 店所・グループから組織ごとの宛先を解決する |
+| createNotificationRecipients | To・Cc・Bccを作成し、重複排除とToの必須チェックを行う |
+| renderNotificationTemplate | プレースホルダーを置換する |
+| createNotificationMessage | 件名・本文を作成する |
+| sendNotification | 送信内容を記録し、送信有効時だけ通知APIを呼ぶ |
 
-写真先頭の1〜2行、および末尾の画面外は確認できません。末尾は関数を閉じて構文が成立する形にしています。写真で確認できない実行呼び出しは追加していません。したがって、このファイル単体では通知処理は実行しません。更新前・更新後それぞれでどのように関数を呼び出すかは、別途元の登録内容との照合が必要です。
+## 登録・実行について
 
-## 原本のまま残した点
+ファイルは関数定義のみです。写真に写っていなかった実行呼び出しは追加していません。利用環境の元の登録内容と照合し、更新前に `getNotificationFields()`、更新後に `sendRealtimeNotification()` を呼び出す設定が必要です。Docker検証では、それぞれの実行条件にファイル本体と関数呼び出しを登録しています。
 
-- 電圧は変更検出・条件判定でClassE、メールテンプレートでClassFを使用。
-- TOはmodelの現在値ではなく、保存したchange.newValueと比較。
-- CheckAが真偽値trueのルールだけを採用。
-- 条件パターン未設定時は「1」。パターン内にCHANGED / TOがあることを評価時に必須とはしていない（候補抽出時はCHANGED / TOを使用）。
-- 通知条件検索は843614を直接使用。SITE_IDS.conditions / rulesは定義されているが参照されていない。
-- 不正なユーザIDは例外にせず除外。
-- getMailRecipientsに未使用のrawValue / convertedValueを取得するループがある。
-- 組織コードのログに単一のorganizationCodeではなくorganizationCodesを使用する箇所がある。
-- デバッグログとコメントアウトされたログを保持。
-- SEND_ENABLEDはfalse。送信は無効。
+更新前にsavedとmodelから変更情報を取得し、context.UserData.notificationDataで更新後へ渡します。SEND_ENABLEDはfalseで、メール送信は無効のままです。
 
-上記は写真の内容を保持したもので、修正事項として確定したものではありません。この写真転記版を通知コードの正とします。従来の notification-before-update.js / notification-after-update.js は削除し、本ファイルに差し替えています。
+## マスターと原本から保持した仕様
 
-## 検証範囲
+| 設定 | サイトID |
+| --- | --- |
+| conditions | 843614 |
+| rules | 843610 |
+| targets | 843620 |
+| organizations | 846822 |
+| mailSettings | 809267 |
 
-- node --checkによる構文確認。
-- Node.jsのVMとモックによる変更検出、TOの値参照、パターン判定、ユーザID変換、宛先重複排除の確認。
-- Pleasanterへの登録、検索API、実メール送信は未検証。
+通知条件の検索では843614を直接指定しています。SITE_IDS.conditions / rulesは定義のみで参照されていません。
 
-構文確認コマンド：
+- statusはClassB、tenshoCodeはClassD、denatsuはClassEで変更検出・判定します。メールの電圧はClassFです。
+- TOは保存したchange.newValueを比較します。CheckAが真偽値trueのルールだけを採用します。
+- 同じ条件パターン内はAND、別パターン間はORです。未設定のパターンは「1」です。候補抽出時はCHANGED / TOを使いますが、各パターンにトリガーがあることは評価時に必須としていません。
+- 宛先は更新後の店所コードから解決します。To > Cc > Bccの順に、大文字・小文字を区別せず文字列の重複を排除します。
+- 不正なユーザIDは除外します。To不足、不正メール、未定義の置換項目などでは例外を送出します。
+- ルール単位で例外を捕捉しません。処理中に例外が発生すると後続ルールも中断します。
+- 件名・本文では `{件名}`、`{店所コード}`、`{ステータス}`、`{電圧}` が使えます。
+
+## 検証
 
 ```sh
 node --check notification/sk-realtime-notification.js
+node --test notification/test/realtime-notification.test.cjs
 ```
+
+29件のテストで、正常系、条件分岐、宛先生成、Cc、重複排除、異常系、送信APIの成功・失敗（モック）を確認します。`NOTIFICATION_BASELINE` に原本ファイルのパスを渡すと、28シナリオの結果・ログ・API呼び出し順・例外を原本と比較します（Ccログの表記差を除く）。
+
+[Dockerでの検証結果](VALIDATION.md)も参照してください。
