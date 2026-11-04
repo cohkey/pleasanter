@@ -381,28 +381,30 @@ function removeDuplicateRecipients(recipients) {
     return recipients;
 }
 
-function sendRealtimeNotification() {
+/**
+ * 更新前に保存した変更情報を読み取る。
+ * 引き継ぎデータがない場合はnullを返す。
+ */
+function readNotificationChanges() {
     const notificationDataJson = context.UserData.notificationData;
 
     if (!notificationDataJson) {
-        return;
+        return null;
     }
 
     const notificationData = JSON.parse(notificationDataJson);
-
     const changedFields = notificationData.changedFields || {};
-    const changedFieldNames = Object.keys(changedFields);
 
     context.Log(`changedFields: ${JSON.stringify(changedFields)}`);
 
-    if (changedFieldNames.length === 0) {
-        return;
-    }
+    return changedFields;
+}
 
-    // 変更項目に関連する通知条件を取得
+/**
+ * 変更された項目を起点に、有効な候補ルールを取得する。
+ */
+function getCandidateNotificationRules(changedFieldNames) {
     const relatedConditions = getRelatedConditions(changedFieldNames);
-
-    // 候補となる通知ルールIDを抽出
     const notificationRuleIds = [
         ...new Set(
             relatedConditions.map(condition =>
@@ -414,168 +416,217 @@ function sendRealtimeNotification() {
     context.Log(`通知候補ルールID: ${JSON.stringify(notificationRuleIds)}`);
 
     if (notificationRuleIds.length === 0) {
-        return;
+        return [];
     }
 
-    // 有効な通知ルールを取得
     const notificationRules = getNotificationRules(notificationRuleIds);
 
-    // 取得結果をログで確認
     for (const rule of notificationRules) {
         context.Log(`通知ID: ${rule.Title}, 通知名: ${rule.DescriptionA}`);
     }
 
-    for (const rule of notificationRules) {
-        const conditions = getNotificationConditions(rule.ResultId);
+    return notificationRules;
+}
 
-        context.Log(`通知条件の取得件数: ${conditions.length}`);
+/**
+ * ルールに紐づく条件を取得し、判定結果を記録する。
+ */
+function matchesNotificationRule(rule, changedFields) {
+    const conditions = getNotificationConditions(rule.ResultId);
 
-        for (const condition of conditions) {
-            context.Log(
-                `パターン: ${condition.ClassB}` +
-                `項目: ${condition.ClassC}` +
-                `判定方法: ${condition.ClassD}` +
-                `比較値: ${condition.DescriptionB}`
-            );
-        }
+    context.Log(`通知条件の取得件数: ${conditions.length}`);
 
-        const matched = evaluateConditions(
-            conditions,
-            changedFields
+    for (const condition of conditions) {
+        context.Log(
+            `パターン: ${condition.ClassB}` +
+            `項目: ${condition.ClassC}` +
+            `判定方法: ${condition.ClassD}` +
+            `比較値: ${condition.DescriptionB}`
         );
+    }
 
-        context.Log(`通知ID: ${rule.Title}, 条件成立: ${matched}`);
+    const matched = evaluateConditions(conditions, changedFields);
 
-        if (!matched) {
-            continue;
-        }
+    context.Log(`通知ID: ${rule.Title}, 条件成立: ${matched}`);
 
-        // 通知対象グループを取得
-        const notificationTargets = getNotificationTargets(rule.ResultId);
+    return matched;
+}
 
-        // 取得結果をログに出力
+/**
+ * 通知対象のグループから、組織ごとの送信先を解決する。
+ */
+function getTargetRecipientAddresses(rule, tenshoCode, target) {
+    const groupCode = target.group;
+    const addressType = target.addressType;
+
+    if (!["To", "Cc", "Bcc"].includes(addressType)) {
+        throw new Error(`宛先区分が不正です: ${addressType}`);
+    }
+
+    const organizationCodes = getOrganizationCodes(tenshoCode, groupCode);
+
+    context.Log(
+        `通知ID: ${rule.Title}, ` +
+        `店所コード: ${tenshoCode}, ` +
+        `グループ区分: ${groupCode} ` +
+        `組織コード: ${JSON.stringify(organizationCodes)}`
+    );
+
+    const addresses = [];
+
+    for (const organizationCode of organizationCodes) {
+        const mailRecipients = getMailRecipients(organizationCode);
+
         context.Log(
             `通知ID: ${rule.Title}, ` +
-            `通知対象: ${JSON.stringify(notificationTargets)}`
+            `組織コード: ${organizationCodes}, ` +
+            `宛先区分: ${addressType}, ` +
+            `設定件数: ${mailRecipients.length}, ` +
+            `宛先: ${JSON.stringify(mailRecipients)}`
         );
 
-        if (notificationTargets.length === 0) {
-            context.Log(`通知対象が未設定: ${rule.Title}`);
-            continue;
-        }
+        addresses.push(...createRecipientAddresses(mailRecipients));
+    }
 
-        const tenshoCode = String(model.ClassD ?? "");
+    return addresses;
+}
 
-        const recipients = {
-            To: [],
-            Cc: [],
-            Bcc: []
-        };
+/**
+ * To・Cc・Bccを作成し、重複排除とToの必須チェックを行う。
+ */
+function createNotificationRecipients(rule, tenshoCode, notificationTargets) {
+    const recipients = {
+        To: [],
+        Cc: [],
+        Bcc: []
+    };
 
-        for (const target of notificationTargets) {
-            // 通知対象のグループ区分
-            const groupCode = target.group;
-            const addressType = target.addressType;
+    for (const target of notificationTargets) {
+        const addresses = getTargetRecipientAddresses(rule, tenshoCode, target);
+        recipients[target.addressType].push(...addresses);
+    }
 
-            if (!["To", "Cc", "Bcc"].includes(addressType)) {
-                throw new Error(`宛先区分が不正です: ${addressType}`);
+    removeDuplicateRecipients(recipients);
+
+    if (recipients.To.length === 0) {
+        throw new Error("Toの通知先がありません");
+    }
+
+    return recipients;
+}
+
+/**
+ * 件名・本文に含まれるプレースホルダーを置換する。
+ */
+function renderNotificationTemplate(template, templateValues) {
+    return String(template ?? "").replace(
+        /\{([^{}]+)\}/g,
+        (match, key) => {
+            if (!Object.prototype.hasOwnProperty.call(templateValues, key)) {
+                throw new Error(`未定義の置換項目: ${key}`);
             }
 
-            // 店所コードとグループ区分から組織コードを取得
-            const organizationCodes = getOrganizationCodes(tenshoCode, groupCode);
-
-            context.Log(
-                `通知ID: ${rule.Title}, ` +
-                `店所コード: ${tenshoCode}, ` +
-                `グループ区分: ${groupCode} ` +
-                `組織コード: ${JSON.stringify(organizationCodes)}`
-            );
-
-            for (const organizationCode of organizationCodes) {
-                const mailRecipients = getMailRecipients(organizationCode);
-
-                context.Log(
-                    `通知ID: ${rule.Title}, ` +
-                    `組織コード: ${organizationCodes}, ` +
-                    `宛先区分: ${addressType}, ` +
-                    `設定件数: ${mailRecipients.length}, ` +
-                    `宛先: ${JSON.stringify(mailRecipients)}`
-                );
-
-                // ユーザID・メールアドレスを宛先に変換
-                const addresses = createRecipientAddresses(mailRecipients);
-
-                recipients[addressType].push(...addresses);
-
-                // for (const recipient of mailRecipients) {
-                //     context.Log(`通知先: ${recipient.notificationUsers}`);
-                //     context.Log(`メールアドレス設定あり: ${recipient.emailAddresses.trim() !== ""}`);
-                // }
-            }
+            return templateValues[key];
         }
+    );
+}
 
-        // 重複する宛先を除外
-        removeDuplicateRecipients(recipients);
+/**
+ * 更新後のレコードからメールの件名・本文を作成する。
+ */
+function createNotificationMessage(rule, tenshoCode) {
+    const templateValues = {
+        "件名": String(model.Title ?? ""),
+        "店所コード": tenshoCode,
+        "ステータス": String(model.ClassB ?? ""),
+        "電圧": String(model.ClassF ?? "")
+    };
 
-        if (recipients.To.length === 0) {
-            throw new Error("Toの通知先がありません");
-        }
+    return {
+        subject: renderNotificationTemplate(rule.DescriptionB, templateValues),
+        body: renderNotificationTemplate(rule.DescriptionC, templateValues)
+    };
+}
 
-        // メールテンプレートの置換地
-        const templateValues = {
-            "件名": String(model.Title ?? ""),
-            "店所コード": tenshoCode,
-            "ステータス": String(model.ClassB ?? ""),
-            "電圧": String(model.ClassF ?? "")
-        };
+/**
+ * 送信内容を記録し、送信が有効な場合だけ通知APIを呼び出す。
+ */
+function sendNotification(rule, recipients, message) {
+    context.Log(`通知ID: ${rule.Title}`);
+    context.Log(`To: ${recipients.To}`);
+    context.Log(`Cc: ${recipients.Cc}`);
+    context.Log(`Bcc: ${recipients.Bcc}`);
+    context.Log(`件名: ${message.subject}`);
+    context.Log(`本文: ${message.body}`);
 
-        // 件名・本文のプレースホルダーを置換
-        const renderTemplate = template =>
-            String(template ?? "").replace(
-                /\{([^{}]+)\}/g,
-                (match, key) => {
-                    if (!Object.prototype.hasOwnProperty.call(
-                        templateValues, key
-                    )) {
-                        throw new Error(
-                            `未定義の置換項目: ${key}`
-                        );
-                    }
-                    return templateValues[key];
-                }
-            );
+    const SEND_ENABLED = false;
 
-        const subject = renderTemplate(rule.DescriptionB);
-        const body = renderTemplate(rule.DescriptionC);
+    if (!SEND_ENABLED) {
+        return;
+    }
 
-        // 送信直前の確認ログ
-        context.Log(`通知ID: ${rule.Title}`);
-        context.Log(`To: ${recipients.To}`);
-        context.Log(`CC: ${recipients.Cc}`);
-        context.Log(`Bcc: ${recipients.Bcc}`);
-        context.Log(`件名: ${subject}`);
-        context.Log(`本文: ${body}`);
+    const notification = notifications.New();
 
-        // メール送信
-        const SEND_ENABLED = false;
+    notification.Type = 1;
+    notification.Address = recipients.To.join(",");
+    notification.CcAddress = recipients.Cc.join(",");
+    notification.BccAddress = recipients.Bcc.join(",");
+    notification.Title = message.subject;
+    notification.Body = message.body;
 
-        if (SEND_ENABLED) {
-            const notification = notifications.New();
+    if (notification.Send()) {
+        context.Log(`リアルタイム通知の送信成功（通知ID: ${rule.Title}）`);
+        context.AddMessage(`対象グループに通知メールを送信しました。（通知ID: ${rule.Title}）`, 'alert-information');
+    } else {
+        context.Log(`リアルタイム通知の送信失敗（通知ID: ${rule.Title}）`);
+        context.AddMessage(`通知メールの送信に失敗しました。（通知ID: ${rule.Title}）`, 'alert-error');
+    }
+}
 
-            notification.Type = 1;
-            notification.Address = recipients.To.join(",");
-            notification.CcAddress = recipients.Cc.join(",");
-            notification.BccAddress = recipients.Bcc.join(",");
-            notification.Title = subject;
-            notification.Body = body;
+/**
+ * 条件が成立したルールの通知対象を取得し、通知を処理する。
+ */
+function processNotificationRule(rule) {
+    const notificationTargets = getNotificationTargets(rule.ResultId);
 
-            if(notification.Send()){
-                context.Log(`リアルタイム通知の送信成功（通知ID: ${rule.Title}）`)
-                context.AddMessage(`対象グループに通知メールを送信しました。（通知ID: ${rule.Title}）`, 'alert-information')
-            }else{
-                context.Log(`リアルタイム通知の送信失敗（通知ID: ${rule.Title}）`)
-                context.AddMessage(`通知メールの送信に失敗しました。（通知ID: ${rule.Title}）`, 'alert-error')
-            }
+    context.Log(
+        `通知ID: ${rule.Title}, ` +
+        `通知対象: ${JSON.stringify(notificationTargets)}`
+    );
+
+    if (notificationTargets.length === 0) {
+        context.Log(`通知対象が未設定: ${rule.Title}`);
+        return;
+    }
+
+    const tenshoCode = String(model.ClassD ?? "");
+    const recipients = createNotificationRecipients(rule, tenshoCode, notificationTargets);
+    const message = createNotificationMessage(rule, tenshoCode);
+
+    sendNotification(rule, recipients, message);
+}
+
+/**
+ * 変更情報を起点に候補ルールを判定し、成立した通知を処理する。
+ */
+function sendRealtimeNotification() {
+    const changedFields = readNotificationChanges();
+
+    if (!changedFields) {
+        return;
+    }
+
+    const changedFieldNames = Object.keys(changedFields);
+
+    if (changedFieldNames.length === 0) {
+        return;
+    }
+
+    const notificationRules = getCandidateNotificationRules(changedFieldNames);
+
+    for (const rule of notificationRules) {
+        if (matchesNotificationRule(rule, changedFields)) {
+            processNotificationRule(rule);
         }
     }
 }
