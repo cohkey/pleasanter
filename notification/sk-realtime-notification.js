@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/05
+ * ・複数値を文字列比較するIN・NOT_IN演算子と比較値の設定検証を追加
  * ・通知条件を親ルールIDで絞り込み、別通知IDの条件が混在する問題を修正
  */
 
@@ -139,6 +140,19 @@ function parseFromToComparison(value) {
     return values;
 }
 
+/**
+ * IN・NOT_INの比較値を2個以上の空でない文字列に分解する。
+ */
+function parseMultipleComparisonValues(value, operator) {
+    const values = value.split(",").map(part => part.trim());
+
+    if (values.length < 2 || values.some(part => part === "")) {
+        throw new Error(`${operator}の比較値が不正です（カンマ区切りで2個以上の値を指定）: ${value}`);
+    }
+
+    return values;
+}
+
 function evaluateCondition(condition, changedFields) {
     const field = String(condition.ClassC);
     const operator = String(condition.ClassD);
@@ -192,6 +206,14 @@ function evaluateCondition(condition, changedFields) {
         case "NE":
             return newValue !== value;
 
+        case "IN":
+        case "NOT_IN": {
+            const values = parseMultipleComparisonValues(value, operator);
+            const included = values.includes(newValue);
+
+            return operator === "IN" ? included : !included;
+        }
+
         case "GE":
             return newValue !== "" &&
                 value !== "" &&
@@ -219,9 +241,12 @@ function evaluateConditions(conditions, changedFields) {
     const patterns = {};
 
     for (const condition of conditions) {
-        // AND/ORの短絡評価でFROM_TOの設定エラーが隠れないよう事前検証する。
-        if (String(condition.ClassD) === "FROM_TO") {
+        // AND/ORの短絡評価で比較値の設定エラーが隠れないよう事前検証する。
+        const operator = String(condition.ClassD);
+        if (operator === "FROM_TO") {
             parseFromToComparison(String(condition.DescriptionB ?? ""));
+        } else if (operator === "IN" || operator === "NOT_IN") {
+            parseMultipleComparisonValues(String(condition.DescriptionB ?? ""), operator);
         }
 
         const pattern = String(condition.ClassB || "1");
