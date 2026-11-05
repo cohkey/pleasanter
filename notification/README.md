@@ -51,7 +51,7 @@ node --check notification/sk-realtime-notification.js
 node --test notification/test/realtime-notification.test.cjs
 ```
 
-51件のテストで、正常系、条件分岐、宛先生成、Cc、重複排除、異常系、送信APIの成功・失敗（モック）を確認します。`NOTIFICATION_BASELINE` に原本ファイルのパスを渡すと、28シナリオの結果・ログ・API呼び出し順・例外を原本と比較します（Ccログの表記差を除く）。
+55件のテストで、正常系、条件分岐、宛先生成、Cc、重複排除、異常系、送信APIの成功・失敗（モック）を確認します。通知IDが異なる条件の混在、誤成立・誤不成立、別ルールの設定エラー混入も回帰テストで確認します。条件検索の形式を変更しているため、写真原本とのAPI呼び出しの完全一致は現行版の検証基準に含めません。
 
 [Dockerでの検証結果](VALIDATION.md)も参照してください。
 
@@ -73,3 +73,11 @@ FROM_TOはCHANGED・TOと同じ通知候補抽出のトリガーです。同一�
 空値、カンマ不足・過多、片側の空値（例：`0100`、`0100,`、`,0200`、`0100,0200,0300`）は、FROM_TOの設定エラーとして例外を送出します。候補ルールの条件を評価する際は、AND/ORの短絡評価で不正なFROM_TOが隠れないよう、全FROM_TO条件を先に検証します。既存の条件演算子は変更していません。
 
 [FROM_TO追加時のPleasanter 1.4.23.3検証結果](FROM_TO-VALIDATION.md)
+
+## 通知IDごとの条件分離
+
+通知条件はClassAの親ルールID（通知ルールのResultId）で取得し、そのルール内のClassBでパターンをまとめます。別通知IDのパターン「1」は別の条件群として扱います。
+
+通知IDがリンク選択式の場合にも検索が効くよう、ClassAの検索値はJSON配列文字列、検索方法はExactMatchMultipleを使用します。取得後にもClassAと対象ResultIdを文字列の完全一致で確認し、別ルールの条件を評価へ渡しません。
+
+[条件混在の再現・修正検証](RULE-SCOPE-VALIDATION.md)

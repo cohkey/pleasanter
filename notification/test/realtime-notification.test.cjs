@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { test } = require('node:test');
 
-const source = fs.readFileSync(path.join(__dirname, '../sk-realtime-notification.js'), 'utf8');
+const source = fs.readFileSync(process.env.NOTIFICATION_SOURCE || path.join(__dirname, '../sk-realtime-notification.js'), 'utf8');
 const baseline = process.env.NOTIFICATION_BASELINE
     ? fs.readFileSync(process.env.NOTIFICATION_BASELINE, 'utf8')
     : null;
@@ -42,6 +42,10 @@ function execute(code, input) {
                     846822: input.organizations, 809267: input.mail };
                 if (!query) return input.rules.filter(rule => rule.ResultId === id);
                 const view = JSON.parse(query).View;
+                // 分類項目の検索が効かず、別ルールの条件も返る状況を再現する。
+                if (input.ignoreConditionRuleFilter && id === 843614 && view.ColumnFilterHash.ClassA !== undefined) {
+                    return input.conditions;
+                }
                 return (tables[id] || []).filter(row => Object.entries(view.ColumnFilterHash).every(([key, value]) =>
                     view.ColumnFilterSearchTypes[key] === 'ExactMatchMultiple'
                         ? JSON.parse(value).includes(row[key])
@@ -108,7 +112,7 @@ const cases = [
         f.targets[0].ClassC = 'INVALID';
         f.rules.push({...f.rules[0],ResultId:11,Title:'後続ルール'});
         f.conditions.push({...f.conditions[0],ClassA:'11'});
-    }, r => { assert.ok(r.error); assert.equal(r.events.some(e => e[0]==='get' && e[2]?.includes('"ClassA":"11"')), false); }],
+    }, r => { assert.ok(r.error); assert.equal(r.events.some(e => e[0]==='get' && e[2] && JSON.parse(e[2]).View.ColumnFilterHash.ClassA === '["11"]'), false); }],
     ['送信成功（テスト内の通知APIモックのみ）', f => { f.sendEnabled = true; }, r => {
         const sent = r.events.find(e => e[0] === 'send')[1];
         assert.equal(sent.Address, '[User1],test@example.invalid');
@@ -225,3 +229,69 @@ for (const [name, extra, expected] of [
         assert.ok(logs(result).includes('通知候補ルールID: ["10"]'));
     });
 }
+
+
+function mixedRuleFixture() {
+    const input = fixture();
+    input.ignoreConditionRuleFilter = true;
+    input.data = JSON.stringify({ changedFields: { status: { oldValue: '0000', newValue: '0100' } } });
+    input.model.ClassB = '0100';
+    input.model.ClassE = '60kV';
+    input.rules[0].Title = 'N001';
+    input.rules.push({ ...input.rules[0], ResultId: 11, Title: 'N999' });
+    input.conditions = [
+        { ...condition('FROM_TO', '0000,0100'), ClassA: '10' },
+        { ...condition('NE', '6kV', 'denatsu'), ClassA: '10' },
+        { ...condition('NE', '20kV', 'denatsu'), ClassA: '10' },
+        { ...condition('TO', '0220'), ClassA: '11' },
+        { ...condition('EQ', '6kV', 'denatsu'), ClassA: '11' },
+        { ...condition('TO', '0300', 'status', '2'), ClassA: '11' }
+    ];
+    return input;
+}
+
+test('別通知IDで同じパターン1を使ってもN001だけ成立する', () => {
+    const result = execute(source, mixedRuleFixture());
+    assert.equal(result.error, undefined);
+    assert.ok(logs(result).includes('通知ID: N001, 条件成立: true'));
+    assert.ok(logs(result).includes('通知ID: N999, 条件成立: false'));
+    assert.equal(logs(result).filter(value => value === '通知条件の取得件数: 3').length, 2);
+    assert.equal(logs(result).filter(value => value.startsWith('件名:')).length, 1);
+});
+
+test('別通知IDの条件で自ルールを誤って成立させない', () => {
+    const input = mixedRuleFixture();
+    input.conditions[0].DescriptionB = '0000,9999';
+    input.conditions[3].DescriptionB = '0100';
+    input.conditions[4].DescriptionB = '60kV';
+    const result = execute(source, input);
+    assert.ok(logs(result).includes('通知ID: N001, 条件成立: false'));
+    assert.ok(logs(result).includes('通知ID: N999, 条件成立: true'));
+});
+
+test('別通知IDの不正なFROM_TOを自ルールの評価に含めない', () => {
+    const input = mixedRuleFixture();
+    // N999自体は評価しない。N001に無関係な条件が返ってきても設定例外にしない。
+    input.rules = [input.rules[0]];
+    input.conditions[3] = { ...condition('FROM_TO', 'bad'), ClassA: '11' };
+    const result = execute(source, input);
+    assert.equal(result.error, undefined);
+    assert.ok(logs(result).includes('通知ID: N001, 条件成立: true'));
+});
+
+test('条件検索は親IDを配列として指定し、取得後も完全一致で絞り込む', () => {
+    let requested;
+    const sandbox = {
+        items: { Get(id, data) {
+            requested = JSON.parse(data).View;
+            return [{ClassA:'10'}, {ClassA:10}, {ClassA:'11'}, {ClassA:'100'}, {}, {ClassA:''}];
+        } }
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(source, sandbox);
+    const rows = sandbox.getNotificationConditions(10);
+    assert.equal(requested.ColumnFilterHash.ClassA, '["10"]');
+    assert.equal(requested.ColumnFilterSearchTypes.ClassA, 'ExactMatchMultiple');
+    assert.equal(rows.length, 2);
+    assert.ok(rows.every(row => String(row.ClassA) === '10'));
+});
