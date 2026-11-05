@@ -1,0 +1,31 @@
+name: Notification checks
+
+on:
+  pull_request:
+    paths:
+      - 'notification/**'
+      - '.github/workflows/notification-checks.yml'
+  push:
+    paths:
+      - 'notification/**'
+      - '.github/workflows/notification-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notification-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax
+        run: node --check notification/sk-realtime-notification.js
+      - name: Run notification regression tests
+        run: node --test notification/test/realtime-notification.test.cjs
+      - name: Verify tests detect broken rule isolation
+        run: node notification/test/check-rule-scope-regression.cjs

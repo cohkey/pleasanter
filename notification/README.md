@@ -2,6 +2,15 @@
 
 `sk-realtime-notification.js` は、提供された16枚の写真から転記したコードを基準に、`sendRealtimeNotification` の処理を関数へ分割したPleasanterのサーバスクリプトです。Ccログの表記を `CC` から `Cc` に統一しています。
 
+## 設計・運用・検証資料
+
+| 資料 | 内容 |
+| --- | --- |
+| [設計書・仕様書とフロー図](docs/DESIGN.md) | 全体フロー、データモデル、項目、演算子、ルール境界、宛先、例外 |
+| [原因分析・見逃し・再発防止](docs/INCIDENT-20261105.md) | なぜテストがあっても見逃したか、実施済みと未実施の対策 |
+| [検証方針・変更時の確認手順](docs/TESTING.md) | 不変条件、CI、列設定別の実更新、PR確認票 |
+
+
 ## 処理の構成
 
 `sendRealtimeNotification()` は、変更情報を読み、候補ルールの条件を判定し、成立したルールの通知処理を呼び出します。
@@ -49,6 +58,7 @@
 ```sh
 node --check notification/sk-realtime-notification.js
 node --test notification/test/realtime-notification.test.cjs
+node notification/test/check-rule-scope-regression.cjs
 ```
 
 55件のテストで、正常系、条件分岐、宛先生成、Cc、重複排除、異常系、送信APIの成功・失敗（モック）を確認します。通知IDが異なる条件の混在、誤成立・誤不成立、別ルールの設定エラー混入も回帰テストで確認します。条件検索の形式を変更しているため、写真原本とのAPI呼び出しの完全一致は現行版の検証基準に含めません。
@@ -81,3 +91,5 @@ FROM_TOはCHANGED・TOと同じ通知候補抽出のトリガーです。同一�
 通知IDがリンク選択式の場合にも検索が効くよう、ClassAの検索値はJSON配列文字列、検索方法はExactMatchMultipleを使用します。取得後にもClassAと対象ResultIdを文字列の完全一致で確認し、別ルールの条件を評価へ渡しません。
 
 [条件混在の再現・修正検証](RULE-SCOPE-VALIDATION.md)
+
+通知関連のpush / PRでは、構文・回帰テスト・防御処理を外した場合の検出力確認をGitHub Actionsで実行します。Pleasanterの実更新はCIには含めず、変更時の確認手順に従って別途実施します。
