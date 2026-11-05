@@ -88,7 +88,7 @@ function getRelatedConditions(changedFieldNames) {
     context.Log(`records.length: ${records.length}, records[0]: ${JSON.stringify(records[0])}`);
 
     // 通知の基点となる判定方法
-    const triggerOperators = ["CHANGED", "TO"];
+    const triggerOperators = ["CHANGED", "TO", "FROM_TO"];
 
     return records.filter(record => {
         context.Log(`record.ClassD: ${record.ClassD}`);
@@ -115,6 +115,20 @@ function getNotificationConditions(ruleId) {
         843614,
         JSON.stringify(data)
     ));
+}
+
+/**
+ * FROM_TOの比較値を変更前・変更後の文字列に分解する。
+ * 空値・区切り不足・区切り過多は通知条件の設定エラーとする。
+ */
+function parseFromToComparison(value) {
+    const values = value.split(",").map(part => part.trim());
+
+    if (values.length !== 2 || values.some(part => part === "")) {
+        throw new Error(`FROM_TOの比較値が不正です（変更前,変更後を指定）: ${value}`);
+    }
+
+    return values;
 }
 
 function evaluateCondition(condition, changedFields) {
@@ -155,6 +169,15 @@ function evaluateCondition(condition, changedFields) {
             return change !== undefined &&
                 String(change.newValue ?? "") === value;
 
+        case "FROM_TO": {
+            const [fromValue, toValue] = parseFromToComparison(value);
+
+            return change !== undefined &&
+                String(change.oldValue ?? "") === fromValue &&
+                String(change.newValue ?? "") === toValue &&
+                fromValue !== toValue;
+        }
+
         case "EQ":
             return newValue === value;
 
@@ -188,6 +211,11 @@ function evaluateConditions(conditions, changedFields) {
     const patterns = {};
 
     for (const condition of conditions) {
+        // AND/ORの短絡評価でFROM_TOの設定エラーが隠れないよう事前検証する。
+        if (String(condition.ClassD) === "FROM_TO") {
+            parseFromToComparison(String(condition.DescriptionB ?? ""));
+        }
+
         const pattern = String(condition.ClassB || "1");
 
         if (!patterns[pattern]) {
