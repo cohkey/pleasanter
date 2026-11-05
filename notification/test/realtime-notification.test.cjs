@@ -295,3 +295,89 @@ test('条件検索は親IDを配列として指定し、取得後も完全一致
     assert.equal(rows.length, 2);
     assert.ok(rows.every(row => String(row.ClassA) === '10'));
 });
+
+for (const operator of ['IN', 'NOT_IN']) {
+    for (const [target, comparison, included] of [
+        ['6kV', '6kV,20kV', true],
+        ['20kV', '6kV,20kV', true],
+        ['60kV', '6kV,20kV', false],
+        ['6', '6kV,20kV', false],
+        ['6kv', '6kV,20kV', false],
+        ['6kV ', '6kV,20kV', false],
+        ['', '6kV,20kV', false],
+        [null, '6kV,20kV', false],
+        [undefined, '6kV,20kV', false],
+        ['6kV', ' 6kV , 20kV ', true],
+        ['0100', '0100,0200', true],
+        ['100', '0100,0200', false],
+        [100, '100,200', true],
+        ['35kV', '6kV,20kV,35kV', true],
+        ['6kV', '6kV,6kV', true]
+    ]) {
+        test(`${operator}: ${JSON.stringify(target)} / ${comparison}`, () => {
+            assert.equal(engine({ ClassE: target }).evaluateCondition(
+                condition(operator, comparison, 'denatsu'), {}
+            ), operator === 'IN' ? included : !included);
+        });
+    }
+
+    for (const value of [undefined, null, '', ' ', '6kV', ' 6kV ', ',', '6kV, ', ',20kV', '6kV,,20kV', '6kV,20kV,', '6kV;20kV']) {
+        test(`${operator}: 設定エラー ${JSON.stringify(value)}`, () => {
+            const c = condition(operator, value, 'denatsu');
+            const ss = engine({ ClassE: '' });
+            const error = new RegExp(`${operator}の比較値が不正`);
+            assert.throws(() => ss.evaluateCondition(c, {}), error);
+            assert.throws(() => ss.evaluateConditions([c], {}), error);
+        });
+    }
+
+    test(`${operator}: AND/ORの短絡評価で設定エラーを隠さない`, () => {
+        const ss = engine({ ClassE: '60kV' });
+        assert.throws(() => ss.evaluateConditions([
+            condition('EQ', '6kV', 'denatsu'), condition(operator, 'invalid', 'denatsu')
+        ], {}), new RegExp(`${operator}の比較値が不正`));
+        assert.throws(() => ss.evaluateConditions([
+            condition('EQ', '60kV', 'denatsu'), condition(operator, 'invalid', 'denatsu', '2')
+        ], {}), new RegExp(`${operator}の比較値が不正`));
+    });
+
+    test(`${operator}: 単独では通知トリガーにしない`, () => {
+        const input = fixture();
+        input.data = JSON.stringify({ changedFields: { denatsu: { oldValue: '6kV', newValue: '20kV' } } });
+        input.model.ClassE = '20kV';
+        input.conditions = [condition(operator, '6kV,20kV', 'denatsu')];
+        const result = execute(source, input);
+        assert.equal(result.error, undefined);
+        assert.equal(hasMessage(result), false);
+        assert.equal(result.events.some(e => e[0] === 'get' && e[1] === 10), false);
+    });
+
+    for (const target of ['6kV', '60kV', '']) {
+        test(`${operator}: FROM_TOとのAND / 電圧${JSON.stringify(target)}`, () => {
+            const input = mixedRuleFixture();
+            input.rules = [input.rules[0]];
+            input.model.ClassE = target;
+            input.conditions = [condition('FROM_TO', '0000,0100'), condition(operator, '6kV,20kV', 'denatsu')];
+            const result = execute(source, input);
+            assert.equal(result.error, undefined);
+            assert.equal(hasMessage(result), operator === 'IN' ? target === '6kV' : target !== '6kV');
+        });
+    }
+
+    test(`${operator}: 異なるパターンとのORを維持`, () => {
+        const ss = engine({ ClassE: '60kV' });
+        const comparison = operator === 'IN' ? '6kV,20kV' : '60kV,20kV';
+        assert.equal(ss.evaluateConditions([
+            condition(operator, comparison, 'denatsu'), condition('EQ', '60kV', 'denatsu', '2')
+        ], {}), true);
+    });
+
+    test(`${operator}: 別ルールの不正な比較値を評価しない`, () => {
+        const input = mixedRuleFixture();
+        input.rules = [input.rules[0]];
+        input.conditions[3] = { ...condition(operator, 'invalid', 'denatsu'), ClassA: '11' };
+        const result = execute(source, input);
+        assert.equal(result.error, undefined);
+        assert.ok(logs(result).includes('通知ID: N001, 条件成立: true'));
+    });
+}
