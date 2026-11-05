@@ -134,3 +134,94 @@ test('Ccログの表記を統一', () => {
     assert.match(source, /context\.Log\(`Cc: \$\{recipients\.Cc\}`\)/);
     assert.doesNotMatch(source, /`CC:/);
 });
+
+
+function condition(operator, value, field = 'status', pattern = '1') {
+    return { ClassC: field, ClassD: operator, DescriptionB: value, ClassB: pattern, ClassA: '10' };
+}
+
+function engine(model = {}) {
+    const sandbox = { model, context: { Log() {} } };
+    vm.createContext(sandbox);
+    vm.runInContext(source, sandbox);
+    return sandbox;
+}
+
+for (const [oldValue, newValue, expected] of [
+    ['0100', '0200', true],
+    ['0100', '0300', false],
+    ['0150', '0200', false],
+    ['0200', '0200', false]
+]) {
+    test(`FROM_TO: ${oldValue}→${newValue}`, () => {
+        assert.equal(engine().evaluateCondition(condition('FROM_TO', '0100,0200'),
+            { status: { oldValue, newValue } }), expected);
+    });
+}
+
+test('FROM_TO: 比較値の空白を除去し先頭ゼロを保持', () => {
+    const ss = engine({ ClassB: 'modelの値は使用しない' });
+    const c = condition('FROM_TO', ' 0100 , 0200 ');
+    assert.equal(ss.evaluateCondition(c, { status: { oldValue: '0100', newValue: '0200' } }), true);
+    assert.equal(ss.evaluateCondition(c, { status: { oldValue: '100', newValue: '200' } }), false);
+});
+
+test('FROM_TO: 変更なしと同値の遷移は不成立', () => {
+    const ss = engine();
+    assert.equal(ss.evaluateCondition(condition('FROM_TO', '0100,0200'), {}), false);
+    assert.equal(ss.evaluateCondition(condition('FROM_TO', '0200,0200'),
+        { status: { oldValue: '0200', newValue: '0200' } }), false);
+});
+
+for (const value of ['', '0100', '0100,', ',0200', ' , ', '0100,0200,0300', '0100,,0200', '0100;0200', null, undefined]) {
+    test(`FROM_TO: 不正な設定を検出 ${JSON.stringify(value)}`, () => {
+        const c = condition('FROM_TO', value);
+        const ss = engine();
+        // 変更なしでも、設定値の不正を黙って不成立にしない。
+        assert.throws(() => ss.evaluateCondition(c, {}), /FROM_TOの比較値が不正/);
+        assert.throws(() => ss.evaluateConditions([c], {}), /FROM_TOの比較値が不正/);
+    });
+}
+
+test('FROM_TOと電圧NEの同一パターンはAND', () => {
+    const ss = engine({ ClassE: '100' });
+    const changes = { status: { oldValue: '0100', newValue: '0200' } };
+    const transition = condition('FROM_TO', '0100,0200');
+    assert.equal(ss.evaluateConditions([transition, condition('NE', '200', 'denatsu')], changes), true);
+    assert.equal(ss.evaluateConditions([transition, condition('NE', '100', 'denatsu')], changes), false);
+    assert.equal(ss.evaluateConditions([transition, condition('NE', '200', 'denatsu')],
+        { status: { oldValue: '0150', newValue: '0200' } }), false);
+});
+
+test('FROM_TOを含む異なるパターンはOR', () => {
+    const ss = engine({ ClassE: '100' });
+    const conditions = [condition('FROM_TO', '0100,0300'), condition('EQ', '100', 'denatsu', '2')];
+    assert.equal(ss.evaluateConditions(conditions, { status: { oldValue: '0100', newValue: '0200' } }), true);
+});
+
+test('AND/ORの短絡評価でFROM_TO設定エラーを隠さない', () => {
+    const ss = engine({ ClassE: '100' });
+    assert.throws(() => ss.evaluateConditions([
+        condition('EQ', '200', 'denatsu'), condition('FROM_TO', 'bad')
+    ], {}), /FROM_TOの比較値が不正/);
+    assert.throws(() => ss.evaluateConditions([
+        condition('EQ', '100', 'denatsu'), condition('FROM_TO', 'bad', 'status', '2')
+    ], {}), /FROM_TOの比較値が不正/);
+});
+
+for (const [name, extra, expected] of [
+    ['単独トリガーから通知を準備', [], true],
+    ['電圧NEが成立する場合に通知を準備', [condition('NE', '200', 'denatsu')], true],
+    ['電圧NEが不成立なら通知しない', [condition('NE', '100', 'denatsu')], false]
+]) {
+    test(`FROM_TO: ${name}`, () => {
+        const input = fixture();
+        input.data = JSON.stringify({ changedFields: { status: { oldValue: '0100', newValue: '0200' } } });
+        input.model.ClassB = '0200';
+        input.conditions = [condition('FROM_TO', '0100,0200'), ...extra];
+        const result = execute(source, input);
+        assert.equal(result.error, undefined);
+        assert.equal(hasMessage(result), expected);
+        assert.ok(logs(result).includes('通知候補ルールID: ["10"]'));
+    });
+}
