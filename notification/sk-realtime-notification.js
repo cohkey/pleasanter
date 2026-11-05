@@ -1,3 +1,9 @@
+/**
+ * 変更履歴
+ * 2026/11/05
+ * ・通知条件を親ルールIDで絞り込み、別通知IDの条件が混在する問題を修正
+ */
+
 // ・新規追加
 
 const SITE_IDS = {
@@ -103,10 +109,10 @@ function getNotificationConditions(ruleId) {
     const data = {
         View: {
             ColumnFilterHash: {
-                ClassA: String(ruleId)
+                ClassA: JSON.stringify([String(ruleId)])
             },
             ColumnFilterSearchTypes: {
-                ClassA: "ExactMatch"
+                ClassA: "ExactMatchMultiple"
             }
         }
     };
@@ -114,7 +120,9 @@ function getNotificationConditions(ruleId) {
     return Array.from(items.Get(
         843614,
         JSON.stringify(data)
-    ));
+    )).filter(condition =>
+        String(condition.ClassA) === String(ruleId)
+    );
 }
 
 /**
