@@ -1,3 +1,9 @@
+/**
+ * 変更履歴
+ * 2026/11/06
+ * ・通知IDごとのログ表示と、ログ以外の処理が変わらないことの確認を追加
+ */
+
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -68,6 +74,17 @@ function execute(code, input) {
 
 function logs(result) { return result.events.filter(e => e[0] === 'log').map(e => e[1]); }
 function hasMessage(result) { return logs(result).some(value => value.startsWith('件名:')); }
+function ruleLogs(result, ruleId) {
+    const lines = logs(result);
+    const prefix = `----- 通知ID: ${ruleId}`;
+    const start = lines.findIndex(line => line.trim() === `${prefix} -----` || line.trim().startsWith(`${prefix}（`));
+    if (start < 0) return [];
+    const next = lines.findIndex((line, index) => index > start && line.trim().startsWith('----- 通知ID:'));
+    return lines.slice(start, next < 0 ? undefined : next);
+}
+function businessResult(result) {
+    return { ...result, events: result.events.filter(event => event[0] !== 'log') };
+}
 
 const cases = [
     ['引き継ぎ情報なし', f => { f.data = undefined; }, r => assert.equal(r.events.length, 0)],
@@ -130,7 +147,11 @@ for (const [name, configure, verify] of cases) {
         configure(input);
         const actual = execute(source, input);
         verify(actual);
-        if (baseline) assert.deepEqual(actual, execute(baseline, input), '原本と処理・ログ・例外・API呼び出し順が一致');
+        if (baseline) {
+            const previous = execute(baseline, input);
+            assert.deepEqual(businessResult(actual), businessResult(previous), '変更前と業務処理・例外・API呼び出し順が一致（表示ログを除く）');
+            assert.deepEqual(logs(actual).filter(line => line.startsWith('{')), logs(previous).filter(line => line.startsWith('{')), '条件評価のJSONログを維持');
+        }
     });
 }
 
@@ -226,7 +247,7 @@ for (const [name, extra, expected] of [
         const result = execute(source, input);
         assert.equal(result.error, undefined);
         assert.equal(hasMessage(result), expected);
-        assert.ok(logs(result).includes('通知候補ルールID: ["10"]'));
+        assert.ok(logs(result).includes('通知候補: ルール'));
     });
 }
 
@@ -253,9 +274,9 @@ function mixedRuleFixture() {
 test('別通知IDで同じパターン1を使ってもN001だけ成立する', () => {
     const result = execute(source, mixedRuleFixture());
     assert.equal(result.error, undefined);
-    assert.ok(logs(result).includes('通知ID: N001, 条件成立: true'));
-    assert.ok(logs(result).includes('通知ID: N999, 条件成立: false'));
-    assert.equal(logs(result).filter(value => value === '通知条件の取得件数: 3').length, 2);
+    assert.ok(ruleLogs(result, 'N001').includes('条件成立: true'));
+    assert.ok(ruleLogs(result, 'N999').includes('条件成立: false'));
+    assert.equal(logs(result).filter(value => value === '通知条件: 3件').length, 2);
     assert.equal(logs(result).filter(value => value.startsWith('件名:')).length, 1);
 });
 
@@ -265,8 +286,8 @@ test('別通知IDの条件で自ルールを誤って成立させない', () => 
     input.conditions[3].DescriptionB = '0100';
     input.conditions[4].DescriptionB = '60kV';
     const result = execute(source, input);
-    assert.ok(logs(result).includes('通知ID: N001, 条件成立: false'));
-    assert.ok(logs(result).includes('通知ID: N999, 条件成立: true'));
+    assert.ok(ruleLogs(result, 'N001').includes('条件成立: false'));
+    assert.ok(ruleLogs(result, 'N999').includes('条件成立: true'));
 });
 
 test('別通知IDの不正なFROM_TOを自ルールの評価に含めない', () => {
@@ -276,7 +297,7 @@ test('別通知IDの不正なFROM_TOを自ルールの評価に含めない', ()
     input.conditions[3] = { ...condition('FROM_TO', 'bad'), ClassA: '11' };
     const result = execute(source, input);
     assert.equal(result.error, undefined);
-    assert.ok(logs(result).includes('通知ID: N001, 条件成立: true'));
+    assert.ok(ruleLogs(result, 'N001').includes('条件成立: true'));
 });
 
 test('条件検索は親IDを配列として指定し、取得後も完全一致で絞り込む', () => {
@@ -378,6 +399,86 @@ for (const operator of ['IN', 'NOT_IN']) {
         input.conditions[3] = { ...condition(operator, 'invalid', 'denatsu'), ClassA: '11' };
         const result = execute(source, input);
         assert.equal(result.error, undefined);
-        assert.ok(logs(result).includes('通知ID: N001, 条件成立: true'));
+        assert.ok(ruleLogs(result, 'N001').includes('条件成立: true'));
     });
 }
+
+
+function sampleLogFixture() {
+    const input = mixedRuleFixture();
+    input.model.ClassE = '6kV';
+    input.rules[0].DescriptionA = '';
+    input.rules[1].DescriptionA = 'テスト1';
+    input.rules.unshift({ ...input.rules[0], ResultId: 12, Title: 'N002' });
+    input.conditions = [
+        { ...condition('IN', '6kV,20kV', 'denatsu'), ClassA: '12' },
+        { ...condition('FROM_TO', '0000,0100'), ClassA: '12' },
+        { ...condition('NOT_IN', '6kV,20kV', 'denatsu'), ClassA: '10' },
+        { ...condition('FROM_TO', '0000,0100'), ClassA: '10' },
+        { ...condition('EQ', '6kV', 'denatsu'), ClassA: '11' },
+        { ...condition('TO', '0220'), ClassA: '11' },
+        { ...condition('TO', '0300', 'status', '2'), ClassA: '11' }
+    ];
+    return input;
+}
+
+test('画像の3ルールを区切り線・条件一覧・既存JSONで読みやすく表示', () => {
+    const input = sampleLogFixture();
+    const result = execute(source, input);
+    assert.equal(result.error, undefined);
+    const lines = logs(result).filter(line => line.trim() !== '').map(line => line.trimStart());
+    assert.deepEqual(lines, [
+        'changedFields: {"status":{"oldValue":"0000","newValue":"0100"}}',
+        '通知候補: N002, N001, N999',
+        '----- 通知ID: N002 -----',
+        '通知条件: 2件',
+        'パターン1 / denatsu / IN / 比較値: 6kV,20kV',
+        'パターン1 / status / FROM_TO / 比較値: 0000,0100',
+        '{"field":"denatsu","operator":"IN","value":"6kV,20kV","columnName":"ClassE","modelValue":"6kV","hasChange":false}',
+        '{"field":"status","operator":"FROM_TO","value":"0000,0100","columnName":"ClassB","modelValue":"0100","changedValue":"0100","hasChange":true}',
+        '条件成立: true',
+        '通知対象が未設定のためスキップ',
+        '----- 通知ID: N001 -----',
+        '通知条件: 2件',
+        'パターン1 / denatsu / NOT_IN / 比較値: 6kV,20kV',
+        'パターン1 / status / FROM_TO / 比較値: 0000,0100',
+        '{"field":"denatsu","operator":"NOT_IN","value":"6kV,20kV","columnName":"ClassE","modelValue":"6kV","hasChange":false}',
+        '条件成立: false',
+        '----- 通知ID: N999（テスト1） -----',
+        '通知条件: 3件',
+        'パターン1 / denatsu / EQ / 比較値: 6kV',
+        'パターン1 / status / TO / 比較値: 0220',
+        'パターン2 / status / TO / 比較値: 0300',
+        '{"field":"denatsu","operator":"EQ","value":"6kV","columnName":"ClassE","modelValue":"6kV","hasChange":false}',
+        '{"field":"status","operator":"TO","value":"0220","columnName":"ClassB","modelValue":"0100","changedValue":"0100","hasChange":true}',
+        '{"field":"status","operator":"TO","value":"0300","columnName":"ClassB","modelValue":"0100","changedValue":"0100","hasChange":true}',
+        '条件成立: false',
+        '----- 通知処理終了 -----'
+    ]);
+    if (baseline) {
+        const previous = execute(baseline, input);
+        assert.deepEqual(businessResult(result), businessResult(previous));
+        assert.deepEqual(logs(result).filter(line => line.startsWith('{')), logs(previous).filter(line => line.startsWith('{')));
+    }
+});
+
+test('重複・内部処理だけのログを出さず、最終宛先と内容を残す', () => {
+    const result = execute(source, fixture());
+    const lines = logs(result);
+    assert.ok(lines.includes('To: [User1],test@example.invalid'));
+    assert.ok(lines.includes('件名: 通知 検証'));
+    assert.ok(lines.includes('本文: 001/完了/200'));
+    assert.ok(lines.includes('組織: ORG1 / 宛先区分: To / メール通知設定: 1件'));
+    assert.ok(!lines.some(line => /records\.length|records\[0\]|record\.ClassD|メールアドレス:/.test(line)));
+});
+
+test('正常終了では終了行が1回、例外時には完了したように表示しない', () => {
+    const normal = execute(source, fixture());
+    assert.equal(logs(normal).filter(line => line.trim() === '----- 通知処理終了 -----').length, 1);
+    const input = fixture();
+    input.mail[0].DescriptionA = 'invalid';
+    const failed = execute(source, input);
+    assert.equal(failed.error, 'メールアドレスの形式が不正です。');
+    assert.ok(logs(failed).includes('不正なメールアドレス: "invalid"'));
+    assert.ok(!logs(failed).some(line => line.includes('通知処理終了')));
+});

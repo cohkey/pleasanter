@@ -1,5 +1,7 @@
 /**
  * 変更履歴
+ * 2026/11/06
+ * ・通知IDごとの区切りと条件一覧を整え、重複するデバッグログを削除
  * 2026/11/05
  * ・複数値を文字列比較するIN・NOT_IN演算子と比較値の設定検証を追加
  * ・通知条件を親ルールIDで絞り込み、別通知IDの条件が混在する問題を修正
@@ -28,8 +30,6 @@ function getNotificationFields() {
         for (const [fieldName, columnName] of Object.entries(NOTIFICATION_FIELDS)) {
             const oldValue = saved[columnName];
             const newValue = model[columnName];
-
-            context.Log(`oldValue: ${oldValue}, newValue: ${newValue}`);
 
             if (String(oldValue ?? "") != String(newValue ?? "")) {
                 changedFields[fieldName] = {
@@ -92,13 +92,10 @@ function getRelatedConditions(changedFieldNames) {
         JSON.stringify(data)
     ));
 
-    context.Log(`records.length: ${records.length}, records[0]: ${JSON.stringify(records[0])}`);
-
     // 通知の基点となる判定方法
     const triggerOperators = ["CHANGED", "TO", "FROM_TO"];
 
     return records.filter(record => {
-        context.Log(`record.ClassD: ${record.ClassD}`);
         return (
             changedFieldNames.includes(String(record.ClassC)) &&
             triggerOperators.includes(String(record.ClassD))
@@ -390,8 +387,8 @@ function parseMailAddresses(value) {
 
     // 明らかに不正なアドレスを検出
     for (const address of addresses) {
-        context.Log(`メールアドレス: ${JSON.stringify(address)}`);
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+            context.Log(`不正なメールアドレス: ${JSON.stringify(address)}`);
             throw new Error("メールアドレスの形式が不正です。");
         }
     }
@@ -405,9 +402,6 @@ function createRecipientAddresses(mailRecipients) {
     for (const recipient of mailRecipients) {
         const userIds = parseNotificationUsers(recipient.notificationUsers);
 
-        // context.Log(`解析前: ${JSON.stringify(recipient.notificationUsers)}`);
-        // context.Log(`解析後: ${JSON.stringify(userIds)}`);
-
         // Pleasanterのユーザ宛先形式
         for (const userId of userIds) {
             addresses.push(`[User${userId}]`);
@@ -419,7 +413,6 @@ function createRecipientAddresses(mailRecipients) {
         addresses.push(...mailAddresses);
     }
 
-    // context.Log(`変換後: ${JSON.stringify(addresses)}`);
     return addresses;
 }
 
@@ -474,17 +467,14 @@ function getCandidateNotificationRules(changedFieldNames) {
         )
     ];
 
-    context.Log(`通知候補ルールID: ${JSON.stringify(notificationRuleIds)}`);
-
     if (notificationRuleIds.length === 0) {
+        context.Log("通知候補: なし");
         return [];
     }
 
     const notificationRules = getNotificationRules(notificationRuleIds);
 
-    for (const rule of notificationRules) {
-        context.Log(`通知ID: ${rule.Title}, 通知名: ${rule.DescriptionA}`);
-    }
+    context.Log(`通知候補: ${notificationRules.map(rule => rule.Title).join(", ") || "なし"}`);
 
     return notificationRules;
 }
@@ -493,22 +483,25 @@ function getCandidateNotificationRules(changedFieldNames) {
  * ルールに紐づく条件を取得し、判定結果を記録する。
  */
 function matchesNotificationRule(rule, changedFields) {
+    const ruleName = String(rule.DescriptionA ?? "");
+    context.Log(`\n----- 通知ID: ${rule.Title}${ruleName ? `（${ruleName}）` : ""} -----`);
+
     const conditions = getNotificationConditions(rule.ResultId);
 
-    context.Log(`通知条件の取得件数: ${conditions.length}`);
+    context.Log(`通知条件: ${conditions.length}件`);
 
     for (const condition of conditions) {
         context.Log(
-            `パターン: ${condition.ClassB}` +
-            `項目: ${condition.ClassC}` +
-            `判定方法: ${condition.ClassD}` +
-            `比較値: ${condition.DescriptionB}`
+            `パターン${condition.ClassB || "1"} / ${condition.ClassC} / ` +
+            `${condition.ClassD} / 比較値: ${condition.DescriptionB}`
         );
     }
 
+    context.Log("");
     const matched = evaluateConditions(conditions, changedFields);
 
-    context.Log(`通知ID: ${rule.Title}, 条件成立: ${matched}`);
+    context.Log("");
+    context.Log(`条件成立: ${matched}`);
 
     return matched;
 }
@@ -527,10 +520,8 @@ function getTargetRecipientAddresses(rule, tenshoCode, target) {
     const organizationCodes = getOrganizationCodes(tenshoCode, groupCode);
 
     context.Log(
-        `通知ID: ${rule.Title}, ` +
-        `店所コード: ${tenshoCode}, ` +
-        `グループ区分: ${groupCode} ` +
-        `組織コード: ${JSON.stringify(organizationCodes)}`
+        `店所: ${tenshoCode} / グループ: ${groupCode} / ` +
+        `組織: ${JSON.stringify(organizationCodes)}`
     );
 
     const addresses = [];
@@ -539,11 +530,8 @@ function getTargetRecipientAddresses(rule, tenshoCode, target) {
         const mailRecipients = getMailRecipients(organizationCode);
 
         context.Log(
-            `通知ID: ${rule.Title}, ` +
-            `組織コード: ${organizationCodes}, ` +
-            `宛先区分: ${addressType}, ` +
-            `設定件数: ${mailRecipients.length}, ` +
-            `宛先: ${JSON.stringify(mailRecipients)}`
+            `組織: ${organizationCode} / 宛先区分: ${addressType} / ` +
+            `メール通知設定: ${mailRecipients.length}件`
         );
 
         addresses.push(...createRecipientAddresses(mailRecipients));
@@ -613,7 +601,6 @@ function createNotificationMessage(rule, tenshoCode) {
  * 送信内容を記録し、送信が有効な場合だけ通知APIを呼び出す。
  */
 function sendNotification(rule, recipients, message) {
-    context.Log(`通知ID: ${rule.Title}`);
     context.Log(`To: ${recipients.To}`);
     context.Log(`Cc: ${recipients.Cc}`);
     context.Log(`Bcc: ${recipients.Bcc}`);
@@ -650,15 +637,12 @@ function sendNotification(rule, recipients, message) {
 function processNotificationRule(rule) {
     const notificationTargets = getNotificationTargets(rule.ResultId);
 
-    context.Log(
-        `通知ID: ${rule.Title}, ` +
-        `通知対象: ${JSON.stringify(notificationTargets)}`
-    );
-
     if (notificationTargets.length === 0) {
-        context.Log(`通知対象が未設定: ${rule.Title}`);
+        context.Log("通知対象が未設定のためスキップ");
         return;
     }
+
+    context.Log(`通知対象: ${JSON.stringify(notificationTargets)}`);
 
     const tenshoCode = String(model.ClassD ?? "");
     const recipients = createNotificationRecipients(rule, tenshoCode, notificationTargets);
@@ -690,4 +674,6 @@ function sendRealtimeNotification() {
             processNotificationRule(rule);
         }
     }
+
+    context.Log("\n----- 通知処理終了 -----");
 }
