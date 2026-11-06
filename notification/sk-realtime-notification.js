@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/06
+ * ・通知対象・組織検索の分類フィルタを配列形式に修正し、組織未取得時の件数を記録
  * ・通知ログの空行と区切り線前の余分な改行を削除
  * ・通知IDごとの区切りと条件一覧を整え、重複するデバッグログを削除
  * 2026/11/05
@@ -267,10 +268,10 @@ function getNotificationTargets(ruleId) {
     const data = {
         View: {
             ColumnFilterHash: {
-                ClassA: String(ruleId)
+                ClassA: JSON.stringify([String(ruleId)])
             },
             ColumnFilterSearchTypes: {
-                ClassA: "ExactMatch"
+                ClassA: "ExactMatchMultiple"
             }
         }
     };
@@ -295,12 +296,12 @@ function getOrganizationCodes(tenshoCode, groupCode) {
     const data = {
         View: {
             ColumnFilterHash: {
-                ClassA: tenshoCode,
-                ClassC: groupCode
+                ClassA: JSON.stringify([String(tenshoCode)]),
+                ClassC: JSON.stringify([String(groupCode)])
             },
             ColumnFilterSearchTypes: {
-                ClassA: "ExactMatch",
-                ClassC: "ExactMatch"
+                ClassA: "ExactMatchMultiple",
+                ClassC: "ExactMatchMultiple"
             }
         }
     };
@@ -310,13 +311,20 @@ function getOrganizationCodes(tenshoCode, groupCode) {
         JSON.stringify(data)
     ));
 
-    return records
+    const matchedRecords = records
         .filter(record =>
             String(record.ClassA) === String(tenshoCode) &&
             String(record.ClassC) === String(groupCode)
-        )
+        );
+    const organizationCodes = matchedRecords
         .map(record => String(record.DescriptionA ?? ""))
         .filter(Boolean);
+
+    if (organizationCodes.length === 0) {
+        context.Log(`組織検索: 取得${records.length}件 / 条件一致${matchedRecords.length}件 / 組織コードあり0件`);
+    }
+
+    return organizationCodes;
 }
 
 const MAIL_SETTING_FIELDS = {

@@ -495,3 +495,72 @@ test('通常ログに空行や区切り線前の改行を出さない', () => {
         }
     }
 });
+
+test('組織検索は分類の両項目を配列で絞り、200件より後の一致レコードも取得する', () => {
+    const rows = Array.from({ length: 200 }, () => ({ ClassA: '999999', ClassC: 'その他', DescriptionA: 'OTHER' }));
+    rows.push({ ClassA: '216485', ClassC: 'グリッドサービスG', DescriptionA: 'ORG_PAGE' });
+    let requested;
+    const sandbox = {
+        context: { Log() {} },
+        items: { Get(id, query) {
+            requested = JSON.parse(query).View;
+            // 選択式分類に単一文字列を渡すと検索が適用されず、先頭200件が返る状況。
+            if (requested.ColumnFilterSearchTypes.ClassA !== 'ExactMatchMultiple' ||
+                requested.ColumnFilterSearchTypes.ClassC !== 'ExactMatchMultiple') return rows.slice(0, 200);
+            return rows.filter(row => JSON.parse(requested.ColumnFilterHash.ClassA).includes(row.ClassA) &&
+                JSON.parse(requested.ColumnFilterHash.ClassC).includes(row.ClassC)).slice(0, 200);
+        } }
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(source, sandbox);
+    assert.equal(JSON.stringify(sandbox.getOrganizationCodes('216485', 'グリッドサービスG')), '["ORG_PAGE"]');
+    assert.equal(requested.ColumnFilterHash.ClassA, '["216485"]');
+    assert.equal(requested.ColumnFilterHash.ClassC, '["グリッドサービスG"]');
+});
+
+test('組織検索の取得後にも店所とグループを完全一致で再確認する', () => {
+    const sandbox = {
+        context: { Log() {} },
+        items: { Get() { return [
+            { ClassA: '216485', ClassC: 'グリッドサービスG', DescriptionA: 'ORG1' },
+            { ClassA: 216485, ClassC: 'グリッドサービスG', DescriptionA: 'ORG2' },
+            { ClassA: '2164850', ClassC: 'グリッドサービスG', DescriptionA: 'WRONG_STORE' },
+            { ClassA: '216485', ClassC: 'その他', DescriptionA: 'WRONG_GROUP' }
+        ]; } }
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(source, sandbox);
+    assert.equal(JSON.stringify(sandbox.getOrganizationCodes('216485', 'グリッドサービスG')), '["ORG1","ORG2"]');
+});
+
+test('組織なしのログで検索0件・照合不一致・組織コード空を区別できる', () => {
+    for (const [rows, expected] of [
+        [[], '組織検索: 取得0件 / 条件一致0件 / 組織コードあり0件'],
+        [[{ ClassA: '216485', ClassC: 'その他', DescriptionA: 'ORG' }], '組織検索: 取得1件 / 条件一致0件 / 組織コードあり0件'],
+        [[{ ClassA: '216485', ClassC: 'グリッドサービスG', DescriptionA: '' }], '組織検索: 取得1件 / 条件一致1件 / 組織コードあり0件']
+    ]) {
+        const lines = [];
+        const sandbox = { context: { Log(value) { lines.push(value); } }, items: { Get() { return rows; } } };
+        vm.createContext(sandbox);
+        vm.runInContext(source, sandbox);
+        assert.equal(sandbox.getOrganizationCodes('216485', 'グリッドサービスG').length, 0);
+        assert.deepEqual(lines, [expected]);
+    }
+});
+
+
+test('通知対象の親ID分類検索も先頭200件からの取りこぼしを防ぐ', () => {
+    const rows = Array.from({ length: 200 }, () => ({ ClassA: '999', ClassB: 'その他', ClassC: 'To' }));
+    rows.push({ ClassA: '12', ClassB: 'グリッドサービスG', ClassC: 'To' });
+    const sandbox = {
+        items: { Get(id, query) {
+            const view = JSON.parse(query).View;
+            if (view.ColumnFilterSearchTypes.ClassA !== 'ExactMatchMultiple') return rows.slice(0, 200);
+            assert.equal(view.ColumnFilterHash.ClassA, '["12"]');
+            return rows.filter(row => JSON.parse(view.ColumnFilterHash.ClassA).includes(row.ClassA)).slice(0, 200);
+        } }
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(source, sandbox);
+    assert.equal(JSON.stringify(sandbox.getNotificationTargets(12)), '[{"group":"グリッドサービスG","addressType":"To"}]');
+});
