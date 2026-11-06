@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/06
+ * ・お客さまサービスグループ指定時に同店所の第一・第二・第三グループも検索し、組織コードを重複排除
  * ・通知対象・組織検索の分類フィルタを配列形式に修正し、組織未取得時の件数を記録
  * ・通知ログの空行と区切り線前の余分な改行を削除
  * ・通知IDごとの区切りと条件一覧を整え、重複するデバッグログを削除
@@ -292,12 +293,26 @@ function getNotificationTargets(ruleId) {
         }));
 }
 
+// 親グループを指定した場合だけ、明示したグループへ検索を展開する。
+const NOTIFICATION_GROUP_EXPANSIONS = {
+    "お客さまサービスグループ": [
+        "お客さまサービスグループ",
+        "お客さまサービス第一グループ",
+        "お客さまサービス第二グループ",
+        "お客さまサービス第三グループ"
+    ]
+};
+
 function getOrganizationCodes(tenshoCode, groupCode) {
+    const groupName = String(groupCode);
+    const groupCodes = Object.prototype.hasOwnProperty.call(NOTIFICATION_GROUP_EXPANSIONS, groupName)
+        ? NOTIFICATION_GROUP_EXPANSIONS[groupName]
+        : [groupName];
     const data = {
         View: {
             ColumnFilterHash: {
                 ClassA: JSON.stringify([String(tenshoCode)]),
-                ClassC: JSON.stringify([String(groupCode)])
+                ClassC: JSON.stringify(groupCodes)
             },
             ColumnFilterSearchTypes: {
                 ClassA: "ExactMatchMultiple",
@@ -314,11 +329,11 @@ function getOrganizationCodes(tenshoCode, groupCode) {
     const matchedRecords = records
         .filter(record =>
             String(record.ClassA) === String(tenshoCode) &&
-            String(record.ClassC) === String(groupCode)
+            groupCodes.includes(String(record.ClassC))
         );
-    const organizationCodes = matchedRecords
+    const organizationCodes = [...new Set(matchedRecords
         .map(record => String(record.DescriptionA ?? ""))
-        .filter(Boolean);
+        .filter(Boolean))];
 
     if (organizationCodes.length === 0) {
         context.Log(`組織検索: 取得${records.length}件 / 条件一致${matchedRecords.length}件 / 組織コードあり0件`);

@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/06
+ * ・サービスグループ展開、同店所の完全一致、直接指定と組織コード重複排除を確認
  * ・通常ログに空行や区切り線前の改行を含めないことを確認
  * ・通知IDごとのログ表示と、ログ以外の処理が変わらないことの確認を追加
  */
@@ -563,4 +564,100 @@ test('通知対象の親ID分類検索も先頭200件からの取りこぼしを
     vm.createContext(sandbox);
     vm.runInContext(source, sandbox);
     assert.equal(JSON.stringify(sandbox.getNotificationTargets(12)), '[{"group":"グリッドサービスG","addressType":"To"}]');
+});
+
+const serviceGroups = [
+    'お客さまサービスグループ',
+    'お客さまサービス第一グループ',
+    'お客さまサービス第二グループ',
+    'お客さまサービス第三グループ'
+];
+const serviceGroupOrganizations = [
+    { ClassA: '216485', ClassC: serviceGroups[0], DescriptionA: 'NORMAL' },
+    { ClassA: '216485', ClassC: 'グリッドサービスG', DescriptionA: 'GRID' },
+    { ClassA: '216486', ClassC: serviceGroups[1], DescriptionA: 'SPECIAL_1' },
+    { ClassA: '216486', ClassC: serviceGroups[2], DescriptionA: 'SHARED' },
+    { ClassA: '216486', ClassC: serviceGroups[3], DescriptionA: 'SHARED' },
+    { ClassA: '216486', ClassC: 'お客さまサービス第四グループ', DescriptionA: 'FOURTH' },
+    { ClassA: '216486', ClassC: 'お客さまサービスグループ補助', DescriptionA: 'SUFFIX' },
+    { ClassA: '216486', ClassC: 'お客さまサービス第一グループ補助', DescriptionA: 'FIRST_SUFFIX' },
+    { ClassA: '2164860', ClassC: serviceGroups[1], DescriptionA: 'SIMILAR_STORE' },
+    { ClassA: '216487', ClassC: serviceGroups[2], DescriptionA: 'ONLY_SECOND' },
+    { ClassA: '216488', ClassC: serviceGroups[0], DescriptionA: 'BASE' },
+    { ClassA: '216488', ClassC: serviceGroups[1], DescriptionA: 'BRANCH' },
+    { ClassA: '216488', ClassC: serviceGroups[3], DescriptionA: '' }
+];
+
+function searchServiceGroups(store, group, ignoreFilters = false) {
+    let view;
+    const sandbox = {
+        context: { Log() {} },
+        items: { Get(id, query) {
+            assert.equal(id, 846822);
+            view = JSON.parse(query).View;
+            if (ignoreFilters) return serviceGroupOrganizations;
+            return serviceGroupOrganizations.filter(row =>
+                JSON.parse(view.ColumnFilterHash.ClassA).includes(row.ClassA) &&
+                JSON.parse(view.ColumnFilterHash.ClassC).includes(row.ClassC)
+            );
+        } }
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(source, sandbox);
+    const codes = JSON.parse(JSON.stringify(sandbox.getOrganizationCodes(store, group)));
+    return { codes, view };
+}
+
+for (const [name, store, group, expected] of [
+    ['通常店所は存在する親グループだけ', '216485', serviceGroups[0], ['NORMAL']],
+    ['特殊店所は第一・第二・第三を検索して重複排除', '216486', serviceGroups[0], ['SPECIAL_1', 'SHARED']],
+    ['一部分だけ存在する店所', '216487', serviceGroups[0], ['ONLY_SECOND']],
+    ['親と分割グループが共存する店所', '216488', serviceGroups[0], ['BASE', 'BRANCH']],
+    ['存在しない店所は他店所へ広げない', 'MISSING', serviceGroups[0], []],
+    ['第一を直接指定したら第一だけ', '216486', serviceGroups[1], ['SPECIAL_1']],
+    ['第二を直接指定したら第二だけ', '216486', serviceGroups[2], ['SHARED']],
+    ['第三を直接指定したら第三だけ', '216486', serviceGroups[3], ['SHARED']],
+    ['別グループの検索は変えない', '216485', 'グリッドサービスG', ['GRID']],
+    ['第四を直接指定する既存検索も変えない', '216486', 'お客さまサービス第四グループ', ['FOURTH']]
+]) {
+    test(`サービスグループ展開: ${name}`, () => {
+        assert.deepEqual(searchServiceGroups(store, group).codes, expected);
+    });
+}
+
+test('サービスグループ展開: 店所は単一の完全一致、グループは明示した4値だけ', () => {
+    const { view } = searchServiceGroups('216486', serviceGroups[0]);
+    assert.deepEqual(JSON.parse(view.ColumnFilterHash.ClassA), ['216486']);
+    assert.deepEqual(JSON.parse(view.ColumnFilterHash.ClassC), serviceGroups);
+    assert.equal(view.ColumnFilterSearchTypes.ClassA, 'ExactMatchMultiple');
+    assert.equal(view.ColumnFilterSearchTypes.ClassC, 'ExactMatchMultiple');
+});
+
+test('サービスグループ展開: 余分な検索結果でも他店所・類似名は取り込まない', () => {
+    assert.deepEqual(searchServiceGroups('216486', serviceGroups[0], true).codes, ['SPECIAL_1', 'SHARED']);
+    assert.deepEqual(searchServiceGroups('216486', serviceGroups[1], true).codes, ['SPECIAL_1']);
+});
+
+test('サービスグループ展開: 対応表にないObjectのプロパティ名も通常の完全一致で扱う', () => {
+    const { codes, view } = searchServiceGroups('216486', 'constructor');
+    assert.deepEqual(codes, []);
+    assert.deepEqual(JSON.parse(view.ColumnFilterHash.ClassC), ['constructor']);
+});
+
+test('サービスグループ展開: 複数組織からToを作り、同じ組織への照会は1回', () => {
+    const input = fixture();
+    input.targets[0].ClassB = serviceGroups[0];
+    input.model.ClassD = '216486';
+    input.organizations = serviceGroupOrganizations;
+    input.mail = [
+        { DescriptionB: 'SPECIAL_1', ClassZ: '["1"]', DescriptionA: 'one@example.invalid' },
+        { DescriptionB: 'SHARED', ClassZ: '[]', DescriptionA: 'two@example.invalid' },
+        { DescriptionB: 'NORMAL', ClassZ: '[]', DescriptionA: 'other-store@example.invalid' }
+    ];
+    const result = execute(source, input);
+    assert.equal(result.error, undefined);
+    assert.ok(logs(result).includes('To: [User1],one@example.invalid,two@example.invalid'));
+    assert.equal(result.events.filter(e => e[0] === 'get' && e[1] === 809267 &&
+        JSON.parse(e[2]).View.ColumnFilterHash.DescriptionB === 'SHARED').length, 1);
+    assert.ok(!logs(result).some(line => line.includes('other-store@example.invalid')));
 });
