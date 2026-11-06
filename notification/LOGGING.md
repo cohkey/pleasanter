@@ -10,39 +10,29 @@
 
 ```text
 通知候補: N002, N001, N999
-
 ----- 通知ID: N002 -----
 通知条件: 2件
 パターン1 / denatsu / IN / 比較値: 6kV,20kV
 パターン1 / status / FROM_TO / 比較値: 0000,0100
-
 {"field":"denatsu","operator":"IN","value":"6kV,20kV","columnName":"ClassE","modelValue":"6kV","hasChange":false}
 {"field":"status","operator":"FROM_TO","value":"0000,0100","columnName":"ClassB","modelValue":"0100","changedValue":"0100","hasChange":true}
-
 条件成立: true
 通知対象が未設定のためスキップ
-
 ----- 通知ID: N001 -----
 通知条件: 2件
 パターン1 / denatsu / NOT_IN / 比較値: 6kV,20kV
 パターン1 / status / FROM_TO / 比較値: 0000,0100
-
 {"field":"denatsu","operator":"NOT_IN","value":"6kV,20kV","columnName":"ClassE","modelValue":"6kV","hasChange":false}
-
 条件成立: false
-
 ----- 通知ID: N999（テスト1） -----
 通知条件: 3件
 パターン1 / denatsu / EQ / 比較値: 6kV
 パターン1 / status / TO / 比較値: 0220
 パターン2 / status / TO / 比較値: 0300
-
 {"field":"denatsu","operator":"EQ","value":"6kV","columnName":"ClassE","modelValue":"6kV","hasChange":false}
 {"field":"status","operator":"TO","value":"0220","columnName":"ClassB","modelValue":"0100","changedValue":"0100","hasChange":true}
 {"field":"status","operator":"TO","value":"0300","columnName":"ClassB","modelValue":"0100","changedValue":"0100","hasChange":true}
-
 条件成立: false
-
 ----- 通知処理終了 -----
 ```
 
@@ -70,11 +60,11 @@
 
 ## 検証
 
-- 既存123テストに、画像の3ルールの表示、重複ログ整理、終了・例外時の表示の3テストを追加し、126件が成功。
+- 既存123テストに、画像の3ルールの表示、重複ログ整理、終了・例外時の表示の3テストと空行なしの確認を追加し、127件が成功。
 - 変更前のコードとの比較で、通常の28シナリオと画像の3ルールのAPI呼び出し・順番・送信内容・例外が一致。条件評価JSONの内容と順番も一致。
 - 通知IDの防御除去と検索値退行を検出するチェックも成功。
 - Pleasanter 1.4.23.3 / PostgreSQL 16の専用環境で、複数ルールを実更新。区切り、判定結果、既存JSONの維持、終了行を確認。
 - 実更新の検証は既存の専用テストサイト・レコードだけを使い、設定と値を退避してfinallyで復元し、一致も確認。
 - SEND_ENABLEDはfalse、OutgoingMailsは0件。ブラウザ画面操作と実メール配送は未実施。
 
-実更新では永続ログ取得のため、検証コピーだけcontext.Logをlogs.LogInfoに置き換えた。空行の扱いはログ出力先によって異なるが、区切り線と各ログの内容は維持する。通知エンジン以外のcheckGMUser等のログは変更していない。
+実更新では永続ログ取得のため、検証コピーだけcontext.Logをlogs.LogInfoに置き換えた。通知エンジン自身は空のログや区切り線前の改行を出力しない。メール本文内の改行は維持する。通知エンジン以外のcheckGMUser等のログは変更していない。

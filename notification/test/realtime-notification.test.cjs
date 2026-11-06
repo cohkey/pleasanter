@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/06
+ * ・通常ログに空行や区切り線前の改行を含めないことを確認
  * ・通知IDごとのログ表示と、ログ以外の処理が変わらないことの確認を追加
  */
 
@@ -481,4 +482,16 @@ test('正常終了では終了行が1回、例外時には完了したように�
     assert.equal(failed.error, 'メールアドレスの形式が不正です。');
     assert.ok(logs(failed).includes('不正なメールアドレス: "invalid"'));
     assert.ok(!logs(failed).some(line => line.includes('通知処理終了')));
+});
+
+
+test('通常ログに空行や区切り線前の改行を出さない', () => {
+    for (const input of [fixture(), mixedRuleFixture(), sampleLogFixture()]) {
+        const result = execute(source, input);
+        assert.equal(result.error, undefined);
+        for (const line of logs(result)) {
+            assert.notEqual(line.trim(), '', '空のログを出さない');
+            assert.ok(!line.startsWith('\n') && !line.startsWith('\r'), '区切り前に改行を付けない');
+        }
+    }
 });

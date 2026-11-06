@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/06
+ * ・通知ログの空行と区切り線前の余分な改行を削除
  * ・通知IDごとの区切りと条件一覧を整え、重複するデバッグログを削除
  * 2026/11/05
  * ・複数値を文字列比較するIN・NOT_IN演算子と比較値の設定検証を追加
@@ -484,7 +485,7 @@ function getCandidateNotificationRules(changedFieldNames) {
  */
 function matchesNotificationRule(rule, changedFields) {
     const ruleName = String(rule.DescriptionA ?? "");
-    context.Log(`\n----- 通知ID: ${rule.Title}${ruleName ? `（${ruleName}）` : ""} -----`);
+    context.Log(`----- 通知ID: ${rule.Title}${ruleName ? `（${ruleName}）` : ""} -----`);
 
     const conditions = getNotificationConditions(rule.ResultId);
 
@@ -497,10 +498,8 @@ function matchesNotificationRule(rule, changedFields) {
         );
     }
 
-    context.Log("");
     const matched = evaluateConditions(conditions, changedFields);
 
-    context.Log("");
     context.Log(`条件成立: ${matched}`);
 
     return matched;
@@ -675,5 +674,5 @@ function sendRealtimeNotification() {
         }
     }
 
-    context.Log("\n----- 通知処理終了 -----");
+    context.Log("----- 通知処理終了 -----");
 }
