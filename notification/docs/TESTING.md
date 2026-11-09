@@ -31,9 +31,10 @@
 node --check notification/sk-realtime-notification.js
 node --test notification/test/realtime-notification.test.cjs
 node notification/test/check-rule-scope-regression.cjs
+node notification/test/check-target-scope-regression.cjs
 ```
 
-通常テストは158件。最後のコマンドは別の「成功ケース2件」ではなく、検証用コピーの防御を壊したときに想定した失敗が発生するかを確認する。
+通常テストは206件。後半の2コマンドは通常の成功件数に足すテストではなく、検証用コピーの防御を壊したときに想定した失敗が発生するかを確認する。
 
 - 親IDの取得後フィルタを外す：混在・誤成立・エラー混入・親ID確認の4テストが失敗する。
 - 検索値を単一文字列へ戻す：検索形式のテストが失敗する。
@@ -106,3 +107,9 @@ node notification/test/check-rule-scope-regression.cjs
 このCIは同じ不具合の退行を検出するが、全てのPleasanter設定差を再現するものではない。Docker統合テストのCI化は未実施であり、上記の実更新手順を該当変更の必須確認にする。ブランチ保護や実メール配送を含む自動化は別途実装・確認が必要。
 
 ログ整形だけを変更し、検索条件等が同じ変更前コードを比較する場合は、`NOTIFICATION_BASELINE` に変更前のコードを指定すると、既存28シナリオと3ルールの表示例について、ログ以外のAPI呼び出し・送信内容・例外が一致することを確認できます。通常28シナリオと複数ルールの比較では、evaluateConditionの実際の呼び出し回数・順番も記録して比較します。通常／デバッグの両設定で業務処理が同じこと、デバッグ時に従来の評価JSONの内容・順番が一致することも確認します。通常の表示文字列は変更対象なので一致比較から除きます。
+
+## 通知対象3区分の追加検証
+
+既存対象はClassD=ORGANIZATIONの移行済み入力で比較する。新規ケースはGM通常1件・特殊3件・別店所と類似区分除外・NumA異常・GroupId重複・固定組織の店所非依存・区分の取り違えを確認する。GMの店所・区分防御と検索配列を壊したコピーで、テストが想定どおり失敗することも確認する。
+
+標準Group宛先の展開結果と通知エンジン3区分の実更新は、[実環境検証](../TARGET-TYPES-VALIDATION.md)を参照。Group展開と実メール配送、同じ欄の重複排除とTo/Cc/Bcc間の重複排除を混同しない。

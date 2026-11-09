@@ -21,11 +21,18 @@
 | getCandidateNotificationRules | 関連条件から有効な候補ルールを取得する |
 | matchesNotificationRule | ルールの条件を取得・評価し、判定を記録する |
 | processNotificationRule | 通知対象の有無を確認し、宛先・メール作成と送信を呼び出す |
-| getTargetRecipientAddresses | 店所・グループから組織ごとの宛先を解決する |
+| getTargetRecipientAddresses | 対象区分により店所連動組織・GM・固定組織の宛先を解決する |
+| getGmGroupAddresses | 同店所・GM区分の対応表からGroup宛先を作る |
 | createNotificationRecipients | To・Cc・Bccを作成し、重複排除とToの必須チェックを行う |
 | renderNotificationTemplate | プレースホルダーを置換する |
 | createNotificationMessage | 件名・本文を作成する |
 | sendNotification | 送信内容を記録し、送信有効時だけ通知APIを呼ぶ |
+
+## 通知対象の3区分
+
+通知対象のClassDに`ORGANIZATION`・`GM`・`FIXED_ORGANIZATION`を設定し、ClassBを共用します。**既存の対象行にもClassD=ORGANIZATIONの補完が必要です。** 固定組織の許可リストは未定のため空です。
+
+GM対応表はサイト727689、店所ClassA・区分ClassC（グリサ／客サ）・GroupId NumA・GMコードDescriptionA・名前ClassDです。GMはメール通知設定を経由せずGroup宛先へ、固定組織は組織コードからメール通知設定へ解決します。[設定・取得フロー・移行手順](TARGET-TYPES.md)と[1.4.23.3検証結果](TARGET-TYPES-VALIDATION.md)を参照してください。
 
 ## 登録・実行について
 
@@ -41,6 +48,7 @@
 | rules | 843610 |
 | targets | 843620 |
 | organizations | 846822 |
+| gmMappings | 727689 |
 | mailSettings | 809267 |
 
 通知条件の検索では843614を直接指定しています。SITE_IDS.conditions / rulesは定義のみで参照されていません。
@@ -61,7 +69,7 @@ node --test notification/test/realtime-notification.test.cjs
 node notification/test/check-rule-scope-regression.cjs
 ```
 
-158件のテストで、正常系、条件分岐、宛先生成、Cc、重複排除、異常系、送信APIの成功・失敗（モック）を確認します。通知IDが異なる条件の混在、誤成立・誤不成立、別ルールの設定エラー混入も回帰テストで確認します。条件検索の形式を変更しているため、写真原本とのAPI呼び出しの完全一致は現行版の検証基準に含めません。
+206件のテストで、正常系、条件分岐、宛先生成、Cc、重複排除、異常系、送信APIの成功・失敗（モック）を確認します。通知IDが異なる条件の混在、誤成立・誤不成立、別ルールの設定エラー混入も回帰テストで確認します。条件検索の形式を変更しているため、写真原本とのAPI呼び出しの完全一致は現行版の検証基準に含めません。
 
 [Dockerでの検証結果](VALIDATION.md)も参照してください。
 
