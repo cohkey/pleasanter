@@ -1,5 +1,7 @@
 /**
  * 変更履歴
+ * 2026/11/09
+ * ・成立したルールの詳細だけを通常出力し、デバッグフラグ・終了件数・常時エラー出力を追加
  * 2026/11/06
  * ・お客さまサービスグループ指定時に同店所の第一・第二・第三グループも検索し、組織コードを重複排除
  * ・通知対象・組織検索の分類フィルタを配列形式に修正し、組織未取得時の件数を記録
@@ -19,6 +21,25 @@ const SITE_IDS = {
     organizations: 846822,
     mailSettings: 809267
 }
+
+// trueにすると、不成立ルールも含む条件一覧・評価JSONを出力する。
+const NOTIFICATION_DEBUG = false;
+let notificationConditionLogBuffer = null;
+
+function logNotificationDebug(message) {
+    if (NOTIFICATION_DEBUG) {
+        context.Log(message);
+    }
+}
+
+function logNotificationCondition(message) {
+    if (notificationConditionLogBuffer !== null) {
+        notificationConditionLogBuffer.push(message);
+    } else {
+        logNotificationDebug(message);
+    }
+}
+
 
 function getNotificationFields() {
     const NOTIFICATION_FIELDS = {
@@ -173,7 +194,7 @@ function evaluateCondition(condition, changedFields) {
     const change = changedFields[field];
     const newValue = String(model[columnName] ?? "");
 
-    context.Log(JSON.stringify({
+    logNotificationCondition(JSON.stringify({
         field,
         operator,
         value,
@@ -473,7 +494,7 @@ function readNotificationChanges() {
     const notificationData = JSON.parse(notificationDataJson);
     const changedFields = notificationData.changedFields || {};
 
-    context.Log(`changedFields: ${JSON.stringify(changedFields)}`);
+    logNotificationDebug(`changedFields: ${JSON.stringify(changedFields)}`);
 
     return changedFields;
 }
@@ -492,13 +513,13 @@ function getCandidateNotificationRules(changedFieldNames) {
     ];
 
     if (notificationRuleIds.length === 0) {
-        context.Log("通知候補: なし");
+        logNotificationDebug("通知候補: なし");
         return [];
     }
 
     const notificationRules = getNotificationRules(notificationRuleIds);
 
-    context.Log(`通知候補: ${notificationRules.map(rule => rule.Title).join(", ") || "なし"}`);
+    logNotificationDebug(`通知候補: ${notificationRules.map(rule => rule.Title).join(", ") || "なし"}`);
 
     return notificationRules;
 }
@@ -507,25 +528,43 @@ function getCandidateNotificationRules(changedFieldNames) {
  * ルールに紐づく条件を取得し、判定結果を記録する。
  */
 function matchesNotificationRule(rule, changedFields) {
-    const ruleName = String(rule.DescriptionA ?? "");
-    context.Log(`----- 通知ID: ${rule.Title}${ruleName ? `（${ruleName}）` : ""} -----`);
+    const previousBuffer = notificationConditionLogBuffer;
+    const messages = [];
+    notificationConditionLogBuffer = messages;
 
-    const conditions = getNotificationConditions(rule.ResultId);
+    try {
+        const ruleName = String(rule.DescriptionA ?? "");
+        logNotificationCondition(`----- 通知ID: ${rule.Title}${ruleName ? `（${ruleName}）` : ""} -----`);
 
-    context.Log(`通知条件: ${conditions.length}件`);
+        const conditions = getNotificationConditions(rule.ResultId);
+        logNotificationCondition(`通知条件: ${conditions.length}件`);
 
-    for (const condition of conditions) {
-        context.Log(
-            `パターン${condition.ClassB || "1"} / ${condition.ClassC} / ` +
-            `${condition.ClassD} / 比較値: ${condition.DescriptionB}`
-        );
+        for (const condition of conditions) {
+            logNotificationCondition(
+                `パターン${condition.ClassB || "1"} / ${condition.ClassC} / ` +
+                `${condition.ClassD} / 比較値: ${condition.DescriptionB}`
+            );
+        }
+
+        const matched = evaluateConditions(conditions, changedFields);
+        logNotificationCondition(`条件成立: ${matched}`);
+
+        if (matched || NOTIFICATION_DEBUG) {
+            for (const message of messages) {
+                context.Log(message);
+            }
+        }
+
+        return matched;
+    } catch (error) {
+        // 判定中のエラーは、不成立の詳細非表示とは区別して常に状況を残す。
+        for (const message of messages) {
+            context.Log(message);
+        }
+        throw error;
+    } finally {
+        notificationConditionLogBuffer = previousBuffer;
     }
-
-    const matched = evaluateConditions(conditions, changedFields);
-
-    context.Log(`条件成立: ${matched}`);
-
-    return matched;
 }
 
 /**
@@ -632,6 +671,7 @@ function sendNotification(rule, recipients, message) {
     const SEND_ENABLED = false;
 
     if (!SEND_ENABLED) {
+        context.Log("送信無効のため送信していません");
         return;
     }
 
@@ -677,25 +717,44 @@ function processNotificationRule(rule) {
  * 変更情報を起点に候補ルールを判定し、成立した通知を処理する。
  */
 function sendRealtimeNotification() {
-    const changedFields = readNotificationChanges();
+    let candidateCount = 0;
+    let matchedCount = 0;
+    let unmatchedCount = 0;
+    let interrupted = false;
 
-    if (!changedFields) {
-        return;
-    }
+    try {
+        const changedFields = readNotificationChanges();
 
-    const changedFieldNames = Object.keys(changedFields);
-
-    if (changedFieldNames.length === 0) {
-        return;
-    }
-
-    const notificationRules = getCandidateNotificationRules(changedFieldNames);
-
-    for (const rule of notificationRules) {
-        if (matchesNotificationRule(rule, changedFields)) {
-            processNotificationRule(rule);
+        if (!changedFields) {
+            return;
         }
-    }
 
-    context.Log("----- 通知処理終了 -----");
+        const changedFieldNames = Object.keys(changedFields);
+
+        if (changedFieldNames.length === 0) {
+            return;
+        }
+
+        const notificationRules = getCandidateNotificationRules(changedFieldNames);
+        candidateCount = notificationRules.length;
+
+        for (const rule of notificationRules) {
+            if (matchesNotificationRule(rule, changedFields)) {
+                matchedCount++;
+                processNotificationRule(rule);
+            } else {
+                unmatchedCount++;
+            }
+        }
+    } catch (error) {
+        interrupted = true;
+        context.Log(`通知処理エラー: ${error.message}`);
+        throw error;
+    } finally {
+        const pending = interrupted ? ` / 未完了${candidateCount - matchedCount - unmatchedCount}件` : "";
+        context.Log(
+            `----- 通知処理${interrupted ? "中断" : "終了"}: ` +
+            `候補${candidateCount}件 / 成立${matchedCount}件 / 不成立${unmatchedCount}件${pending} -----`
+        );
+    }
 }
