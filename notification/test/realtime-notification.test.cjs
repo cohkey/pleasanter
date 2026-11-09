@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/09
+ * ・通知対象の3区分、GMの店所分離・NumA・Group宛先、固定組織と区分設定を検証
  * ・通常時とデバッグ時のログ、集計、評価回数・順序の不変を確認
  * 2026/11/06
  * ・サービスグループ展開、同店所の完全一致、直接指定と組織コード重複排除を確認
@@ -26,7 +27,7 @@ function fixture() {
         rules: [{ ResultId: 10, Title: 'ルール', DescriptionA: '検証ルール', CheckA: true,
             DescriptionB: '通知 {件名}', DescriptionC: '{店所コード}/{ステータス}/{電圧}' }],
         conditions: [{ ClassA: '10', ClassB: '1', ClassC: 'status', ClassD: 'TO', DescriptionB: '完了' }],
-        targets: [{ ClassA: '10', ClassB: 'G1', ClassC: 'To' }],
+        targets: [{ ClassA: '10', ClassB: 'G1', ClassC: 'To', ClassD: 'ORGANIZATION' }],
         organizations: [{ ClassA: '001', ClassC: 'G1', DescriptionA: 'ORG1' }],
         mail: [{ DescriptionB: 'ORG1', ClassZ: '["1"]', DescriptionA: 'test@example.invalid' }],
         sendEnabled: false,
@@ -49,9 +50,10 @@ function execute(code, input) {
             Get(id, query) {
                 events.push(['get', id, query]);
                 const tables = { 843614: input.conditions, 843620: input.targets,
-                    846822: input.organizations, 809267: input.mail };
+                    846822: input.organizations, 809267: input.mail, 727689: input.gmMappings };
                 if (!query) return input.rules.filter(rule => rule.ResultId === id);
                 const view = JSON.parse(query).View;
+                if (id === 727689 && input.ignoreGmFilter) return input.gmMappings;
                 // 分類項目の検索が効かず、別ルールの条件も返る状況を再現する。
                 if (input.ignoreConditionRuleFilter && id === 843614 && view.ColumnFilterHash.ClassA !== undefined) {
                     return input.conditions;
@@ -71,6 +73,8 @@ function execute(code, input) {
             ? code.replace('const SEND_ENABLED = false;', 'const SEND_ENABLED = true;')
             : code;
         if (input.debugEnabled) executable = executable.replace('const NOTIFICATION_DEBUG = false;', 'const NOTIFICATION_DEBUG = true;');
+        if (input.fixedOrganizationCodes) executable = executable.replace('const FIXED_ORGANIZATION_CODES = [];',
+            'const FIXED_ORGANIZATION_CODES = ' + JSON.stringify(input.fixedOrganizationCodes) + ';');
         vm.runInContext(executable, sandbox);
         if (input.trackEvaluation) {
             const original = sandbox.evaluateCondition;
@@ -124,10 +128,10 @@ const cases = [
     ['不正な宛先区分', f => { f.targets[0].ClassC = 'CC'; }, r => assert.equal(r.error, '宛先区分が不正です: CC')],
     ['CcだけではTo不足', f => { f.targets[0].ClassC = 'Cc'; }, r => assert.equal(r.error, 'Toの通知先がありません')],
     ['To優先で重複排除', f => {
-        for (const kind of ['Cc','Bcc']) f.targets.push({ClassA:'10',ClassB:'G1',ClassC:kind});
+        for (const kind of ['Cc','Bcc']) f.targets.push({ClassA:'10',ClassB:'G1',ClassC:kind,ClassD:'ORGANIZATION'});
     }, r => { assert.ok(logs(r).includes('Cc: ')); assert.ok(logs(r).includes('Bcc: ')); }],
     ['独立したCc宛先', f => {
-        f.targets.push({ClassA:'10',ClassB:'G2',ClassC:'Cc'});
+        f.targets.push({ClassA:'10',ClassB:'G2',ClassC:'Cc',ClassD:'ORGANIZATION'});
         f.organizations.push({ClassA:'001',ClassC:'G2',DescriptionA:'ORG2'});
         f.mail.push({DescriptionB:'ORG2',ClassZ:'[]',DescriptionA:'cc@example.invalid'});
     }, r => assert.ok(logs(r).includes('Cc: cc@example.invalid'))],
@@ -575,7 +579,7 @@ test('通知対象の親ID分類検索も先頭200件からの取りこぼしを
     };
     vm.createContext(sandbox);
     vm.runInContext(source, sandbox);
-    assert.equal(JSON.stringify(sandbox.getNotificationTargets(12)), '[{"group":"グリッドサービスG","addressType":"To"}]');
+    assert.equal(JSON.stringify(sandbox.getNotificationTargets(12)), '[{"group":"グリッドサービスG","addressType":"To","targetType":""}]');
 });
 
 const serviceGroups = [
@@ -789,4 +793,208 @@ test('条件評価の例外を同じオブジェクトで再送出し、ログ�
     assert.throws(() => sandbox.sendRealtimeNotification(), e => e === original);
     assert.equal(vm.runInContext('notificationConditionLogBuffer', sandbox), null);
     assert.ok(recorded.includes('通知処理エラー: 評価例外'));
+});
+
+function gmFixture() {
+    const input = fixture();
+    input.model.ClassD = '216485';
+    input.targets = [{ ClassA: '10', ClassB: '客サGM', ClassC: 'To', ClassD: 'GM' }];
+    input.gmMappings = [
+        { ClassA: '216485', ClassC: '客サ', NumA: 101, DescriptionA: 'GM001', ClassD: '通常客サGM' },
+        { ClassA: '216485', ClassC: 'グリサ', NumA: 102, DescriptionA: 'GM002' },
+        { ClassA: '216486', ClassC: '客サ', NumA: 201, DescriptionA: 'GM011', ClassD: '客サ第一GM' },
+        { ClassA: '216486', ClassC: '客サ', NumA: 202, DescriptionA: 'GM012', ClassD: '客サ第二GM' },
+        { ClassA: '216486', ClassC: '客サ', NumA: 203, DescriptionA: 'GM013', ClassD: '客サ第三GM' },
+        { ClassA: '2164860', ClassC: '客サ', NumA: 999, DescriptionA: 'GM099' },
+        { ClassA: '216486', ClassC: '客サ補助', NumA: 998, DescriptionA: 'GM098' }
+    ];
+    return input;
+}
+
+for (const [name, store, group, expected] of [
+    ['通常店所の客サは1件', '216485', '客サGM', '[Group101]'],
+    ['特殊店所の客サは第一〜第三', '216486', '客サGM', '[Group201],[Group202],[Group203]'],
+    ['グリサは完全一致の1件', '216485', 'グリサGM', '[Group102]']
+]) {
+    test(`GM: ${name}`, () => {
+        const input = gmFixture();
+        input.model.ClassD = store;
+        input.targets[0].ClassB = group;
+        const result = execute(source, input);
+        assert.equal(result.error, undefined);
+        assert.ok(logs(result).includes(`To: ${expected}`));
+        assert.ok(!result.events.some(e => e[0] === 'get' && [846822, 809267].includes(e[1])), '組織表・メール通知設定を参照しない');
+        const request = result.events.find(e => e[0] === 'get' && e[1] === 727689);
+        const view = JSON.parse(request[2]).View;
+        assert.equal(view.ColumnFilterHash.ClassA, JSON.stringify([store]));
+        assert.equal(view.ColumnFilterHash.ClassC, JSON.stringify([group === '客サGM' ? '客サ' : 'グリサ']));
+        assert.deepEqual(view.ColumnFilterSearchTypes, { ClassA: 'ExactMatchMultiple', ClassC: 'ExactMatchMultiple' });
+    });
+}
+
+test('GM: 検索フィルタが効かなくても別店所・類似区分を除外する', () => {
+    const input = gmFixture();
+    input.model.ClassD = '216486';
+    input.ignoreGmFilter = true;
+    // 防御確認前にIDを検証してもいけない。
+    input.gmMappings[0].NumA = 'invalid';
+    const result = execute(source, input);
+    assert.equal(result.error, undefined);
+    assert.ok(logs(result).includes('To: [Group201],[Group202],[Group203]'));
+});
+
+test('GM: 存在しない店所を他店所で補完しない', () => {
+    const input = gmFixture();
+    input.model.ClassD = '001'; // 内部値216485の表示名を検索値に流用しない。
+    const result = execute(source, input);
+    assert.match(result.error, /GM対応がありません/);
+    assert.ok(!hasMessage(result));
+});
+
+test('GM: 店所未設定は検索前にエラー', () => {
+    const input = gmFixture();
+    input.model.ClassD = '';
+    const result = execute(source, input);
+    assert.equal(result.error, 'GM検索の店所コードが未設定です');
+    assert.ok(!result.events.some(e => e[0] === 'get' && e[1] === 727689));
+});
+
+for (const value of [undefined, '', null, 0, -1, 1.5, 'abc', '0x10', '1e3', true, [], 2147483648]) {
+    test(`GM: 不正なNumA ${JSON.stringify(value)}を通知先にしない`, () => {
+        const input = gmFixture();
+        input.gmMappings[0].NumA = value;
+        const result = execute(source, input);
+        assert.match(result.error, /GMグループIDが不正/);
+        assert.ok(!hasMessage(result));
+    });
+}
+
+for (const value of [101, '101', '101.0', 2147483647]) {
+    test(`GM: 有効なNumA ${JSON.stringify(value)}をGroup形式にする`, () => {
+        const input = gmFixture();
+        input.gmMappings[0].NumA = value;
+        const result = execute(source, input);
+        assert.equal(result.error, undefined);
+        assert.ok(logs(result).includes(`To: [Group${Number(value)}]`));
+    });
+}
+
+for (const value of ['', 'GM', 'ORG001', 'GM001,GM002', 'GM 001', '[Group101]']) {
+    test(`GM: 不正なグループコード ${JSON.stringify(value)}は設定エラー`, () => {
+        const input = gmFixture();
+        input.gmMappings[0].DescriptionA = value;
+        assert.match(execute(source, input).error, /GMグループコードが不正/);
+    });
+}
+
+test('GM: 同じGroupIdは取得時とTo・Cc・Bcc間で重複排除', () => {
+    const input = gmFixture();
+    input.gmMappings.push({ ...input.gmMappings[0], NumA: '101.0' });
+    for (const type of ['Cc', 'Bcc']) input.targets.push({ ...input.targets[0], ClassC: type });
+    const result = execute(source, input);
+    assert.equal(result.error, undefined);
+    assert.ok(logs(result).includes('To: [Group101]'));
+    assert.ok(logs(result).includes('Cc: '));
+    assert.ok(logs(result).includes('Bcc: '));
+});
+
+for (const store of ['', '216485', 'OTHER']) {
+    test(`固定組織: 店所 ${JSON.stringify(store)} に依存しない`, () => {
+        const input = fixture();
+        input.fixedOrganizationCodes = ['001ABC'];
+        input.model.ClassD = store;
+        input.targets[0].ClassD = 'FIXED_ORGANIZATION';
+        input.targets[0].ClassB = '001ABC';
+        input.mail[0].DescriptionB = '001ABC';
+        const result = execute(source, input);
+        assert.equal(result.error, undefined);
+        assert.ok(logs(result).includes('To: [User1],test@example.invalid'));
+        assert.ok(!result.events.some(e => e[0] === 'get' && [846822, 727689].includes(e[1])));
+        const query = result.events.find(e => e[0] === 'get' && e[1] === 809267);
+        assert.equal(JSON.parse(query[2]).View.ColumnFilterHash.DescriptionB, '001ABC');
+    });
+}
+
+for (const [type, group, expected] of [
+    ['', 'G1', /通知対象区分が不正/],
+    ['UNKNOWN', 'G1', /通知対象区分が不正/],
+    ['GM', '客サ', /GMの対象グループが不正/],
+    ['GM', 'constructor', /GMの対象グループが不正/],
+    ['GM', 'G1', /GMの対象グループが不正/],
+    ['ORGANIZATION', '客サGM', /店所連動組織の対象グループが不正/],
+    ['ORGANIZATION', 'FIX001', /店所連動組織の対象グループが不正/],
+    ['FIXED_ORGANIZATION', 'G1', /固定組織の許可コードにありません/],
+    ['FIXED_ORGANIZATION', '客サGM', /固定組織の許可コードにありません/],
+    ['GM', '', /通知対象グループが未設定/]
+]) {
+    test(`区分と選択値の検証: ${type}/${group}`, () => {
+        const input = fixture();
+        input.fixedOrganizationCodes = ['FIX001'];
+        input.targets[0].ClassD = type;
+        input.targets[0].ClassB = group;
+        const result = execute(source, input);
+        assert.match(result.error, expected);
+        assert.ok(!result.events.some(e => e[0] === 'get' && [846822, 727689, 809267].includes(e[1])));
+    });
+}
+
+test('対象区分の未登録を既存組織と推測して送信しない', () => {
+    const input = fixture();
+    delete input.targets[0].ClassD;
+    assert.match(execute(source, input).error, /通知対象区分が不正/);
+});
+
+test('固定組織: 既定の許可リストは空で未設定コードを拒否する', () => {
+    const input = fixture();
+    input.targets[0].ClassD = 'FIXED_ORGANIZATION';
+    input.targets[0].ClassB = 'ABC001';
+    assert.equal(execute(source, input).error, '固定組織の許可コードにありません: ABC001');
+});
+
+test('3区分混在: 既存宛先とGroup宛先を併用し、送信APIは1回だけ呼ぶ', () => {
+    const input = gmFixture();
+    input.fixedOrganizationCodes = ['ORG1'];
+    input.organizations[0].ClassA = '216485';
+    input.organizations[0].DescriptionA = 'STORE_ORG';
+    input.mail.push({ ...input.mail[0], DescriptionB: 'STORE_ORG' });
+    input.targets.push(
+        { ClassA: '10', ClassB: 'G1', ClassC: 'To', ClassD: 'ORGANIZATION' },
+        { ClassA: '10', ClassB: 'ORG1', ClassC: 'Cc', ClassD: 'FIXED_ORGANIZATION' },
+        { ClassA: '10', ClassB: 'グリサGM', ClassC: 'Bcc', ClassD: 'GM' }
+    );
+    input.sendEnabled = true;
+    input.trackEvaluation = true;
+    const result = execute(source, input);
+    assert.equal(result.error, undefined);
+    const sends = result.events.filter(e => e[0] === 'send');
+    assert.equal(sends.length, 1);
+    assert.equal(sends[0][1].Address, '[Group101],[User1],test@example.invalid');
+    assert.equal(sends[0][1].CcAddress, '');
+    assert.equal(sends[0][1].BccAddress, '[Group102]');
+    assert.equal(result.events.filter(e => e[0] === 'evaluate').length, 1);
+});
+
+for (const type of ['Cc', 'Bcc']) {
+    test(`GM: 独立した${type}も既存の送信プロパティへ渡す`, () => {
+        const input = gmFixture();
+        input.targets[0].ClassC = type;
+        input.fixedOrganizationCodes = ['ORG1'];
+        input.targets.push({ ClassA: '10', ClassB: 'ORG1', ClassC: 'To', ClassD: 'FIXED_ORGANIZATION' });
+        input.sendEnabled = true;
+        const result = execute(source, input);
+        assert.equal(result.error, undefined);
+        const sent = result.events.find(e => e[0] === 'send')[1];
+        assert.equal(sent.Address, '[User1],test@example.invalid');
+        assert.equal(sent[type + 'Address'], '[Group101]');
+    });
+}
+
+test('GM: 後続の対応行が不正なら一部のGroupだけを送信しない', () => {
+    const input = gmFixture();
+    input.model.ClassD = '216486';
+    input.gmMappings[4].NumA = 0;
+    input.sendEnabled = true;
+    const result = execute(source, input);
+    assert.match(result.error, /GMグループIDが不正/);
+    assert.ok(!result.events.some(e => e[0] === 'send'));
 });

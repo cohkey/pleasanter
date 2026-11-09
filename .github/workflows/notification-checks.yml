@@ -29,3 +29,5 @@ jobs:
         run: node --test notification/test/realtime-notification.test.cjs
       - name: Verify tests detect broken rule isolation
         run: node notification/test/check-rule-scope-regression.cjs
+      - name: Verify tests detect broken GM scope
+        run: node notification/test/check-target-scope-regression.cjs

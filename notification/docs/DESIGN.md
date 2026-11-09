@@ -99,8 +99,9 @@ erDiagram
 | --- | --- | --- |
 | 通知ルール | 843610 | ResultId：内部の親ID、Title：表示用通知ID（例N001）、DescriptionA：通知名、CheckA：有効、DescriptionB：件名、DescriptionC：本文 |
 | 通知条件 | 843614 | ClassA：親ルールのResultId、ClassB：条件パターン、ClassC：論理項目名、ClassD：演算子、DescriptionB：比較値 |
-| 通知対象 | 843620 | ClassA：親ルールのResultId、ClassB：グループ、ClassC：To / Cc / Bcc |
+| 通知対象 | 843620 | ClassA：親ルールのResultId、ClassB：グループ、ClassC：To / Cc / Bcc、ClassD：対象区分 |
 | 組織 | 846822 | ClassA：店所コード、ClassC：グループ、DescriptionA：組織コード |
+| 店所・GM対応表 | 727689 | ClassA：店所内部ID、ClassC：グリサ／客サ、NumA：GroupId、DescriptionA：GMコード、ClassD：GM名 |
 | メール通知設定 | 809267 | DescriptionB：組織コード、ClassZ：ユーザIDのJSON配列、DescriptionA：直接メールアドレス |
 
 **表示用通知IDのN001ではなく、内部のResultIdで親子を関連付ける。** 例えばN001のResultIdが846996なら条件のClassAは846996となる。店所もマスター参照の分類なら、表示001と保存されたレコードIDを区別し、対象レコードのClassDと組織表のClassAの内部値をそのまま照合する。
@@ -179,13 +180,14 @@ FROM_TO / IN / NOT_INについては、候補ルールに所属する比較値�
 ## 10. 宛先・本文・送信
 
 - 通知対象0件はログを出してそのルールをスキップする。
-- 更新後のClassDと対象グループから組織コードを取得する。「お客さまサービスグループ」指定時だけ、同店所の親・第一・第二・第三の4値を完全一致で検索する。第一等の直接指定と他グループは1値だけを検索し、組織コードは重複排除する。変更前の店所には通知しない。通知対象のClassAと組織のClassA / ClassCはJSON配列文字列＋ExactMatchMultipleで検索し、取得後の一致確認も行う。組織未取得時は取得・条件一致・コード有無の件数を記録する。
+- 通知対象ClassDのORGANIZATIONは既存組織検索、GMはサイト727689からGroup宛先取得、FIXED_ORGANIZATIONはClassBの許可済み組織コードでメール通知設定を検索する。ClassBは共用し、固定組織専用項目は追加しない。対象区分は必須。詳細・移行は[通知対象区分](../TARGET-TYPES.md)を参照。
+- ORGANIZATIONでは更新後のClassDと対象グループから組織コードを取得する。「お客さまサービスグループ」指定時だけ、同店所の親・第一・第二・第三の4値を完全一致で検索する。第一等の直接指定と他グループは1値だけを検索し、組織コードは重複排除する。変更前の店所には通知しない。通知対象のClassAと組織のClassA / ClassCはJSON配列文字列＋ExactMatchMultipleで検索し、取得後の一致確認も行う。組織未取得時は取得・条件一致・コード有無の件数を記録する。
 - 宛先区分はTo / Cc / Bccの完全一致のみ許可する。
 - ClassZはJSON配列とし、trim後に数字だけのユーザIDを採用する。不正IDは除外し、配列以外・壊れたJSONは例外となる。
 - ユーザIDは `[User12345]` 形式に変換する。
 - 直接アドレスはカンマ・セミコロン・改行で分割し、空白除去後に簡易形式チェックする。
 - To→Cc→Bccの順で、大文字小文字を区別せず同じ文字列を排除する。
-- ユーザ指定と直接アドレスの同一人物判定、ルール間の重複排除は行わない。
+- ユーザ指定・Group指定・直接アドレス間の同一人物判定、ルール間の重複排除は行わない。Group展開後のTo/Cc/Bccをまたぐメンバー重複は標準処理でも残る。
 - Toが空なら例外。Cc / Bccだけでの送信は許可しない。
 
 | プレースホルダー | 値 |

@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/09
+ * ・通知対象区分を追加し、店所連動GMと固定組織の宛先解決に対応
  * ・成立したルールの詳細だけを通常出力し、デバッグフラグ・終了件数・常時エラー出力を追加
  * 2026/11/06
  * ・お客さまサービスグループ指定時に同店所の第一・第二・第三グループも検索し、組織コードを重複排除
@@ -19,8 +20,26 @@ const SITE_IDS = {
     rules: 843610,
     targets: 843620,
     organizations: 846822,
+    gmMappings: 727689,
     mailSettings: 809267
 }
+
+// 通知対象ClassDの保存値。ClassBは区分に応じてグループ区分／組織コードを共用する。
+const NOTIFICATION_TARGET_TYPES = ["ORGANIZATION", "GM", "FIXED_ORGANIZATION"];
+const GM_MAPPING_FIELDS = {
+    store: "ClassA",
+    category: "ClassC",
+    groupId: "NumA",
+    groupCode: "DescriptionA",
+    groupName: "ClassD"
+};
+// キーは通知対象ClassB、値はGM対応表ClassCの保存値。
+const NOTIFICATION_GM_CATEGORIES = {
+    "グリサGM": "グリサ",
+    "客サGM": "客サ"
+};
+// 固定組織の許可コード。例は登録せず、実際の組織コードを導入時に追加する。
+const FIXED_ORGANIZATION_CODES = [];
 
 // trueにすると、不成立ルールも含む条件一覧・評価JSONを出力する。
 const NOTIFICATION_DEBUG = false;
@@ -310,7 +329,8 @@ function getNotificationTargets(ruleId) {
         )
         .map(record => ({
             group: String(record.ClassB ?? ""),
-            addressType: String(record.ClassC ?? "")
+            addressType: String(record.ClassC ?? ""),
+            targetType: String(record.ClassD ?? "")
         }));
 }
 
@@ -361,6 +381,58 @@ function getOrganizationCodes(tenshoCode, groupCode) {
     }
 
     return organizationCodes;
+}
+
+/**
+ * 同じ店所・GM区分の全対応を取得する。客サの第一〜第三も区分「客サ」で登録する。
+ */
+function getGmGroupAddresses(tenshoCode, category) {
+    const store = String(tenshoCode ?? "");
+    if (!store) {
+        throw new Error("GM検索の店所コードが未設定です");
+    }
+
+    const fields = GM_MAPPING_FIELDS;
+    const data = {
+        View: {
+            ColumnFilterHash: {
+                [fields.store]: JSON.stringify([store]),
+                [fields.category]: JSON.stringify([category])
+            },
+            ColumnFilterSearchTypes: {
+                [fields.store]: "ExactMatchMultiple",
+                [fields.category]: "ExactMatchMultiple"
+            }
+        }
+    };
+    const records = Array.from(items.Get(SITE_IDS.gmMappings, JSON.stringify(data)));
+    const matched = records.filter(record =>
+        String(record[fields.store]) === store &&
+        String(record[fields.category]) === category
+    );
+    if (matched.length === 0) {
+        throw new Error(`GM対応がありません（店所: ${store} / 区分: ${category}）`);
+    }
+
+    const addresses = matched.map(record => {
+        const rawId = record[fields.groupId];
+        const groupId = Number(rawId);
+        // GroupIdはPleasanterの正のInt32。NumAの小数・負数・空値を宛先へ流さない。
+        if (!["string", "number"].includes(typeof rawId) ||
+            !/^\d+(?:\.0+)?$/.test(String(rawId).trim()) || !Number.isInteger(groupId) ||
+            groupId <= 0 || groupId > 2147483647) {
+            throw new Error(`GMグループIDが不正です: ${rawId}`);
+        }
+        const groupCode = String(record[fields.groupCode] ?? "");
+        if (!/^GM[^\s,;\[\]]+$/.test(groupCode)) {
+            throw new Error(`GMグループコードが不正です: ${groupCode}`);
+        }
+        logNotificationDebug(
+            `GM: ${record[fields.groupName] ?? ""} / コード: ${groupCode} / GroupId: ${groupId}`
+        );
+        return `[Group${groupId}]`;
+    });
+    return [...new Set(addresses)];
 }
 
 const MAIL_SETTING_FIELDS = {
@@ -578,12 +650,42 @@ function getTargetRecipientAddresses(rule, tenshoCode, target) {
         throw new Error(`宛先区分が不正です: ${addressType}`);
     }
 
-    const organizationCodes = getOrganizationCodes(tenshoCode, groupCode);
+    const targetType = target.targetType;
+    if (!NOTIFICATION_TARGET_TYPES.includes(targetType)) {
+        throw new Error(`通知対象区分が不正です: ${targetType ?? ""}`);
+    }
+    if (!groupCode) {
+        throw new Error("通知対象グループが未設定です");
+    }
 
-    context.Log(
-        `店所: ${tenshoCode} / グループ: ${groupCode} / ` +
-        `組織: ${JSON.stringify(organizationCodes)}`
-    );
+    const isGm = Object.prototype.hasOwnProperty.call(NOTIFICATION_GM_CATEGORIES, groupCode);
+    const isFixed = FIXED_ORGANIZATION_CODES.includes(groupCode);
+    if (targetType === "GM") {
+        if (!isGm || isFixed) {
+            throw new Error(`GMの対象グループが不正です: ${groupCode}`);
+        }
+        const addresses = getGmGroupAddresses(tenshoCode, NOTIFICATION_GM_CATEGORIES[groupCode]);
+        context.Log(`店所: ${tenshoCode} / GM: ${groupCode} / 宛先: ${JSON.stringify(addresses)}`);
+        return addresses;
+    }
+
+    let organizationCodes;
+    if (targetType === "FIXED_ORGANIZATION") {
+        if (!isFixed || isGm) {
+            throw new Error(`固定組織の許可コードにありません: ${groupCode}`);
+        }
+        organizationCodes = [groupCode];
+        context.Log(`固定組織: ${groupCode} / 宛先区分: ${addressType}`);
+    } else {
+        if (isGm || isFixed) {
+            throw new Error(`店所連動組織の対象グループが不正です: ${groupCode}`);
+        }
+        organizationCodes = getOrganizationCodes(tenshoCode, groupCode);
+        context.Log(
+            `店所: ${tenshoCode} / グループ: ${groupCode} / ` +
+            `組織: ${JSON.stringify(organizationCodes)}`
+        );
+    }
 
     const addresses = [];
 
