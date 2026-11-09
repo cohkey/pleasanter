@@ -1,5 +1,7 @@
 /**
  * 変更履歴
+ * 2026/11/09
+ * ・通常時とデバッグ時のログ、集計、評価回数・順序の不変を確認
  * 2026/11/06
  * ・サービスグループ展開、同店所の完全一致、直接指定と組織コード重複排除を確認
  * ・通常ログに空行や区切り線前の改行を含めないことを確認
@@ -65,10 +67,18 @@ function execute(code, input) {
     vm.createContext(sandbox);
     let error;
     try {
-        const executable = input.sendEnabled
+        let executable = input.sendEnabled
             ? code.replace('const SEND_ENABLED = false;', 'const SEND_ENABLED = true;')
             : code;
+        if (input.debugEnabled) executable = executable.replace('const NOTIFICATION_DEBUG = false;', 'const NOTIFICATION_DEBUG = true;');
         vm.runInContext(executable, sandbox);
+        if (input.trackEvaluation) {
+            const original = sandbox.evaluateCondition;
+            sandbox.evaluateCondition = function(c, f) {
+                events.push(['evaluate', c.ClassA, c.ClassB, c.ClassC, c.ClassD]);
+                return original(c, f);
+            };
+        }
         sandbox.sendRealtimeNotification();
     } catch (e) { error = e.message; }
     return JSON.parse(JSON.stringify({ events, error }));
@@ -89,7 +99,7 @@ function businessResult(result) {
 }
 
 const cases = [
-    ['引き継ぎ情報なし', f => { f.data = undefined; }, r => assert.equal(r.events.length, 0)],
+    ['引き継ぎ情報なし', f => { f.data = undefined; }, r => assert.equal(businessResult(r).events.length, 0)],
     ['変更なし', f => { f.data = '{"changedFields":{}}'; }, r => assert.equal(hasMessage(r), false)],
     ['changedFields未設定', f => { f.data = '{}'; }, r => assert.equal(hasMessage(r), false)],
     ['不正なJSON', f => { f.data = '{'; }, r => assert.ok(r.error)],
@@ -147,12 +157,13 @@ for (const [name, configure, verify] of cases) {
     test(name, () => {
         const input = fixture();
         configure(input);
+        input.trackEvaluation = true;
         const actual = execute(source, input);
         verify(actual);
         if (baseline) {
             const previous = execute(baseline, input);
             assert.deepEqual(businessResult(actual), businessResult(previous), '変更前と業務処理・例外・API呼び出し順が一致（表示ログを除く）');
-            assert.deepEqual(logs(actual).filter(line => line.startsWith('{')), logs(previous).filter(line => line.startsWith('{')), '条件評価のJSONログを維持');
+
         }
     });
 }
@@ -249,13 +260,14 @@ for (const [name, extra, expected] of [
         const result = execute(source, input);
         assert.equal(result.error, undefined);
         assert.equal(hasMessage(result), expected);
-        assert.ok(logs(result).includes('通知候補: ルール'));
+        assert.ok(logs(result).some(line => line.includes('候補1件')));
     });
 }
 
 
 function mixedRuleFixture() {
     const input = fixture();
+    input.debugEnabled = true;
     input.ignoreConditionRuleFilter = true;
     input.data = JSON.stringify({ changedFields: { status: { oldValue: '0000', newValue: '0100' } } });
     input.model.ClassB = '0100';
@@ -424,7 +436,7 @@ function sampleLogFixture() {
     return input;
 }
 
-test('画像の3ルールを区切り線・条件一覧・既存JSONで読みやすく表示', () => {
+test('デバッグ時は画像の3ルールを従来の条件一覧・既存JSONで表示', () => {
     const input = sampleLogFixture();
     const result = execute(source, input);
     assert.equal(result.error, undefined);
@@ -455,7 +467,7 @@ test('画像の3ルールを区切り線・条件一覧・既存JSONで読みや
         '{"field":"status","operator":"TO","value":"0220","columnName":"ClassB","modelValue":"0100","changedValue":"0100","hasChange":true}',
         '{"field":"status","operator":"TO","value":"0300","columnName":"ClassB","modelValue":"0100","changedValue":"0100","hasChange":true}',
         '条件成立: false',
-        '----- 通知処理終了 -----'
+        '----- 通知処理終了: 候補3件 / 成立1件 / 不成立2件 -----'
     ]);
     if (baseline) {
         const previous = execute(baseline, input);
@@ -476,7 +488,7 @@ test('重複・内部処理だけのログを出さず、最終宛先と内容�
 
 test('正常終了では終了行が1回、例外時には完了したように表示しない', () => {
     const normal = execute(source, fixture());
-    assert.equal(logs(normal).filter(line => line.trim() === '----- 通知処理終了 -----').length, 1);
+    assert.equal(logs(normal).filter(line => line.trim() === '----- 通知処理終了: 候補1件 / 成立1件 / 不成立0件 -----').length, 1);
     const input = fixture();
     input.mail[0].DescriptionA = 'invalid';
     const failed = execute(source, input);
@@ -660,4 +672,121 @@ test('サービスグループ展開: 複数組織からToを作り、同じ組�
     assert.equal(result.events.filter(e => e[0] === 'get' && e[1] === 809267 &&
         JSON.parse(e[2]).View.ColumnFilterHash.DescriptionB === 'SHARED').length, 1);
     assert.ok(!logs(result).some(line => line.includes('other-store@example.invalid')));
+});
+
+function summary(result) {
+    return logs(result).filter(line => /^----- 通知処理(終了|中断):/.test(line));
+}
+
+test('通常時は成立したN002だけ詳細を表示し、不成立2件は集計だけにする', () => {
+    const input = sampleLogFixture();
+    input.debugEnabled = false;
+    const result = execute(source, input);
+    assert.equal(result.error, undefined);
+    assert.deepEqual(logs(result).filter(line => line.startsWith('----- 通知ID:')), ['----- 通知ID: N002 -----']);
+    assert.equal(logs(result).filter(line => line.startsWith('{')).length, 2);
+    assert.ok(!logs(result).some(line => /NOT_IN|条件成立: false|changedFields:|通知候補:/.test(line)));
+    assert.deepEqual(summary(result), ['----- 通知処理終了: 候補3件 / 成立1件 / 不成立2件 -----']);
+});
+
+for (const debugEnabled of [false, true]) {
+    test(`評価回数・順序・短絡評価・業務APIは変更前と同じ（debug=${debugEnabled}）`, () => {
+        for (const configure of [() => {}, f => { f.model.ClassE = '100kV'; }, f => { f.conditions[1].DescriptionB = '0000,9999'; }]) {
+            const input = sampleLogFixture();
+            input.debugEnabled = debugEnabled;
+            input.trackEvaluation = true;
+            configure(input);
+            const result = execute(source, input);
+            const other = execute(source, { ...input, debugEnabled: !debugEnabled });
+            assert.deepEqual(businessResult(result), businessResult(other));
+            if (baseline) assert.deepEqual(businessResult(result), businessResult(execute(baseline, input)));
+        }
+        const input = sampleLogFixture();
+        input.debugEnabled = debugEnabled;
+        input.trackEvaluation = true;
+        assert.deepEqual(execute(source, input).events.filter(e => e[0] === 'evaluate'), [
+            ['evaluate', '12', '1', 'denatsu', 'IN'], ['evaluate', '12', '1', 'status', 'FROM_TO'],
+            ['evaluate', '10', '1', 'denatsu', 'NOT_IN'], ['evaluate', '11', '1', 'denatsu', 'EQ'],
+            ['evaluate', '11', '1', 'status', 'TO'], ['evaluate', '11', '2', 'status', 'TO']
+        ]);
+    });
+
+    test(`条件設定エラーは詳細・エラー・未完了数を残す（debug=${debugEnabled}）`, () => {
+        const input = sampleLogFixture();
+        input.debugEnabled = debugEnabled;
+        input.conditions[1].DescriptionB = 'bad';
+        const result = execute(source, input);
+        assert.match(result.error, /FROM_TOの比較値が不正/);
+        assert.ok(logs(result).includes('----- 通知ID: N002 -----'));
+        assert.ok(logs(result).some(line => line.startsWith('通知処理エラー:')));
+        assert.deepEqual(summary(result), ['----- 通知処理中断: 候補3件 / 成立0件 / 不成立0件 / 未完了3件 -----']);
+    });
+
+    test(`宛先エラーでも成立数を送信成功数にしない（debug=${debugEnabled}）`, () => {
+        const input = fixture();
+        input.debugEnabled = debugEnabled;
+        input.organizations = [];
+        const result = execute(source, input);
+        assert.equal(result.error, 'Toの通知先がありません');
+        assert.ok(logs(result).includes('通知処理エラー: Toの通知先がありません'));
+        assert.deepEqual(summary(result), ['----- 通知処理中断: 候補1件 / 成立1件 / 不成立0件 / 未完了0件 -----']);
+    });
+}
+
+test('全件不成立では詳細を出さず0成立を表示する', () => {
+    const input = sampleLogFixture();
+    input.debugEnabled = false;
+    input.conditions[1].DescriptionB = '0000,9999';
+    const result = execute(source, input);
+    assert.deepEqual(logs(result), ['----- 通知処理終了: 候補3件 / 成立0件 / 不成立3件 -----']);
+});
+
+test('引継ぎなし・変更なし・候補なしでも0件の集計を出す', () => {
+    for (const configure of [f => { f.data = undefined; }, f => { f.data = '{"changedFields":{}}'; }, f => { f.conditions = []; }]) {
+        const input = fixture();
+        configure(input);
+        assert.deepEqual(logs(execute(source, input)), ['----- 通知処理終了: 候補0件 / 成立0件 / 不成立0件 -----']);
+    }
+});
+
+test('無効・リンク切れルールは集計候補に含めず、リンク切れの警告は常時出す', () => {
+    const input = mixedRuleFixture();
+    input.debugEnabled = false;
+    input.rules[0].CheckA = false;
+    input.rules.pop();
+    const result = execute(source, input);
+    assert.ok(logs(result).includes('通知ルールが見つかりません: 11'));
+    assert.deepEqual(summary(result), ['----- 通知処理終了: 候補0件 / 成立0件 / 不成立0件 -----']);
+});
+
+test('送信無効は未送信と明示し、成功通知や送信API呼出を行わない', () => {
+    const result = execute(source, fixture());
+    assert.ok(logs(result).includes('送信無効のため送信していません'));
+    assert.ok(!logs(result).some(line => /送信成功|送信しました/.test(line)));
+    assert.ok(!result.events.some(e => ['newNotification', 'send', 'message'].includes(e[0])));
+});
+
+test('不成立ログが後続の成立ルールに混入しない', () => {
+    const input = mixedRuleFixture();
+    input.debugEnabled = false;
+    input.conditions[0].DescriptionB = '0000,9999';
+    input.conditions[3].DescriptionB = '0100';
+    input.conditions[4].DescriptionB = '60kV';
+    const result = execute(source, input);
+    assert.ok(logs(result).some(line => line.startsWith('----- 通知ID: N999')));
+    assert.ok(!logs(result).some(line => /通知ID: N001|FROM_TO|比較値: 20kV/.test(line)));
+});
+
+test('条件評価の例外を同じオブジェクトで再送出し、ログバッファを復元する', () => {
+    const sandbox = engine();
+    sandbox.context.UserData = { notificationData: '{"changedFields":{"status":{}}}' };
+    const recorded = [];
+    sandbox.context.Log = message => recorded.push(message);
+    const original = new Error('評価例外');
+    sandbox.getCandidateNotificationRules = () => [{ ResultId: 10, Title: 'ERR' }];
+    sandbox.getNotificationConditions = () => [condition('TO', '0100')];
+    sandbox.evaluateConditions = () => { throw original; };
+    assert.throws(() => sandbox.sendRealtimeNotification(), e => e === original);
+    assert.equal(vm.runInContext('notificationConditionLogBuffer', sandbox), null);
+    assert.ok(recorded.includes('通知処理エラー: 評価例外'));
 });
