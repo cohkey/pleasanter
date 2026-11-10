@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/10
+ * ・固定組織の許可4コードを登録し、店所連動の宛先名に「店所に紐づく」を付加
  * ・TEST／PRODUCTION送信モードと通知対象の表示名を使う受付・送信結果メッセージを追加
  * 2026/11/09
  * ・通知対象区分を追加し、店所連動GMと固定組織の宛先解決に対応
@@ -14,8 +15,6 @@
  * ・複数値を文字列比較するIN・NOT_IN演算子と比較値の設定検証を追加
  * ・通知条件を親ルールIDで絞り込み、別通知IDの条件が混在する問題を修正
  */
-
-// ・新規追加
 
 const SITE_IDS = {
     conditions: 843614,
@@ -40,8 +39,8 @@ const NOTIFICATION_GM_CATEGORIES = {
     "グリサGM": "グリサ",
     "客サGM": "客サ"
 };
-// 固定組織の許可コード。例は登録せず、実際の組織コードを導入時に追加する。
-const FIXED_ORGANIZATION_CODES = [];
+// 固定組織として指定できる組織コード（保存値）。
+const FIXED_ORGANIZATION_CODES = ["1014797", "1015247", "1015246", "TTA"];
 
 // 送信モードの参照はgetNotificationSendModeに集約する。初期値では実送信しない。
 const NOTIFICATION_SEND_MODE = "TEST";
@@ -774,7 +773,7 @@ function createNotificationMessage(rule, tenshoCode) {
 }
 
 /**
- * 対象テーブルClassBの静的選択肢から表示名を取得する。
+ * 店所連動は指定の名称に接頭語を付け、固定組織はClassBの表示名を使う。
  * 取得不能時は保存コードを対象名と推測せず、対象全体を表す文言にする。
  */
 function getNotificationTargetLabel(targets) {
@@ -785,27 +784,52 @@ function getNotificationTargetLabel(targets) {
         ? `指定された通知対象（${uniqueTargets.length}件）`
         : "指定された通知対象";
 
-    try {
-        const site = Array.from(items.GetSite(SITE_IDS.targets))[0];
-        const column = Array.from(site?.SiteSettings?.Columns || [])
-            .find(column => column.ColumnName === "ClassB");
-        const labels = new Map();
-        // Pleasanter 1.4.23.3既定の選択肢形式：保存値,表示名,略称,...（\,はカンマ）。
-        for (const line of String(column?.ChoicesText ?? "").split(/\r\n|\n|\r/)) {
-            if (!line || line.startsWith("[")) continue; // 動的・リンク選択肢は名前を推測しない。
-            const parts = line.split(/(?<!\\),/).map(value => value.replace(/\\,/g, ","));
-            if (!labels.has(parts[0])) labels.set(parts[0], parts[1] || parts[0]);
+    // 表示専用。宛先検索に使う保存値・グループ対応は変更しない。
+    const storeLabels = {
+        ORGANIZATION: {
+            "客サ": "お客さまサービスG",
+            "お客さまサービスグループ": "お客さまサービスG",
+            "お客さまサービスG": "お客さまサービスG",
+            "グリサ": "グリッドサービスG",
+            "グリッドサービスG": "グリッドサービスG"
+        },
+        GM: {
+            "客サGM": "お客さまサービスGM",
+            "グリサGM": "グリッドサービスGM"
         }
-        const names = uniqueTargets.map(target => labels.get(target.group));
-        if (names.length === 0 || names.some(name => !name)) {
-            context.Log("通知対象の表示名を取得できないため、対象名を省略して表示します");
+    };
+    const knownName = target => {
+        const names = storeLabels[target.targetType];
+        return names && Object.prototype.hasOwnProperty.call(names, target.group)
+            ? names[target.group] : undefined;
+    };
+    let names = uniqueTargets.map(knownName);
+    if (names.some(name => !name)) {
+        try {
+            const site = Array.from(items.GetSite(SITE_IDS.targets))[0];
+            const column = Array.from(site?.SiteSettings?.Columns || [])
+                .find(column => column.ColumnName === "ClassB");
+            const labels = new Map();
+            // Pleasanter 1.4.23.3既定の選択肢形式：保存値,表示名,略称,...（\,はカンマ）。
+            for (const line of String(column?.ChoicesText ?? "").split(/\r\n|\n|\r/)) {
+                if (!line || line.startsWith("[")) continue;
+                const parts = line.split(/(?<!\\),/).map(value => value.replace(/\\,/g, ","));
+                if (!labels.has(parts[0])) labels.set(parts[0], parts[1] || parts[0]);
+            }
+            names = uniqueTargets.map(target => knownName(target) || labels.get(target.group));
+        } catch (error) {
+            context.Log(`通知対象の表示名を取得できません: ${error.message}`);
             return fallback;
         }
-        return [...new Set(names)].join("、");
-    } catch (error) {
-        context.Log(`通知対象の表示名を取得できません: ${error.message}`);
+    }
+    if (names.length === 0 || names.some(name => !name)) {
+        context.Log("通知対象の表示名を取得できないため、対象名を省略して表示します");
         return fallback;
     }
+    return [...new Set(names.map((name, index) =>
+        uniqueTargets[index].targetType === "FIXED_ORGANIZATION" || name.startsWith("店所に紐づく")
+            ? name : `店所に紐づく${name}`
+    ))].join("、");
 }
 
 /**
