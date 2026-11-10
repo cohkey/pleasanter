@@ -1,0 +1,150 @@
+{
+  "Version": 1.017,
+  "ReferenceType": "Results",
+  "GridColumns": [
+    "ResultId",
+    "Title",
+    "Status",
+    "UpdatedTime"
+  ],
+  "EditorColumnHash": {
+    "General": [
+      "Title",
+      "Status",
+      "ClassA",
+      "ClassB",
+      "ClassC",
+      "ClassD",
+      "ClassE",
+      "ClassF",
+      "DateA",
+      "DateB",
+      "DateC",
+      "DateD",
+      "DateE",
+      "DateF",
+      "CheckA",
+      "DateG",
+      "DateH",
+      "DateI",
+      "DateJ",
+      "DateK",
+      "DateL",
+      "DescriptionA",
+      "DescriptionB",
+      "DescriptionC",
+      "DescriptionD",
+      "AttachmentsA"
+    ]
+  },
+  "Columns": [
+    {
+      "ColumnName": "Title",
+      "LabelText": "タイトル",
+      "ValidateRequired": true
+    },
+    {
+      "ColumnName": "Status",
+      "LabelText": "対応状況",
+      "ChoicesText": "100,未受領\n200,対応中\n900,完了"
+    },
+    {
+      "ColumnName": "ClassA",
+      "LabelText": "設計番号"
+    },
+    {
+      "ColumnName": "ClassB",
+      "LabelText": "エリア",
+      "ChoicesText": "東京\n埼玉\n神奈川"
+    },
+    {
+      "ColumnName": "ClassC",
+      "LabelText": "ブロック番号",
+      "ChoicesText": "01\n02\n03"
+    },
+    {
+      "ColumnName": "ClassD",
+      "LabelText": "お客さま名"
+    },
+    {
+      "ColumnName": "ClassE",
+      "LabelText": "担当者"
+    },
+    {
+      "ColumnName": "ClassF",
+      "LabelText": "工事立会",
+      "ChoicesText": "あり\nなし"
+    },
+    {
+      "ColumnName": "DateA",
+      "LabelText": "送電日"
+    },
+    {
+      "ColumnName": "DateB",
+      "LabelText": "耐圧試験日"
+    },
+    {
+      "ColumnName": "DateC",
+      "LabelText": "工事実施予定日（工期）"
+    },
+    {
+      "ColumnName": "DateD",
+      "LabelText": "当社工事日2週間前"
+    },
+    {
+      "ColumnName": "DateE",
+      "LabelText": "当社工事実施日の2日前"
+    },
+    {
+      "ColumnName": "DateF",
+      "LabelText": "お客さまからの受領日"
+    },
+    {
+      "ColumnName": "CheckA",
+      "LabelText": "記入漏れ不備確認"
+    },
+    {
+      "ColumnName": "DateG",
+      "LabelText": "工事監理方への回答日"
+    },
+    {
+      "ColumnName": "DateH",
+      "LabelText": "グリッドサービス方からの受領日"
+    },
+    {
+      "ColumnName": "DateI",
+      "LabelText": "安全措置・工事会社へ回付日"
+    },
+    {
+      "ColumnName": "DateJ",
+      "LabelText": "工事会社よりFAX受領・グリサへ工事日連絡"
+    },
+    {
+      "ColumnName": "DateK",
+      "LabelText": "工事予定日"
+    },
+    {
+      "ColumnName": "DateL",
+      "LabelText": "第二工事予定日"
+    },
+    {
+      "ColumnName": "DescriptionA",
+      "LabelText": "主任技術者へ"
+    },
+    {
+      "ColumnName": "DescriptionB",
+      "LabelText": "電気工事店へ"
+    },
+    {
+      "ColumnName": "DescriptionC",
+      "LabelText": "主任技術者へ"
+    },
+    {
+      "ColumnName": "DescriptionD",
+      "LabelText": "電気工事店へ"
+    }
+  ],
+  "GeneralTabLabelText": "工事連絡",
+  "Scripts": [],
+  "Styles": []
+}
