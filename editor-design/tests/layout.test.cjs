@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/10
+ * ・標準イベントの共存と、手動診断で返す状態を確認
  * ・登録用の項目割り当てとDocker検証用の割り当てを分離
  */
 /* node layout.test.cjs 実HTMLのパス jsdomのインストール先/node_modules/jsdom */
@@ -45,8 +46,12 @@ function setup(script = source) {
         panel.remove();
         w.eval(source); d.dispatchEvent(new w.Event('DOMContentLoaded'));
         assert.equal(d.querySelector('.pcl-shell'),null);
+        assert.equal(w.PleasanterConstructionLayout.refresh().status, 'skipped');
         parent.append(panel);
-        w.PleasanterConstructionLayout.refresh();
+        const result = w.PleasanterConstructionLayout.refresh();
+        assert.equal(result.status, 'applied');
+        assert.equal(result.count, 25);
+        assert.equal(result.cssApplied, false);
         assert.equal(d.querySelectorAll('.pcl-field').length,25);w.close();
     });
     await test('実HTMLの25項目を移動、ID/name/値/選択肢/子要素と直接イベントを保持', () => {
@@ -62,6 +67,8 @@ function setup(script = source) {
         assert.equal(d.querySelectorAll('.pcl-paired').length,2);
         before.forEach((n,i)=>{assert.equal(d.getElementById(n.id),n);assert.equal(n.outerHTML,attrs[i]);});
         field.click(); assert.equal(clicks,1);
+        assert.equal(w.$p.events.on_editor_load(), false);
+        w.PleasanterConstructionLayout.stop();
         assert.equal(w.$p.events.on_editor_load, originalHandler);
         assert.equal(d.querySelector('#Results_AttachmentsAField').parentElement,root);
         assert.deepEqual([...d.querySelector('.pcl-summary-grid').children].map(n=>n.id),['Results_TitleField','Results_StatusField']);
@@ -82,7 +89,7 @@ function setup(script = source) {
         const section=d.createElement('section');field.replaceWith(section);section.append(field);
         w.eval(source);w.document.dispatchEvent(new w.Event('DOMContentLoaded'));assert.equal(d.querySelector('.pcl-shell'),null);assert.equal(field.parentNode,section);w.close();
     });
-    await test('Ajaxのフィールド差し替え・編集タブ再描画に追従', async () => {
+    await test('項目単体の差し替えと標準イベントによる編集タブ再描画に追従', async () => {
         const {w,d}=setup();
         let field=d.getElementById('Results_ClassAField');
         const replacement=field.cloneNode(true); replacement.classList.remove('pcl-field'); replacement.querySelector('input').value='差し替え';
@@ -91,7 +98,9 @@ function setup(script = source) {
         assert.equal(d.getElementById('Results_ClassA').value,'差し替え');
         assert(replacement.classList.contains('pcl-field'));
         const fresh=new JSDOM(html).window.document.querySelector(rootSelector).cloneNode(true);
-        d.querySelector(rootSelector).replaceWith(fresh); await sleep(210);
+        d.querySelector(rootSelector).replaceWith(fresh);
+        // 監視タイマーの実行前に標準イベントだけで適用できることを確認。
+        assert.equal(w.$p.events.on_editor_load(), false);
         assert.equal(d.querySelectorAll('.pcl-field').length,25);w.close();
     });
     await test('非表示・読取専用・添付・画像ボタンの属性を保持',()=>{
