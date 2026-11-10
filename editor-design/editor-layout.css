@@ -69,3 +69,6 @@
     .pcl-editor .pcl-safety { padding: 16px 13px; }
     .pcl-editor .pcl-note { display: none; }
 }
+
+/* 移動後に空になった標準セクションの見出しだけ隠す。Ajaxで項目が戻れば表示する。 */
+.pcl-editor > .pcl-empty-source:not(:has(> .section-fields > *)) { display: none; }

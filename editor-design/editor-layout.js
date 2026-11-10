@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/10
+ * ・標準タブ内のPleasanterセクションにある項目をカードに配置
  * ・標準の on_editor_load から適用し、手動診断で結果とCSSの適用状態を返す
  * ・実環境の項目割り当てを反映
  * ・対象テーブルへの直接登録を前提に enabled と siteId を廃止
@@ -84,22 +85,32 @@
         const fields = new Map();
         const ids = new Set();
         const problems = [];
+        const sourceSections = new Set();
         for (const [key, column] of Object.entries(config.columns)) {
             const id = `${config.prefix}_${column}Field`;
             const matches = /^[a-zA-Z0-9_]+$/.test(id)
                 ? document.querySelectorAll(`[id="${id}"]`) : [];
             const field = matches[0];
+            const section = field?.parentElement;
+            const container = section?.parentElement;
+            // 標準タブ直下のPleasanter標準セクションだけを移動元にする。
+            const inNativeSection = section?.matches('.section-fields') &&
+                container?.matches('.section-fields-container') && container.parentElement === panel;
             let reason;
             if (ids.has(id)) reason = '項目設定が重複';
             else if (!matches.length) reason = 'DOMに見つかりません';
             else if (matches.length > 1) reason = 'DOMのIDが重複';
             else if (field.closest('form') !== form) reason = '対象フォームの外にあります';
-            else if (field.parentElement !== panel && !previousShell?.contains(field)) {
-                reason = '標準タブ直下にありません';
+            else if (inNativeSection && (section.matches('.hidden, [hidden]') ||
+                container.matches('.hidden, [hidden]') || container.querySelector(':scope > div > .field-section.expand'))) {
+                reason = '移動元のセクションが非表示または折りたたみ可能です';
+            } else if (section !== panel && !inNativeSection && !previousShell?.contains(field)) {
+                reason = '標準タブ直下または標準セクション内にありません';
             } else if (!field.querySelector(':scope > .field-control')) {
                 reason = '直下に .field-control がありません';
             }
             if (reason) problems.push(`${key} (${id}): ${reason}`);
+            if (inNativeSection) sourceSections.add(section);
             fields.set(key, field);
             ids.add(id);
         }
@@ -113,7 +124,9 @@
         }
 
         const shell = createElement('div', 'pcl-shell');
-        panel.insertBefore(shell, previousShell || fields.get('title'));
+        const titleField = fields.get('title');
+        const titleAnchor = titleField.closest('.section-fields-container') || titleField;
+        panel.insertBefore(shell, previousShell || titleAnchor);
         panel.classList.add('pcl-editor');
 
         // append() はコピーではなく「元の入力欄を移動」する。
@@ -150,6 +163,11 @@
             shell.append(card);
         }
         previousShell?.remove();
+        for (const section of sourceSections) {
+            if (!section.children.length && !section.textContent.trim()) {
+                section.parentElement.classList.add('pcl-empty-source');
+            }
+        }
         return applied(shell, fields.size);
     }
 

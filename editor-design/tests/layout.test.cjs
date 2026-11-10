@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/10
+ * ・標準セクション2つを再現し、項目の移動と対象外項目の保持を確認
  * ・標準イベントの共存と、手動診断で返す状態を確認
  * ・登録用の項目割り当てとDocker検証用の割り当てを分離
  */
@@ -88,6 +89,43 @@ function setup(script = source) {
         const {w,d}=setup(null), field=d.getElementById('Results_ClassAField');
         const section=d.createElement('section');field.replaceWith(section);section.append(field);
         w.eval(source);w.document.dispatchEvent(new w.Event('DOMContentLoaded'));assert.equal(d.querySelector('.pcl-shell'),null);assert.equal(field.parentNode,section);w.close();
+    });
+    await test('標準セクション2つから移動し、対象外項目と元の入力値を保持する', () => {
+        const {w,d}=setup(null);
+        const panel=d.querySelector(rootSelector);
+        const columns=require('./lab-settings.json').EditorColumnHash.General
+            .filter(column => !['Title', 'Status', 'AttachmentsA'].includes(column));
+        const makeSection = (id, sectionColumns) => {
+            const container=d.createElement('div');
+            container.id='SectionFields' + id + 'Container';
+            container.className='section-fields-container';
+            container.innerHTML='<div><label class="field-section">入力欄</label></div><div class="section-fields"></div>';
+            const body=container.querySelector('.section-fields');
+            body.id='SectionFields' + id;
+            for(const column of sectionColumns) body.append(d.getElementById('Results_' + column + 'Field'));
+            panel.append(container);
+            return body;
+        };
+        const gridService=makeSection(1, columns.slice(0,14));
+        const construction=makeSection(2, columns.slice(14));
+        const attachment=d.getElementById('Results_AttachmentsAField');
+        construction.append(attachment);
+        const design=d.getElementById('Results_ClassA');
+        design.value='保存対象の値';
+        construction.classList.add('hidden');
+        w.eval(source); d.dispatchEvent(new w.Event('DOMContentLoaded'));
+        assert.equal(d.querySelector('.pcl-shell'),null);
+        assert.match(w.PleasanterConstructionLayout.refresh().message,/セクションが非表示/);
+        construction.classList.remove('hidden');
+        w.PleasanterConstructionLayout.refresh();
+        assert.equal(d.querySelectorAll('.pcl-field').length,25);
+        assert.equal(d.getElementById(design.id),design);
+        assert.equal(design.value,'保存対象の値');
+        assert.equal(design.form,panel.closest('form'));
+        assert(gridService.parentElement.classList.contains('pcl-empty-source'));
+        assert(!construction.parentElement.classList.contains('pcl-empty-source'));
+        assert.equal(attachment.parentElement,construction);
+        w.close();
     });
     await test('項目単体の差し替えと標準イベントによる編集タブ再描画に追従', async () => {
         const {w,d}=setup();
