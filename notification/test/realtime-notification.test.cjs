@@ -1,5 +1,7 @@
 /**
  * 変更履歴
+ * 2026/11/10
+ * ・送信モード・表示名・複数対象・失敗時メッセージを確認
  * 2026/11/09
  * ・通知対象の3区分、GMの店所分離・NumA・Group宛先、固定組織と区分設定を検証
  * ・通常時とデバッグ時のログ、集計、評価回数・順序の不変を確認
@@ -37,7 +39,7 @@ function fixture() {
 
 function execute(code, input) {
     const events = [];
-    const notification = { Send() { events.push(['send', { ...this, Send: undefined }]); return input.sendResult; } };
+    const notification = { Send() { events.push(['send', { ...this, Send: undefined }]); if (input.sendThrows) throw new Error('送信API例外'); return input.sendResult; } };
     const sandbox = {
         model: input.model,
         context: {
@@ -47,6 +49,13 @@ function execute(code, input) {
         },
         notifications: { New() { events.push(['newNotification']); return notification; } },
         items: {
+            GetSite(id) {
+                events.push(['getSite', id]);
+                if (input.labelLookupError) throw new Error('表示名の取得エラー');
+                return input.noTargetSite ? [] : [{ SiteSettings: { Columns: [{
+                    ColumnName: 'ClassB', ChoicesText: input.targetChoices ?? 'G1,検証グループ\nG2,別グループ'
+                }] } }];
+            },
             Get(id, query) {
                 events.push(['get', id, query]);
                 const tables = { 843614: input.conditions, 843620: input.targets,
@@ -72,6 +81,8 @@ function execute(code, input) {
         let executable = input.sendEnabled
             ? code.replace('const SEND_ENABLED = false;', 'const SEND_ENABLED = true;')
             : code;
+        const mode = Object.prototype.hasOwnProperty.call(input, 'sendMode') ? input.sendMode : (input.sendEnabled ? 'PRODUCTION' : 'TEST');
+        executable = executable.replace('const NOTIFICATION_SEND_MODE = "TEST";', 'const NOTIFICATION_SEND_MODE = ' + JSON.stringify(mode) + ';');
         if (input.debugEnabled) executable = executable.replace('const NOTIFICATION_DEBUG = false;', 'const NOTIFICATION_DEBUG = true;');
         if (input.fixedOrganizationCodes) executable = executable.replace('const FIXED_ORGANIZATION_CODES = [];',
             'const FIXED_ORGANIZATION_CODES = ' + JSON.stringify(input.fixedOrganizationCodes) + ';');
@@ -99,7 +110,7 @@ function ruleLogs(result, ruleId) {
     return lines.slice(start, next < 0 ? undefined : next);
 }
 function businessResult(result) {
-    return { ...result, events: result.events.filter(event => event[0] !== 'log') };
+    return { ...result, events: result.events.filter(event => !['log', 'message', 'getSite'].includes(event[0])) };
 }
 
 const cases = [
@@ -763,11 +774,11 @@ test('無効・リンク切れルールは集計候補に含めず、リンク�
     assert.deepEqual(summary(result), ['----- 通知処理終了: 候補0件 / 成立0件 / 不成立0件 -----']);
 });
 
-test('送信無効は未送信と明示し、成功通知や送信API呼出を行わない', () => {
+test('TESTは未送信と明示し、受付表示だけを行う', () => {
     const result = execute(source, fixture());
-    assert.ok(logs(result).includes('送信無効のため送信していません'));
+    assert.ok(logs(result).includes('TESTモードのため実際のメールは送信していません'));
     assert.ok(!logs(result).some(line => /送信成功|送信しました/.test(line)));
-    assert.ok(!result.events.some(e => ['newNotification', 'send', 'message'].includes(e[0])));
+    assert.ok(!result.events.some(e => ['newNotification', 'send'].includes(e[0])));
 });
 
 test('不成立ログが後続の成立ルールに混入しない', () => {
@@ -997,4 +1008,153 @@ test('GM: 後続の対応行が不正なら一部のGroupだけを送信しな�
     const result = execute(source, input);
     assert.match(result.error, /GMグループIDが不正/);
     assert.ok(!result.events.some(e => e[0] === 'send'));
+});
+
+function displayedMessages(result) { return result.events.filter(e => e[0] === 'message').map(e => [e[1], e[2]]); }
+const testSuffix = '宛の依頼メールの送信を受け付けました。 ※実際のメールは送信していません。';
+
+for (const [type, value, name] of [
+    ['ORGANIZATION', 'G1', '受付グループ'],
+    ['GM', '客サGM', 'お客さまサービスGM'],
+    ['FIXED_ORGANIZATION', '001ABC', 'ABCグループ']
+]) {
+    for (const mode of ['TEST', 'PRODUCTION']) {
+        test(`表示名とモード: ${type}/${mode}`, () => {
+            const input = type === 'GM' ? gmFixture() : fixture();
+            input.targets[0].ClassD = type;
+            input.targets[0].ClassB = value;
+            input.targetChoices = `${value},${name}`;
+            input.sendMode = mode;
+            input.trackEvaluation = true;
+            if (type === 'FIXED_ORGANIZATION') {
+                input.fixedOrganizationCodes = [value];
+                input.mail[0].DescriptionB = value;
+            }
+            const result = execute(source, input);
+            assert.equal(result.error, undefined);
+            assert.deepEqual(displayedMessages(result), [[mode === 'TEST'
+                ? `【テスト】${name}${testSuffix}` : `${name}宛に依頼メールを送信しました。`, 'alert-information']]);
+            assert.equal(result.events.filter(e => e[0] === 'evaluate').length, 1);
+            assert.equal(result.events.filter(e => e[0] === 'send').length, mode === 'TEST' ? 0 : 1);
+            assert.equal(result.events.filter(e => e[0] === 'newNotification').length, mode === 'TEST' ? 0 : 1);
+            assert.ok(logs(result).some(line => line.startsWith('件名:')));
+            assert.ok(logs(result).some(line => line.startsWith('本文:')));
+        });
+    }
+}
+
+test('TESTは既定値で、モード定数の参照は取得関数だけに集約する', () => {
+    assert.match(source, /const NOTIFICATION_SEND_MODE = "TEST";/);
+    assert.doesNotMatch(source, /SEND_ENABLED/);
+    assert.equal((source.match(/\bNOTIFICATION_SEND_MODE\b/g) || []).length, 2);
+    const result = execute(source, fixture());
+    assert.equal(displayedMessages(result).length, 1);
+    assert.ok(displayedMessages(result)[0][0].startsWith('【テスト】'));
+    assert.ok(!result.events.some(e => ['send', 'newNotification'].includes(e[0])));
+});
+
+for (const mode of ['BAD', '', 'test', 'TEST ', false, 0, null, undefined, {}, []]) {
+    test(`未知の送信モード ${JSON.stringify(mode)} は検索・送信・受付表示前にエラー`, () => {
+        const input = fixture();
+        input.sendMode = mode;
+        const result = execute(source, input);
+        assert.match(result.error, /通知送信モードが不正/);
+        assert.deepEqual(displayedMessages(result), []);
+        assert.ok(!result.events.some(e => ['get', 'getSite', 'send', 'newNotification'].includes(e[0])));
+        assert.ok(logs(result).some(line => line.startsWith('通知処理エラー:')));
+    });
+}
+
+for (const mode of ['TEST', 'PRODUCTION']) {
+    for (const [name, configure] of [
+        ['条件不成立', f => { f.conditions[0].DescriptionB = '不成立'; }],
+        ['通知対象なし', f => { f.targets = []; }],
+        ['To不足', f => { f.organizations = []; }],
+        ['不正宛先', f => { f.mail[0].DescriptionA = 'invalid'; }],
+        ['本文生成失敗', f => { f.rules[0].DescriptionC = '{不明}'; }]
+    ]) {
+        test(`成功表示の抑止: ${mode}/${name}`, () => {
+            const input = fixture();
+            input.sendMode = mode;
+            configure(input);
+            const result = execute(source, input);
+            assert.deepEqual(displayedMessages(result), []);
+            assert.ok(!result.events.some(e => ['send', 'newNotification', 'getSite'].includes(e[0])));
+        });
+    }
+}
+
+for (const mode of ['TEST', 'PRODUCTION']) {
+    test(`複数対象の全表示名を使い、同じ対象のTo/Cc重複は名前を重ねない（${mode}）`, () => {
+        const input = fixture();
+        input.sendMode = mode;
+        input.fixedOrganizationCodes = ['FIX001'];
+        input.targetChoices = 'G1,現場グループ\nFIX001,固定グループ';
+        input.targets.push({ ClassA:'10', ClassB:'FIX001', ClassC:'Cc', ClassD:'FIXED_ORGANIZATION' },
+            { ...input.targets[0], ClassC:'Bcc' });
+        input.mail.push({ DescriptionB:'FIX001', ClassZ:'[]', DescriptionA:'fixed@example.invalid' });
+        const result = execute(source, input);
+        assert.equal(result.error, undefined);
+        assert.deepEqual(displayedMessages(result), [[mode === 'TEST' ? `【テスト】現場グループ、固定グループ${testSuffix}`
+            : '現場グループ、固定グループ宛に依頼メールを送信しました。', 'alert-information']]);
+        assert.equal(result.events.filter(e => e[0] === 'getSite').length, 1);
+    });
+}
+
+for (const configure of [
+    f => { f.targetChoices = ''; },
+    f => { f.targetChoices = '[{"SiteId":123}]'; },
+    f => { f.noTargetSite = true; },
+    f => { f.labelLookupError = true; }
+]) {
+    test(`表示名取得不可では保存コードを名前と推測せず一般表現で表示 ${configure.toString()}`, () => {
+        const input = fixture();
+        configure(input);
+        const result = execute(source, input);
+        assert.equal(result.error, undefined);
+        assert.deepEqual(displayedMessages(result), [[`【テスト】指定された通知対象${testSuffix}`, 'alert-information']]);
+    });
+}
+
+test('複数対象で一部の表示名が不明なら、一つの対象名だけで全体を代表させない', () => {
+    const input = fixture();
+    input.targets.push({ ...input.targets[0], ClassB:'G2', ClassC:'Cc' });
+    input.organizations.push({ ClassA:'001', ClassC:'G2', DescriptionA:'ORG2' });
+    input.mail.push({ DescriptionB:'ORG2', ClassZ:'[]', DescriptionA:'two@example.invalid' });
+    input.targetChoices = 'G1,一つだけ判明';
+    assert.deepEqual(displayedMessages(execute(source, input)), [[`【テスト】指定された通知対象（2件）${testSuffix}`, 'alert-information']]);
+});
+
+test('静的選択肢の省略表示名・エスケープしたカンマ・略称を標準形式で解釈する', () => {
+    const input = fixture();
+    input.targetChoices = 'G2,別の表示\r\nG1,第一\\,第二グループ,略称\r\n';
+    assert.deepEqual(displayedMessages(execute(source, input)), [[`【テスト】第一,第二グループ${testSuffix}`, 'alert-information']]);
+    input.targetChoices = 'G1';
+    assert.deepEqual(displayedMessages(execute(source, input)), [[`【テスト】G1${testSuffix}`, 'alert-information']]);
+});
+
+test('PRODUCTIONのSend=falseでは失敗だけ表示し、TEST受付や成功を表示しない', () => {
+    const input = fixture();
+    input.sendMode = 'PRODUCTION';
+    input.sendResult = false;
+    const result = execute(source, input);
+    assert.deepEqual(displayedMessages(result), [['検証グループ宛の依頼メールの送信に失敗しました。', 'alert-error']]);
+    assert.equal(result.events.filter(e => e[0] === 'send').length, 1);
+});
+
+test('PRODUCTIONのSend例外では成功表示せず、従来どおり中断する', () => {
+    const input = fixture();
+    input.sendMode = 'PRODUCTION';
+    input.sendThrows = true;
+    const result = execute(source, input);
+    assert.equal(result.error, '送信API例外');
+    assert.deepEqual(displayedMessages(result), []);
+    assert.ok(logs(result).some(line => line.startsWith('通知処理エラー:')));
+});
+
+test('TESTの受付表示は追加CSS不要の1行にし、未送信を必ず明示する', () => {
+    const [message, css] = displayedMessages(execute(source, fixture()))[0];
+    assert.doesNotMatch(message, /[\r\n]|<br\s*\/?\s*>/i);
+    assert.ok(message.endsWith('※実際のメールは送信していません。'));
+    assert.equal(css, 'alert-information');
 });

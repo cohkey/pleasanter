@@ -26,7 +26,9 @@
 | createNotificationRecipients | To・Cc・Bccを作成し、重複排除とToの必須チェックを行う |
 | renderNotificationTemplate | プレースホルダーを置換する |
 | createNotificationMessage | 件名・本文を作成する |
-| sendNotification | 送信内容を記録し、送信有効時だけ通知APIを呼ぶ |
+| getNotificationSendMode | TEST / PRODUCTIONを取得・検証 |
+| getNotificationTargetLabel | 対象テーブルClassBの選択肢から表示名を取得 |
+| sendNotification | TESTは未送信の受付表示、PRODUCTIONは通知APIと結果表示 |
 
 ## 通知対象の3区分
 
@@ -38,7 +40,7 @@ GM対応表はサイト727689、店所ClassA・区分ClassC（グリサ／客サ
 
 ファイルは関数定義のみです。写真に写っていなかった実行呼び出しは追加していません。利用環境の元の登録内容と照合し、更新前に `getNotificationFields()`、更新後に `sendRealtimeNotification()` を呼び出す設定が必要です。Docker検証では、それぞれの実行条件にファイル本体と関数呼び出しを登録しています。
 
-更新前にsavedとmodelから変更情報を取得し、context.UserData.notificationDataで更新後へ渡します。SEND_ENABLEDはfalseで、メール送信は無効のままです。
+更新前にsavedとmodelから変更情報を取得し、context.UserData.notificationDataで更新後へ渡します。`NOTIFICATION_SEND_MODE = "TEST"` が初期値で、通知APIは呼びません。旧SEND_ENABLEDは廃止し、実送信はPRODUCTIONに切り替えます。[送信モード・表示名・改行の確認手順](SEND-MODES.md)を参照してください。
 
 ## マスターと原本から保持した仕様
 
@@ -69,7 +71,7 @@ node --test notification/test/realtime-notification.test.cjs
 node notification/test/check-rule-scope-regression.cjs
 ```
 
-206件のテストで、正常系、条件分岐、宛先生成、Cc、重複排除、異常系、送信APIの成功・失敗（モック）を確認します。通知IDが異なる条件の混在、誤成立・誤不成立、別ルールの設定エラー混入も回帰テストで確認します。条件検索の形式を変更しているため、写真原本とのAPI呼び出しの完全一致は現行版の検証基準に含めません。
+244件のテストで、正常系、条件分岐、宛先生成、Cc、重複排除、異常系、送信APIの成功・失敗（モック）を確認します。通知IDが異なる条件の混在、誤成立・誤不成立、別ルールの設定エラー混入も回帰テストで確認します。条件検索の形式を変更しているため、写真原本とのAPI呼び出しの完全一致は現行版の検証基準に含めません。
 
 [Dockerでの検証結果](VALIDATION.md)も参照してください。
 
@@ -128,7 +130,7 @@ IN / NOT_INは通知候補を抽出するトリガーには含めません。例
 
 ## デバッグログ
 
-通常時は条件が成立した通知IDだけ、区切り線・条件一覧・評価JSONを表示します。`NOTIFICATION_DEBUG = true` で不成立ルールの詳細も表示します。終了時に候補・成立・不成立件数を出し、エラーは常時表示します。`SEND_ENABLED = false` では未送信と明示します。[表示例と変更範囲](LOGGING.md)を参照してください。
+通常時は条件が成立した通知IDだけ、区切り線・条件一覧・評価JSONを表示します。`NOTIFICATION_DEBUG = true` で不成立ルールの詳細も表示します。終了時に候補・成立・不成立件数を出し、エラーは常時表示します。TESTモードでは未送信と明示します。[表示例と変更範囲](LOGGING.md)を参照してください。
 
 ## 通知先の組織が取得できない場合
 
