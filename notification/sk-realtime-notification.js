@@ -1,5 +1,7 @@
 /**
  * 変更履歴
+ * 2026/11/10
+ * ・TEST／PRODUCTION送信モードと通知対象の表示名を使う受付・送信結果メッセージを追加
  * 2026/11/09
  * ・通知対象区分を追加し、店所連動GMと固定組織の宛先解決に対応
  * ・成立したルールの詳細だけを通常出力し、デバッグフラグ・終了件数・常時エラー出力を追加
@@ -40,6 +42,17 @@ const NOTIFICATION_GM_CATEGORIES = {
 };
 // 固定組織の許可コード。例は登録せず、実際の組織コードを導入時に追加する。
 const FIXED_ORGANIZATION_CODES = [];
+
+// 送信モードの参照はgetNotificationSendModeに集約する。初期値では実送信しない。
+const NOTIFICATION_SEND_MODE = "TEST";
+
+function getNotificationSendMode() {
+    const mode = NOTIFICATION_SEND_MODE;
+    if (!["TEST", "PRODUCTION"].includes(mode)) {
+        throw new Error(`通知送信モードが不正です: ${mode}`);
+    }
+    return mode;
+}
 
 // trueにすると、不成立ルールも含む条件一覧・評価JSONを出力する。
 const NOTIFICATION_DEBUG = false;
@@ -761,19 +774,62 @@ function createNotificationMessage(rule, tenshoCode) {
 }
 
 /**
- * 送信内容を記録し、送信が有効な場合だけ通知APIを呼び出す。
+ * 対象テーブルClassBの静的選択肢から表示名を取得する。
+ * 取得不能時は保存コードを対象名と推測せず、対象全体を表す文言にする。
  */
-function sendNotification(rule, recipients, message) {
+function getNotificationTargetLabel(targets) {
+    const uniqueTargets = [...new Map(targets.map(target =>
+        [JSON.stringify([target.targetType, target.group]), target]
+    )).values()];
+    const fallback = uniqueTargets.length > 1
+        ? `指定された通知対象（${uniqueTargets.length}件）`
+        : "指定された通知対象";
+
+    try {
+        const site = Array.from(items.GetSite(SITE_IDS.targets))[0];
+        const column = Array.from(site?.SiteSettings?.Columns || [])
+            .find(column => column.ColumnName === "ClassB");
+        const labels = new Map();
+        // Pleasanter 1.4.23.3既定の選択肢形式：保存値,表示名,略称,...（\,はカンマ）。
+        for (const line of String(column?.ChoicesText ?? "").split(/\r\n|\n|\r/)) {
+            if (!line || line.startsWith("[")) continue; // 動的・リンク選択肢は名前を推測しない。
+            const parts = line.split(/(?<!\\),/).map(value => value.replace(/\\,/g, ","));
+            if (!labels.has(parts[0])) labels.set(parts[0], parts[1] || parts[0]);
+        }
+        const names = uniqueTargets.map(target => labels.get(target.group));
+        if (names.length === 0 || names.some(name => !name)) {
+            context.Log("通知対象の表示名を取得できないため、対象名を省略して表示します");
+            return fallback;
+        }
+        return [...new Set(names)].join("、");
+    } catch (error) {
+        context.Log(`通知対象の表示名を取得できません: ${error.message}`);
+        return fallback;
+    }
+}
+
+/**
+ * TESTは受付表示のみ、PRODUCTIONは既存の通知APIで送信する。
+ */
+function sendNotification(rule, recipients, message, targets, mode = getNotificationSendMode()) {
     context.Log(`To: ${recipients.To}`);
     context.Log(`Cc: ${recipients.Cc}`);
     context.Log(`Bcc: ${recipients.Bcc}`);
     context.Log(`件名: ${message.subject}`);
     context.Log(`本文: ${message.body}`);
 
-    const SEND_ENABLED = false;
-
-    if (!SEND_ENABLED) {
-        context.Log("送信無効のため送信していません");
+    // 呼出側の引数が不正でもPRODUCTION扱いにしない。
+    if (!["TEST", "PRODUCTION"].includes(mode)) {
+        throw new Error(`通知送信モードが不正です: ${mode}`);
+    }
+    const targetLabel = getNotificationTargetLabel(targets);
+    if (mode === "TEST") {
+        context.Log("TESTモードのため実際のメールは送信していません");
+        // 改行の実画面確認ができていないため、追加CSS不要の1行表示にする。
+        context.AddMessage(
+            `【テスト】${targetLabel}宛の依頼メールの送信を受け付けました。 ※実際のメールは送信していません。`,
+            'alert-information'
+        );
         return;
     }
 
@@ -788,17 +844,17 @@ function sendNotification(rule, recipients, message) {
 
     if (notification.Send()) {
         context.Log(`リアルタイム通知の送信成功（通知ID: ${rule.Title}）`);
-        context.AddMessage(`対象グループに通知メールを送信しました。（通知ID: ${rule.Title}）`, 'alert-information');
+        context.AddMessage(`${targetLabel}宛に依頼メールを送信しました。`, 'alert-information');
     } else {
         context.Log(`リアルタイム通知の送信失敗（通知ID: ${rule.Title}）`);
-        context.AddMessage(`通知メールの送信に失敗しました。（通知ID: ${rule.Title}）`, 'alert-error');
+        context.AddMessage(`${targetLabel}宛の依頼メールの送信に失敗しました。`, 'alert-error');
     }
 }
 
 /**
  * 条件が成立したルールの通知対象を取得し、通知を処理する。
  */
-function processNotificationRule(rule) {
+function processNotificationRule(rule, mode) {
     const notificationTargets = getNotificationTargets(rule.ResultId);
 
     if (notificationTargets.length === 0) {
@@ -812,7 +868,7 @@ function processNotificationRule(rule) {
     const recipients = createNotificationRecipients(rule, tenshoCode, notificationTargets);
     const message = createNotificationMessage(rule, tenshoCode);
 
-    sendNotification(rule, recipients, message);
+    sendNotification(rule, recipients, message, notificationTargets, mode);
 }
 
 /**
@@ -825,6 +881,7 @@ function sendRealtimeNotification() {
     let interrupted = false;
 
     try {
+        const mode = getNotificationSendMode();
         const changedFields = readNotificationChanges();
 
         if (!changedFields) {
@@ -843,7 +900,7 @@ function sendRealtimeNotification() {
         for (const rule of notificationRules) {
             if (matchesNotificationRule(rule, changedFields)) {
                 matchedCount++;
-                processNotificationRule(rule);
+                processNotificationRule(rule, mode);
             } else {
                 unmatchedCount++;
             }

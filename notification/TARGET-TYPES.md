@@ -91,8 +91,8 @@ NumA=12345なら宛先は`[Group12345]`。通知エンジンはグループの�
 2. 既存通知対象レコードのClassDをORGANIZATIONで補完する。ClassB・ClassC・親ルールのリンクは変更しない。
 3. ClassBにGMの選択肢を追加する。固定組織が決まった場合はコードの許可リストとClassBの選択肢を両方更新する。
 4. GM対応表の店所内部ID・ClassCの保存値・NumA・GMコードを確認する。
-5. 新コードを登録し、SEND_ENABLED=falseのまま成立ルールの宛先と件数を確認する。既存組織・通常GM・特殊店所GM・固定組織を対象に確認する。
-6. 内容確認後に従来の手順で送信を有効にする。NOTIFICATION_DEBUGは送信可否とは独立。
+5. 新コードを登録し、NOTIFICATION_SEND_MODE="TEST"のまま成立ルールの宛先と件数を確認する。既存組織・通常GM・特殊店所GM・固定組織を対象に確認する。
+6. 内容確認後にNOTIFICATION_SEND_MODEをPRODUCTIONへ切り替える。NOTIFICATION_DEBUGは送信可否とは独立。
 
 既存レコード補完とコード切替は同じ保守作業で実施する。新コードは未設定の区分をORGANIZATIONと推測しない。ロールバックは旧コードへ戻せば既存組織通知の経路を利用できるが、新GM・固定組織の通知対象行は無効化／除外してから戻す。
 
