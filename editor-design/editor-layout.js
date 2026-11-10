@@ -1,3 +1,11 @@
+/**
+ * 変更履歴
+ * 2026/11/10
+ * ・実環境の項目割り当てを反映
+ * ・対象テーブルへの直接登録を前提に enabled と siteId を廃止
+ * ・読み込み、適用結果、項目ごとの停止理由をコンソールに出力
+ * ・既存フォームとAjax再描画への対応を維持しながらレイアウト処理を簡略化
+ */
 /* Pleasanter 1.4.23.3 : 編集画面の見た目を整えるCS
  * 入力欄そのものは作り直さず、既存DOMを移動する。
  * 既存の editor-layout.css をそのまま使える。
@@ -10,15 +18,15 @@
         prefix: 'Results',     // 記録: Results / 期限付き: Issues
         columns: {
             title: 'Title', status: 'Status',
-            design: 'ClassA', area: 'ClassB', block: 'ClassC',
-            customer: 'ClassD', agent: 'ClassE', attendance: 'ClassF',
+            design: 'DescriptionA', area: 'ClassB', block: 'ClassC',
+            customer: 'DescriptionC', agent: 'DescriptionD', attendance: 'ClassD',
             power: 'DateA', withstand: 'DateB', period: 'DateC',
             twoWeeks: 'DateD', twoDays: 'DateE',
             customerReceived: 'DateF', checked: 'CheckA', reply: 'DateG',
             gridReceived: 'DateH', forwarded: 'DateI', fax: 'DateJ',
             workday: 'DateK', alternate: 'DateL',
-            workManager: 'DescriptionA', workContractor: 'DescriptionB',
-            completionManager: 'DescriptionC', completionContractor: 'DescriptionD'
+            workManager: 'DescriptionE', workContractor: 'DescriptionF',
+            completionManager: 'DescriptionG', completionContractor: 'DescriptionH'
         }
     };
 

@@ -1,10 +1,24 @@
+/**
+ * 変更履歴
+ * 2026/11/10
+ * ・登録用の項目割り当てとDocker検証用の割り当てを分離
+ */
 /* node layout.test.cjs 実HTMLのパス jsdomのインストール先/node_modules/jsdom */
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { JSDOM } = require(process.argv[3] || 'jsdom');
 const html = fs.readFileSync(process.argv[2], 'utf8');
-const source = fs.readFileSync(path.join(__dirname, '../editor-layout.js'), 'utf8');
+const registeredScript = fs.readFileSync(path.join(__dirname, '../editor-layout.js'), 'utf8');
+// Dockerの採取済みHTMLは実環境と項目割り当てが異なる。
+const labColumns = {
+    design: 'ClassA', customer: 'ClassD', agent: 'ClassE', attendance: 'ClassF',
+    workManager: 'DescriptionA', workContractor: 'DescriptionB',
+    completionManager: 'DescriptionC', completionContractor: 'DescriptionD'
+};
+const source = registeredScript.replace(/(\w+): '[^']+'/g, (match, key) =>
+    labColumns[key] ? `${key}: '${labColumns[key]}'` : match
+);
 const rootSelector = '#FieldSetGeneral > .tabs-panel-inner';
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 let passed = 0;
