@@ -27,12 +27,12 @@
 | renderNotificationTemplate | プレースホルダーを置換する |
 | createNotificationMessage | 件名・本文を作成する |
 | getNotificationSendMode | TEST / PRODUCTIONを取得・検証 |
-| getNotificationTargetLabel | 対象テーブルClassBの選択肢から表示名を取得 |
+| getNotificationTargetLabel | 店所連動は「店所に紐づく〜」、固定組織はClassBの表示名を使用 |
 | sendNotification | TESTは未送信の受付表示、PRODUCTIONは通知APIと結果表示 |
 
 ## 通知対象の3区分
 
-通知対象のClassDに`ORGANIZATION`・`GM`・`FIXED_ORGANIZATION`を設定し、ClassBを共用します。**既存の対象行にもClassD=ORGANIZATIONの補完が必要です。** 固定組織の許可リストは未定のため空です。
+通知対象のClassDに`ORGANIZATION`・`GM`・`FIXED_ORGANIZATION`を設定し、ClassBを共用します。**既存の対象行にもClassD=ORGANIZATIONの補完が必要です。** 固定組織の許可コードは文字列の`1014797`・`1015247`・`1015246`・`TTA`です。
 
 GM対応表はサイト727689、店所ClassA・区分ClassC（グリサ／客サ）・GroupId NumA・GMコードDescriptionA・名前ClassDです。GMはメール通知設定を経由せずGroup宛先へ、固定組織は組織コードからメール通知設定へ解決します。[設定・取得フロー・移行手順](TARGET-TYPES.md)と[1.4.23.3検証結果](TARGET-TYPES-VALIDATION.md)を参照してください。
 
@@ -71,7 +71,7 @@ node --test notification/test/realtime-notification.test.cjs
 node notification/test/check-rule-scope-regression.cjs
 ```
 
-244件のテストで、正常系、条件分岐、宛先生成、Cc、重複排除、異常系、送信APIの成功・失敗（モック）を確認します。通知IDが異なる条件の混在、誤成立・誤不成立、別ルールの設定エラー混入も回帰テストで確認します。条件検索の形式を変更しているため、写真原本とのAPI呼び出しの完全一致は現行版の検証基準に含めません。
+255件のテストで、正常系、条件分岐、宛先生成、Cc、重複排除、異常系、送信APIの成功・失敗（モック）を確認します。通知IDが異なる条件の混在、誤成立・誤不成立、別ルールの設定エラー混入も回帰テストで確認します。条件検索の形式を変更しているため、写真原本とのAPI呼び出しの完全一致は現行版の検証基準に含めません。
 
 [Dockerでの検証結果](VALIDATION.md)も参照してください。
 

@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/10
+ * ・固定組織の許可4コードと店所連動の宛先名を確認
  * ・送信モード・表示名・複数対象・失敗時メッセージを確認
  * 2026/11/09
  * ・通知対象の3区分、GMの店所分離・NumA・Group宛先、固定組織と区分設定を検証
@@ -84,7 +85,7 @@ function execute(code, input) {
         const mode = Object.prototype.hasOwnProperty.call(input, 'sendMode') ? input.sendMode : (input.sendEnabled ? 'PRODUCTION' : 'TEST');
         executable = executable.replace('const NOTIFICATION_SEND_MODE = "TEST";', 'const NOTIFICATION_SEND_MODE = ' + JSON.stringify(mode) + ';');
         if (input.debugEnabled) executable = executable.replace('const NOTIFICATION_DEBUG = false;', 'const NOTIFICATION_DEBUG = true;');
-        if (input.fixedOrganizationCodes) executable = executable.replace('const FIXED_ORGANIZATION_CODES = [];',
+        if (input.fixedOrganizationCodes) executable = executable.replace(/const FIXED_ORGANIZATION_CODES = \[[\s\S]*?\];/,
             'const FIXED_ORGANIZATION_CODES = ' + JSON.stringify(input.fixedOrganizationCodes) + ';');
         vm.runInContext(executable, sandbox);
         if (input.trackEvaluation) {
@@ -955,7 +956,7 @@ test('対象区分の未登録を既存組織と推測して送信しない', ()
     assert.match(execute(source, input).error, /通知対象区分が不正/);
 });
 
-test('固定組織: 既定の許可リストは空で未設定コードを拒否する', () => {
+test('固定組織: 許可リストにないコードを拒否する', () => {
     const input = fixture();
     input.targets[0].ClassD = 'FIXED_ORGANIZATION';
     input.targets[0].ClassB = 'ABC001';
@@ -1033,7 +1034,7 @@ for (const [type, value, name] of [
             const result = execute(source, input);
             assert.equal(result.error, undefined);
             assert.deepEqual(displayedMessages(result), [[mode === 'TEST'
-                ? `【テスト】${name}${testSuffix}` : `${name}宛に依頼メールを送信しました。`, 'alert-information']]);
+                ? `【テスト】${type === 'FIXED_ORGANIZATION' ? name : '店所に紐づく' + name}${testSuffix}` : `${type === 'FIXED_ORGANIZATION' ? name : '店所に紐づく' + name}宛に依頼メールを送信しました。`, 'alert-information']]);
             assert.equal(result.events.filter(e => e[0] === 'evaluate').length, 1);
             assert.equal(result.events.filter(e => e[0] === 'send').length, mode === 'TEST' ? 0 : 1);
             assert.equal(result.events.filter(e => e[0] === 'newNotification').length, mode === 'TEST' ? 0 : 1);
@@ -1095,8 +1096,8 @@ for (const mode of ['TEST', 'PRODUCTION']) {
         input.mail.push({ DescriptionB:'FIX001', ClassZ:'[]', DescriptionA:'fixed@example.invalid' });
         const result = execute(source, input);
         assert.equal(result.error, undefined);
-        assert.deepEqual(displayedMessages(result), [[mode === 'TEST' ? `【テスト】現場グループ、固定グループ${testSuffix}`
-            : '現場グループ、固定グループ宛に依頼メールを送信しました。', 'alert-information']]);
+        assert.deepEqual(displayedMessages(result), [[mode === 'TEST' ? `【テスト】店所に紐づく現場グループ、固定グループ${testSuffix}`
+            : '店所に紐づく現場グループ、固定グループ宛に依頼メールを送信しました。', 'alert-information']]);
         assert.equal(result.events.filter(e => e[0] === 'getSite').length, 1);
     });
 }
@@ -1128,9 +1129,9 @@ test('複数対象で一部の表示名が不明なら、一つの対象名だ�
 test('静的選択肢の省略表示名・エスケープしたカンマ・略称を標準形式で解釈する', () => {
     const input = fixture();
     input.targetChoices = 'G2,別の表示\r\nG1,第一\\,第二グループ,略称\r\n';
-    assert.deepEqual(displayedMessages(execute(source, input)), [[`【テスト】第一,第二グループ${testSuffix}`, 'alert-information']]);
+    assert.deepEqual(displayedMessages(execute(source, input)), [[`【テスト】店所に紐づく第一,第二グループ${testSuffix}`, 'alert-information']]);
     input.targetChoices = 'G1';
-    assert.deepEqual(displayedMessages(execute(source, input)), [[`【テスト】G1${testSuffix}`, 'alert-information']]);
+    assert.deepEqual(displayedMessages(execute(source, input)), [[`【テスト】店所に紐づくG1${testSuffix}`, 'alert-information']]);
 });
 
 test('PRODUCTIONのSend=falseでは失敗だけ表示し、TEST受付や成功を表示しない', () => {
@@ -1138,7 +1139,7 @@ test('PRODUCTIONのSend=falseでは失敗だけ表示し、TEST受付や成功�
     input.sendMode = 'PRODUCTION';
     input.sendResult = false;
     const result = execute(source, input);
-    assert.deepEqual(displayedMessages(result), [['検証グループ宛の依頼メールの送信に失敗しました。', 'alert-error']]);
+    assert.deepEqual(displayedMessages(result), [['店所に紐づく検証グループ宛の依頼メールの送信に失敗しました。', 'alert-error']]);
     assert.equal(result.events.filter(e => e[0] === 'send').length, 1);
 });
 
@@ -1157,4 +1158,39 @@ test('TESTの受付表示は追加CSS不要の1行にし、未送信を必ず明
     assert.doesNotMatch(message, /[\r\n]|<br\s*\/?\s*>/i);
     assert.ok(message.endsWith('※実際のメールは送信していません。'));
     assert.equal(css, 'alert-information');
+});
+
+for (const [type, group, name] of [
+    ['ORGANIZATION', '客サ', 'お客さまサービスG'],
+    ['ORGANIZATION', 'お客さまサービスグループ', 'お客さまサービスG'],
+    ['ORGANIZATION', 'グリサ', 'グリッドサービスG'],
+    ['ORGANIZATION', 'グリッドサービスG', 'グリッドサービスG'],
+    ['GM', '客サGM', 'お客さまサービスGM'],
+    ['GM', 'グリサGM', 'グリッドサービスGM']
+]) {
+    test(`店所連動の指定表示名: ${type}/${group}`, () => {
+        const sandbox = engine();
+        assert.equal(sandbox.getNotificationTargetLabel([{targetType:type,group}]), '店所に紐づく'+name);
+    });
+}
+
+for (const code of ['1014797', '1015247', '1015246', 'TTA']) {
+    test(`指定の固定組織コードを標準設定で許可し、表示名を使う: ${code}`, () => {
+        const input = fixture();
+        input.targets[0].ClassD = 'FIXED_ORGANIZATION';
+        input.targets[0].ClassB = code;
+        input.mail[0].DescriptionB = code;
+        input.targetChoices = `${code},固定組織の表示名`;
+        const result = execute(source, input);
+        assert.equal(result.error, undefined);
+        assert.deepEqual(displayedMessages(result), [[`【テスト】固定組織の表示名${testSuffix}`, 'alert-information']]);
+        assert.ok(!result.events.some(e => e[0]==='get' && [846822,727689].includes(e[1])));
+    });
+}
+
+test('上部の新規追加コメントを除去し、宛先表示の店所接頭語を重複させない', () => {
+    assert.doesNotMatch(source, /\/\/\s*[・]?新規追加/);
+    const input = fixture();
+    input.targetChoices = 'G1,店所に紐づく検証グループ';
+    assert.deepEqual(displayedMessages(execute(source, input)), [[`【テスト】店所に紐づく検証グループ${testSuffix}`, 'alert-information']]);
 });
