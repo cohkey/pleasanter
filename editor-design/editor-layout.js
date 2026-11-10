@@ -7,8 +7,6 @@
 
     // ここだけ実環境に合わせて設定
     const config = {
-        enabled: false,
-        siteId: '',             // 対象テーブルのSiteId
         prefix: 'Results',     // 記録: Results / 期限付き: Issues
         columns: {
             title: 'Title', status: 'Status',
@@ -54,41 +52,53 @@
         return element;
     };
 
-    function applyLayout() {
-        if (!config.enabled || !/^\d+$/.test(config.siteId)) return;
-        const siteIds = document.querySelectorAll('#SiteId');
-        if (siteIds.length !== 1 || siteIds[0].value !== config.siteId) return;
+    const logPrefix = '[編集レイアウト]';
+    let lastMessage;
+    function report(message, level = 'info') {
+        // Ajax監視のたびに同じ診断を出さない。
+        if (message === lastMessage) return;
+        lastMessage = message;
+        console[level](logPrefix + ' ' + message);
+    }
 
+    function applyLayout() {
         const panels = document.querySelectorAll('#FieldSetGeneral > .tabs-panel-inner');
-        if (panels.length !== 1) return;
+        if (panels.length !== 1) return report('標準編集タブの件数: ' + panels.length + '（1件必要）');
         const panel = panels[0];
-        if (!panel.closest('form')) return;
+        const form = panel.closest('form');
+        if (!form) return report('標準編集タブがフォーム内にありません', 'warn');
         const previousShell = panel.querySelector(':scope > .pcl-shell');
 
         // 全項目が存在することを確認してから移動する。
         const fields = new Map();
         const ids = new Set();
+        const problems = [];
         for (const [key, column] of Object.entries(config.columns)) {
             const id = `${config.prefix}_${column}Field`;
-            if (!/^[a-zA-Z0-9_]+$/.test(id)) {
-                console.warn('[編集レイアウト] 項目の内部名を確認してください:', id);
-                return;
-            }
-            const matches = document.querySelectorAll(`[id="${id}"]`);
+            const matches = /^[a-zA-Z0-9_]+$/.test(id)
+                ? document.querySelectorAll(`[id="${id}"]`) : [];
             const field = matches[0];
-            if (ids.has(id) || matches.length !== 1 || !field ||
-                (field.parentElement !== panel && !previousShell?.contains(field)) ||
-                !field.querySelector(':scope > .field-control')) {
-                console.warn('[編集レイアウト] 項目の設定・配置を確認してください:', id);
-                return;
+            let reason;
+            if (ids.has(id)) reason = '項目設定が重複';
+            else if (!matches.length) reason = 'DOMに見つかりません';
+            else if (matches.length > 1) reason = 'DOMのIDが重複';
+            else if (field.closest('form') !== form) reason = '対象フォームの外にあります';
+            else if (field.parentElement !== panel && !previousShell?.contains(field)) {
+                reason = '標準タブ直下にありません';
+            } else if (!field.querySelector(':scope > .field-control')) {
+                reason = '直下に .field-control がありません';
             }
+            if (reason) problems.push(`${key} (${id}): ${reason}`);
             fields.set(key, field);
             ids.add(id);
         }
 
+        if (problems.length) return report('適用を見送りました\n' + problems.join('\n'), 'warn');
+
         if (previousShell && [...fields.values()].every(field => previousShell.contains(field))) {
             // 項目だけ差し替わる場合は、その場で表示クラスを戻す。
             for (const field of fields.values()) field.classList.add('pcl-field');
+            report('適用済み: ' + fields.size + '項目');
             return;
         }
 
@@ -130,12 +140,13 @@
             shell.append(card);
         }
         previousShell?.remove();
+        report('適用済み: ' + fields.size + '項目');
     }
 
     // Ajaxなどで編集画面が再生成された場合にも、新しい画面へ適用する。
     // 既存の $p.events.on_editor_load は上書きしない。
+    console.info(logPrefix + ' 読み込みました');
     window.PleasanterConstructionLayout?.stop?.();
-    if (!config.enabled) return;
     let timer;
     let active = true;
     const observer = new MutationObserver(() => {
