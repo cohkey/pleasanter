@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/10
+ * ・標準の on_editor_load から適用し、手動診断で結果とCSSの適用状態を返す
  * ・実環境の項目割り当てを反映
  * ・対象テーブルへの直接登録を前提に enabled と siteId を廃止
  * ・読み込み、適用結果、項目ごとの停止理由をコンソールに出力
@@ -64,14 +65,16 @@
     let lastMessage;
     function report(message, level = 'info') {
         // Ajax監視のたびに同じ診断を出さない。
-        if (message === lastMessage) return;
-        lastMessage = message;
-        console[level](logPrefix + ' ' + message);
+        if (message !== lastMessage) {
+            lastMessage = message;
+            console[level](logPrefix + ' ' + message);
+        }
+        return { status: level === 'info' ? 'applied' : level === 'error' ? 'error' : 'skipped', message };
     }
 
     function applyLayout() {
         const panels = document.querySelectorAll('#FieldSetGeneral > .tabs-panel-inner');
-        if (panels.length !== 1) return report('標準編集タブの件数: ' + panels.length + '（1件必要）');
+        if (panels.length !== 1) return report('標準編集タブの件数: ' + panels.length + '（1件必要）', 'warn');
         const panel = panels[0];
         const form = panel.closest('form');
         if (!form) return report('標準編集タブがフォーム内にありません', 'warn');
@@ -106,8 +109,7 @@
         if (previousShell && [...fields.values()].every(field => previousShell.contains(field))) {
             // 項目だけ差し替わる場合は、その場で表示クラスを戻す。
             for (const field of fields.values()) field.classList.add('pcl-field');
-            report('適用済み: ' + fields.size + '項目');
-            return;
+            return applied(previousShell, fields.size);
         }
 
         const shell = createElement('div', 'pcl-shell');
@@ -148,34 +150,73 @@
             shell.append(card);
         }
         previousShell?.remove();
-        report('適用済み: ' + fields.size + '項目');
+        return applied(shell, fields.size);
     }
 
-    // Ajaxなどで編集画面が再生成された場合にも、新しい画面へ適用する。
-    // 既存の $p.events.on_editor_load は上書きしない。
+    function applied(shell, count) {
+        const grid = shell.querySelector('.pcl-summary-grid');
+        const cssApplied = getComputedStyle(grid).display === 'grid';
+        return {
+            ...report('適用済み: ' + count + '項目' + (cssApplied ? '' : '（CSSが効いていません）')),
+            count,
+            cssApplied
+        };
+    }
+
+    function refresh(trigger = '手動') {
+        if (trigger !== '項目の再描画') lastMessage = undefined;
+        try {
+            return applyLayout();
+        } catch (error) {
+            console.error(logPrefix + ' ' + trigger + 'で例外が発生しました', error);
+            return { status: 'error', message: error.message };
+        }
+    }
+
     console.info(logPrefix + ' 読み込みました');
     window.PleasanterConstructionLayout?.stop?.();
     let timer;
     let active = true;
+    let removeEditorLoad = () => {};
+
+    // 項目単体の差し替えでは on_editor_load が発火しない。
     const observer = new MutationObserver(() => {
         if (!timer) timer = setTimeout(() => {
             timer = undefined;
-            applyLayout();
+            refresh('項目の再描画');
         }, 80);
     });
     window.PleasanterConstructionLayout = {
-        refresh: applyLayout,
+        refresh: () => refresh(),
         stop() {
             active = false;
             observer.disconnect();
             clearTimeout(timer);
+            removeEditorLoad();
         }
     };
-    const start = () => {
+
+    function start() {
         if (!active) return;
+        const events = window.$p?.events;
+        if (events) {
+            const previous = events.on_editor_load;
+            function onEditorLoad(...args) {
+                const result = previous?.apply(this, args);
+                refresh('on_editor_load');
+                return result;
+            }
+            events.on_editor_load = onEditorLoad;
+            removeEditorLoad = () => {
+                if (events.on_editor_load === onEditorLoad) events.on_editor_load = previous;
+            };
+        } else {
+            console.warn(logPrefix + ' $p.events が見つからないため標準イベントを登録できません');
+        }
         observer.observe(document.body, { childList: true, subtree: true });
-        applyLayout();
-    };
+        refresh('初回表示');
+    }
+
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', start, { once: true });
     } else {
