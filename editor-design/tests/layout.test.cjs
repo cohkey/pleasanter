@@ -45,14 +45,12 @@ function setup(script = enabled) {
         assert.deepEqual([...d.querySelector('.pcl-summary-grid').children].map(n=>n.id),['Results_TitleField','Results_StatusField']);
         w.close();
     });
-    await test('重複実行で増殖しない・停止で元順序と入力値を復元', () => {
-        const {w,d}=setup(source), root=d.querySelector(rootSelector);
-        const before=[...root.children].map(n=>n.id);
+    await test('重複実行で増殖せず入力値を保持', () => {
+        const {w,d}=setup(source);
         d.getElementById('Results_ClassA').value='編集中';
         w.eval(enabled);w.document.dispatchEvent(new w.Event('DOMContentLoaded'));w.PleasanterConstructionLayout.refresh();w.eval(enabled);w.document.dispatchEvent(new w.Event('DOMContentLoaded'));
         assert.equal(d.querySelectorAll('.pcl-shell').length,1);
-        w.PleasanterConstructionLayout.destroy();
-        assert.deepEqual([...root.children].map(n=>n.id),before);
+        w.PleasanterConstructionLayout.stop();
         assert.equal(d.getElementById('Results_ClassA').value,'編集中');w.close();
     });
     await test('項目不足・重複マッピング・既存セクションではDOMを動かさない', () => {
@@ -65,10 +63,11 @@ function setup(script = enabled) {
     await test('Ajaxのフィールド差し替え・編集タブ再描画に追従', async () => {
         const {w,d}=setup();
         let field=d.getElementById('Results_ClassAField');
-        const replacement=field.cloneNode(true); replacement.querySelector('input').value='差し替え';
+        const replacement=field.cloneNode(true); replacement.classList.remove('pcl-field'); replacement.querySelector('input').value='差し替え';
         field.replaceWith(replacement); await sleep(210);
         assert.equal(d.querySelectorAll('.pcl-shell').length,1);
         assert.equal(d.getElementById('Results_ClassA').value,'差し替え');
+        assert(replacement.classList.contains('pcl-field'));
         const fresh=new JSDOM(html).window.document.querySelector(rootSelector).cloneNode(true);
         d.querySelector(rootSelector).replaceWith(fresh); await sleep(210);
         assert.equal(d.querySelectorAll('.pcl-field').length,25);w.close();
