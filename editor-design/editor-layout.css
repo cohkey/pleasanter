@@ -11,6 +11,7 @@
 .mado-editor > .mado-group {
     border: 1px solid #dce3e8;
     border-radius: 8px;
+    box-shadow: 0 5px 27px rgb(37 52 75 / 4.5%);
     padding: clamp(14px, 2.4vw, 24px);
 }
 
