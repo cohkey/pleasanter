@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/11
+ * ・転記ボタンの配置、重複防止、入力値の受け渡しを確認
  * ・簡素化した編集レイアウトの構造と項目差し替えを確認
  * 2026/11/10
  * ・標準セクション2つを再現し、項目の移動と対象外項目の保持を確認
@@ -90,8 +91,17 @@ function setup(script = source) {
         d.getElementById('Results_ClassA').value='編集中';
         w.eval(source);w.document.dispatchEvent(new w.Event('DOMContentLoaded'));w.PleasanterConstructionLayout.refresh();w.eval(source);w.document.dispatchEvent(new w.Event('DOMContentLoaded'));
         assert.equal(d.querySelectorAll('.mado-editor').length,1);
+        const design = d.getElementById('Results_ClassA');
+        const button = design.nextElementSibling;
+        assert.equal(button.type, 'button');
+        assert.equal(button.textContent, '転記');
+        assert.equal(d.querySelectorAll('.mado-tenki').length, 1);
+        let designNumber;
+        d.addEventListener('mado:tenki', event => { designNumber = event.detail.designNumber; });
+        button.click();
+        assert.equal(designNumber, '編集中');
         w.PleasanterConstructionLayout.stop();
-        assert.equal(d.getElementById('Results_ClassA').value,'編集中');w.close();
+        assert.equal(design.value,'編集中');w.close();
     });
     await test('項目不足・重複マッピング・既存セクションではDOMを動かさない', () => {
         const variants=[source.replace("area: 'ClassB'", "area: 'ClassZ'"),source.replace("area: 'ClassB'", "area: 'ClassA'")];

@@ -4,31 +4,32 @@ body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) { min-wi
 .tabs-panel-inner:has(> .mado-editor) { background: #f5f7fa; }
 
 .mado-editor {
-    --mado-card-padding: clamp(14px, 3vw, 24px);
-    color: #334155;
+    --mado-card-padding: clamp(15px, 3vw, 28px);
+    color: #25334a;
     container-type: inline-size;
     display: grid;
-    gap: 22px;
-    margin: 0 auto 22px;
-    max-width: 1344px;
+    gap: 21px;
+    margin: 0 auto 21px;
+    max-width: 1244px;
 }
 
 .mado-editor > .mado-summary,
 .mado-editor > .mado-group {
     background: #fff;
-    border: 1px solid #e2e8ef;
-    border-radius: 10px;
+    border: 1px solid #e5eaf0;
+    border-radius: 14px;
     box-shadow: 0 5px 27px rgb(37 52 75 / 4.5%);
     min-width: 0;
     padding: var(--mado-card-padding);
 }
 
-.mado-editor > .mado-group { padding-top: 0; }
+.mado-editor > .mado-summary { padding-block: 22px; }
+.mado-editor > .mado-group { padding-block: 0 28px; }
 
 .mado-editor .mado-group > h2 {
     border: 0;
     border-bottom: 1px solid #e2e8ef;
-    border-radius: 9px 9px 0 0;
+    border-radius: 13px 13px 0 0;
     color: inherit;
     font-size: 17px;
     font-weight: 700;
@@ -41,32 +42,44 @@ body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) { min-wi
 .mado-editor .mado-haiden > h2 { background: #eaf6f7; }
 
 .mado-editor .mado-grid > h3 {
+    align-items: center;
     background: none;
     border: 0;
-    border-bottom: 1px solid #e2e8ef;
-    color: inherit;
-    font-size: 14px;
-    font-weight: 600;
+    color: #516075;
+    display: flex;
+    font-size: 12px;
+    font-weight: 700;
+    gap: 10px;
     grid-column: 1 / -1;
-    line-height: 1.4;
+    line-height: 1.5;
     margin: 0;
-    padding: 0 0 8px;
+    padding: 0;
 }
 
-.mado-editor .mado-group > .mado-grid + .mado-grid { margin-top: 26px; }
+.mado-editor .mado-grid > h3::after {
+    background: #edf0f4;
+    content: '';
+    flex: 1;
+    height: 1px;
+}
+
+.mado-editor .mado-group > .mado-grid + .mado-grid { margin-top: 28px; }
 .mado-editor .mado-anzen-sochi {
-    background: #f8fafc;
-    border: 1px solid #e2e8ef;
-    border-radius: 7px;
-    padding: 16px;
+    background: #fcfdff;
+    border: 1px solid #e6ebf1;
+    border-inline-start: 3px solid var(--mado-section-accent);
+    border-radius: 10px;
+    padding: 19px 20px 20px;
 }
 
-.mado-editor .mado-anzen-sochi > h3 { border-bottom: 0; padding-bottom: 0; }
+.mado-editor .mado-gurisa { --mado-section-accent: #dfbd7e; }
+.mado-editor .mado-haiden { --mado-section-accent: #8dc0c7; }
+.mado-editor .mado-anzen-sochi > h3 { color: #3f566e; font-size: 13px; }
 
 .mado-editor .mado-grid {
     align-items: start;
     display: grid;
-    gap: 20px 22px;
+    gap: 17px 20px;
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -91,7 +104,7 @@ body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) { min-wi
     float: none;
     height: auto;
     line-height: 1.4;
-    margin: 0 0 6px;
+    margin: 0 0 7px;
     max-width: 100%;
     padding: 0;
     text-align: left;
@@ -99,8 +112,8 @@ body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) { min-wi
 }
 
 .mado-editor .field-label > label {
-    color: #3e4a56;
-    font-size: 13px;
+    color: #4f5c70;
+    font-size: 12px;
     font-weight: 600;
     white-space: normal;
 }
@@ -123,32 +136,57 @@ body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) { min-wi
     align-items: center;
     display: inline-flex;
     margin: 0;
-    min-height: 40px;
+    min-height: 39px;
 }
 
 .mado-editor :is(input.control-textbox, select.control-dropdown, textarea.control-textarea, textarea.control-markdown) {
-    background: #fff;
-    border: 1px solid #cbd5df;
-    border-radius: 5px;
+    background: #fbfcfe;
+    border: 1px solid #dce3eb;
+    border-radius: 7px;
     box-sizing: border-box;
-    color: inherit;
+    color: #354459;
     font: inherit;
     max-width: 100%;
-    min-height: 40px;
-    padding: 7px 10px;
+    min-height: 39px;
+    padding: 9px 12px;
     width: 100%;
 }
 
 .mado-editor :is(input.control-textbox, select.control-dropdown, textarea.control-textarea, textarea.control-markdown):focus {
-    outline: 2px solid #5586b1;
+    background: #fff;
+    outline: 2px solid #75a3c9;
     outline-offset: 1px;
 }
 
 .mado-editor .mado-renraku :is(textarea.control-textarea, textarea.control-markdown) {
-    line-height: 1.6;
-    min-height: 96px;
+    line-height: 1.7;
+    min-height: 106px;
     resize: vertical;
 }
+
+.mado-editor .input-field:has(> .mado-tenki) {
+    align-items: stretch;
+    display: flex;
+    gap: 8px;
+}
+
+.mado-editor .input-field:has(> .mado-tenki) > input { min-width: 0; }
+
+.mado-editor .mado-tenki {
+    background: #eff6fb;
+    border: 1px solid #cedfed;
+    border-radius: 7px;
+    color: #346c94;
+    cursor: pointer;
+    flex: none;
+    font: inherit;
+    font-weight: 700;
+    padding: 0 12px;
+    white-space: nowrap;
+}
+
+.mado-editor .mado-tenki:hover { background: #e3eff8; }
+.mado-editor .mado-tenki:focus-visible { outline: 2px solid #75a3c9; outline-offset: 1px; }
 
 @container (max-width: 980px) {
     .mado-editor .mado-grid:not(.mado-summary) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -156,6 +194,7 @@ body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) { min-wi
 
 @container (max-width: 600px) {
     .mado-editor .mado-grid:not(.mado-summary) { grid-template-columns: minmax(0, 1fr); }
+    .mado-editor .mado-anzen-sochi { padding: 14px; }
 }
 
 /* 項目をすべて移動した標準セクションだけ隠す。 */

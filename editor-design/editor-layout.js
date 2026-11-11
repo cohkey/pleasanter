@@ -1,6 +1,7 @@
 /**
  * 変更履歴
  * 2026/11/11
+ * ・設計番号の入力欄の横に転記ボタンを追加
  * ・グループ表示を簡素化し、窓シスのCSSクラス名を mado- に統一
  * ・項目の差し替え監視を標準編集タブ内に限定
  * 2026/11/10
@@ -70,6 +71,20 @@
         return { status: level === 'info' ? 'applied' : 'skipped', message };
     }
 
+    function addTenkiButton(field) {
+        const input = field.querySelector('.input-field > input.control-textbox');
+        if (!input || input.parentElement.querySelector('.mado-tenki')) return;
+
+        const button = createElement('button', 'mado-tenki', '転記');
+        button.type = 'button';
+        // 転記先の処理は利用側のCSで受け取り、標準の保存には関与しない。
+        button.addEventListener('click', () => button.dispatchEvent(new CustomEvent('mado:tenki', {
+            bubbles: true,
+            detail: { designNumber: input.value }
+        })));
+        input.after(button);
+    }
+
     function applyLayout() {
         const panels = document.querySelectorAll('#FieldSetGeneral > .tabs-panel-inner');
         if (panels.length !== 1) return report('標準編集タブの件数: ' + panels.length + '（1件必要）', 'warn');
@@ -118,6 +133,8 @@
         }
 
         if (problems.length) return report('適用を見送りました\n' + problems.join('\n'), 'warn');
+
+        addTenkiButton(fields.get('design'));
 
         if (previousShell && [...fields.values()].every(field => previousShell.contains(field))) {
             return applied(previousShell, fields.size);
