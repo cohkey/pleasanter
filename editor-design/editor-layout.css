@@ -1,46 +1,72 @@
+/* 標準テーマのページ最小幅を、この編集画面だけ解除する。 */
+body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) { min-width: 0; }
+
+.tabs-panel-inner:has(> .mado-editor) { background: #f5f7fa; }
+
 .mado-editor {
-    color: #28333f;
+    --mado-card-padding: clamp(14px, 3vw, 24px);
+    color: #334155;
     container-type: inline-size;
     display: grid;
-    gap: 16px;
-    margin: 0 auto 16px;
-    max-width: 1244px;
+    gap: 22px;
+    margin: 0 auto 22px;
+    max-width: 1344px;
 }
 
 .mado-editor > .mado-summary,
 .mado-editor > .mado-group {
-    border: 1px solid #dce3e8;
-    border-radius: 8px;
+    background: #fff;
+    border: 1px solid #e2e8ef;
+    border-radius: 10px;
     box-shadow: 0 5px 27px rgb(37 52 75 / 4.5%);
-    padding: clamp(14px, 2.4vw, 24px);
+    min-width: 0;
+    padding: var(--mado-card-padding);
 }
 
-.mado-editor > .mado-gurisa { background: #faf8f2; }
-.mado-editor > .mado-haiden { background: #f3f8f7; }
+.mado-editor > .mado-group { padding-top: 0; }
 
-.mado-editor .mado-group > h2,
+.mado-editor .mado-group > h2 {
+    border: 0;
+    border-bottom: 1px solid #e2e8ef;
+    border-radius: 9px 9px 0 0;
+    color: inherit;
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.4;
+    margin: 0 calc(-1 * var(--mado-card-padding)) 24px;
+    padding: 14px var(--mado-card-padding);
+}
+
+.mado-editor .mado-gurisa > h2 { background: #fff3df; }
+.mado-editor .mado-haiden > h2 { background: #eaf6f7; }
+
 .mado-editor .mado-grid > h3 {
     background: none;
     border: 0;
+    border-bottom: 1px solid #e2e8ef;
     color: inherit;
-    font-weight: 700;
-    padding: 0;
+    font-size: 14px;
+    font-weight: 600;
+    grid-column: 1 / -1;
+    line-height: 1.4;
+    margin: 0;
+    padding: 0 0 8px;
 }
 
-.mado-editor .mado-group > h2 { font-size: 16px; margin: 0 0 16px; }
-.mado-editor .mado-grid > h3 { font-size: 13px; grid-column: 1 / -1; margin: 0; }
-.mado-editor .mado-group > .mado-grid + .mado-grid { margin-top: 18px; }
+.mado-editor .mado-group > .mado-grid + .mado-grid { margin-top: 26px; }
 .mado-editor .mado-anzen-sochi {
-    background: #fff;
-    border: 1px solid #e1e6e9;
-    border-radius: 6px;
-    padding: 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8ef;
+    border-radius: 7px;
+    padding: 16px;
 }
+
+.mado-editor .mado-anzen-sochi > h3 { border-bottom: 0; padding-bottom: 0; }
 
 .mado-editor .mado-grid {
     align-items: start;
     display: grid;
-    gap: 10px 16px;
+    gap: 20px 22px;
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -53,6 +79,7 @@
     box-sizing: border-box;
     clear: none;
     float: none;
+    height: auto;
     margin: 0;
     max-width: 100%;
     min-width: 0;
@@ -73,7 +100,7 @@
 
 .mado-editor .field-label > label {
     color: #3e4a56;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     white-space: normal;
 }
@@ -88,6 +115,17 @@
     width: auto;
 }
 
+.mado-editor .mado-grid > [id$="Field"]:has(> .field-control > .container-normal > .check-option) {
+    align-self: end;
+}
+
+.mado-editor .mado-grid > [id$="Field"] > .field-control > .container-normal > .check-option {
+    align-items: center;
+    display: inline-flex;
+    margin: 0;
+    min-height: 40px;
+}
+
 .mado-editor :is(input.control-textbox, select.control-dropdown, textarea.control-textarea, textarea.control-markdown) {
     background: #fff;
     border: 1px solid #cbd5df;
@@ -96,7 +134,7 @@
     color: inherit;
     font: inherit;
     max-width: 100%;
-    min-height: 36px;
+    min-height: 40px;
     padding: 7px 10px;
     width: 100%;
 }
