@@ -1,5 +1,8 @@
 /**
  * 変更履歴
+ * 2026/11/11
+ * ・グループ表示を簡素化し、窓シスのCSSクラス名を mado- に統一
+ * ・項目の差し替え監視を標準編集タブ内に限定
  * 2026/11/10
  * ・標準タブ内のPleasanterセクションにある項目をカードに配置
  * ・標準の on_editor_load から適用し、手動診断で結果とCSSの適用状態を返す
@@ -7,10 +10,6 @@
  * ・対象テーブルへの直接登録を前提に enabled と siteId を廃止
  * ・読み込み、適用結果、項目ごとの停止理由をコンソールに出力
  * ・既存フォームとAjax再描画への対応を維持しながらレイアウト処理を簡略化
- */
-/* Pleasanter 1.4.23.3 : 編集画面の見た目を整えるCS
- * 入力欄そのものは作り直さず、既存DOMを移動する。
- * 既存の editor-layout.css をそのまま使える。
  */
 (() => {
     'use strict';
@@ -35,29 +34,27 @@
     // [小見出し, 項目キー, 特別な表示]。配置を変えるときはここを編集する。
     const groups = [
         {
-            title: 'グリッドサービスG 入力欄', tone: 'amber', owner: 'グリッドサービスG',
-            note: '案件情報と工事に関する日程を入力',
+            title: 'グリッドサービスG 入力欄', name: 'gurisa',
             sections: [
                 ['基本情報', ['design', 'area', 'block', 'customer', 'agent', 'attendance']],
                 ['工事日程', ['power', 'withstand', 'period', 'twoWeeks', 'twoDays']],
-                ['高圧供給設備の安全処置について', ['customerReceived', 'checked', 'reply'], 'safety']
+                ['高圧供給設備の安全処置について', ['customerReceived', 'checked', 'reply'], 'anzen-sochi']
             ]
         },
         {
-            title: '配電建設G 入力欄', tone: 'teal', owner: '配電建設G',
-            note: '受領・回付日と工事の連絡記録を管理',
+            title: '配電建設G 入力欄', name: 'haiden',
             sections: [
-                ['高圧供給設備の安全処置について', ['gridReceived', 'forwarded', 'fax'], 'safety'],
+                ['高圧供給設備の安全処置について', ['gridReceived', 'forwarded', 'fax'], 'anzen-sochi'],
                 ['工事日程', ['workday', 'alternate']],
-                ['工事日の連絡記録', ['workManager', 'workContractor'], 'paired'],
-                ['工事完了の連絡記録', ['completionManager', 'completionContractor'], 'paired']
+                ['工事日の連絡記録', ['workManager', 'workContractor'], 'renraku'],
+                ['工事完了の連絡記録', ['completionManager', 'completionContractor'], 'renraku']
             ]
         }
     ];
 
     const createElement = (tag, className, text) => {
         const element = document.createElement(tag);
-        element.className = className;
+        if (className) element.className = className;
         if (text) element.textContent = text;
         return element;
     };
@@ -70,16 +67,21 @@
             lastMessage = message;
             console[level](logPrefix + ' ' + message);
         }
-        return { status: level === 'info' ? 'applied' : level === 'error' ? 'error' : 'skipped', message };
+        return { status: level === 'info' ? 'applied' : 'skipped', message };
     }
 
     function applyLayout() {
         const panels = document.querySelectorAll('#FieldSetGeneral > .tabs-panel-inner');
         if (panels.length !== 1) return report('標準編集タブの件数: ' + panels.length + '（1件必要）', 'warn');
         const panel = panels[0];
+        if (panel !== observedPanel) {
+            observer.disconnect();
+            observer.observe(panel, { childList: true, subtree: true });
+            observedPanel = panel;
+        }
         const form = panel.closest('form');
         if (!form) return report('標準編集タブがフォーム内にありません', 'warn');
-        const previousShell = panel.querySelector(':scope > .pcl-shell');
+        const previousShell = panel.querySelector(':scope > .mado-editor');
 
         // 全項目が存在することを確認してから移動する。
         const fields = new Map();
@@ -118,61 +120,39 @@
         if (problems.length) return report('適用を見送りました\n' + problems.join('\n'), 'warn');
 
         if (previousShell && [...fields.values()].every(field => previousShell.contains(field))) {
-            // 項目だけ差し替わる場合は、その場で表示クラスを戻す。
-            for (const field of fields.values()) field.classList.add('pcl-field');
             return applied(previousShell, fields.size);
         }
 
-        const shell = createElement('div', 'pcl-shell');
+        const editor = createElement('div', 'mado-editor');
         const titleField = fields.get('title');
         const titleAnchor = titleField.closest('.section-fields-container') || titleField;
-        panel.insertBefore(shell, previousShell || titleAnchor);
-        panel.classList.add('pcl-editor');
+        panel.insertBefore(editor, previousShell || titleAnchor);
 
-        // append() はコピーではなく「元の入力欄を移動」する。
-        function move(key, destination) {
-            const field = fields.get(key);
-            field.classList.add('pcl-field');
-            destination.append(field);
-        }
-
-        const summary = createElement('div', 'pcl-card pcl-summary');
-        const summaryGrid = createElement('div', 'pcl-grid pcl-summary-grid');
-        summary.append(summaryGrid);
-        shell.append(summary);
-        move('title', summaryGrid);
-        move('status', summaryGrid);
+        const summary = createElement('div', 'mado-grid mado-summary');
+        summary.append(fields.get('title'), fields.get('status'));
+        editor.append(summary);
 
         for (const group of groups) {
-            const card = createElement('section', `pcl-card pcl-${group.tone}`);
-            const head = createElement('div', 'pcl-card-head');
-            const titles = createElement('div', 'pcl-titles');
-            titles.append(createElement('h2', 'pcl-card-title', group.title),
-                          createElement('p', 'pcl-note', group.note));
-            head.append(titles, createElement('span', 'pcl-owner', group.owner));
-
-            const body = createElement('div', 'pcl-card-body');
+            const groupElement = createElement('section', `mado-group mado-${group.name}`);
+            groupElement.append(createElement('h2', '', group.title));
             for (const [title, keys, type] of group.sections) {
-                const section = createElement('section', type === 'safety' ? 'pcl-section pcl-safety' : 'pcl-section');
-                const grid = createElement('div', type === 'paired' ? 'pcl-grid pcl-paired' : 'pcl-grid');
-                section.append(createElement('h3', 'pcl-subheading', title), grid);
-                keys.forEach(key => move(key, grid));
-                body.append(section);
+                const section = createElement('section', type ? `mado-grid mado-${type}` : 'mado-grid');
+                section.append(createElement('h3', '', title), ...keys.map(key => fields.get(key)));
+                groupElement.append(section);
             }
-            card.append(head, body);
-            shell.append(card);
+            editor.append(groupElement);
         }
         previousShell?.remove();
         for (const section of sourceSections) {
             if (!section.children.length && !section.textContent.trim()) {
-                section.parentElement.classList.add('pcl-empty-source');
+                section.parentElement.classList.add('mado-empty-section');
             }
         }
-        return applied(shell, fields.size);
+        return applied(editor, fields.size);
     }
 
-    function applied(shell, count) {
-        const grid = shell.querySelector('.pcl-summary-grid');
+    function applied(editor, count) {
+        const grid = editor.querySelector('.mado-summary');
         const cssApplied = getComputedStyle(grid).display === 'grid';
         return {
             ...report('適用済み: ' + count + '項目' + (cssApplied ? '' : '（CSSが効いていません）')),
@@ -195,10 +175,13 @@
     window.PleasanterConstructionLayout?.stop?.();
     let timer;
     let active = true;
+    let observedPanel;
     let removeEditorLoad = () => {};
 
     // 項目単体の差し替えでは on_editor_load が発火しない。
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver(records => {
+        if (!records.some(({ target }) => target === observedPanel ||
+            target.matches('.mado-editor, .mado-group, .mado-grid, .section-fields, .section-fields-container'))) return;
         if (!timer) timer = setTimeout(() => {
             timer = undefined;
             refresh('項目の再描画');
@@ -231,7 +214,6 @@
         } else {
             console.warn(logPrefix + ' $p.events が見つからないため標準イベントを登録できません');
         }
-        observer.observe(document.body, { childList: true, subtree: true });
         refresh('初回表示');
     }
 

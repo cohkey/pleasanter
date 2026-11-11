@@ -1,74 +1,123 @@
-/* このスクリプトが適用した編集タブ内に限定。標準ボタン・ポップアップは変更しない。 */
-.pcl-editor {
-    --pcl-ink: #25334a;
-    --pcl-line: #e2e8ef;
-    box-sizing: border-box;
-    background: #f5f7fa;
-    padding: 24px;
+.mado-editor {
+    color: #28333f;
     container-type: inline-size;
-}
-.pcl-editor .pcl-shell { max-width: 1244px; margin-inline: auto; color: var(--pcl-ink); }
-.pcl-editor .pcl-card {
-    background: #fff; border: 1px solid #e5eaf0; border-radius: 14px;
-    box-shadow: 0 5px 27px rgb(37 52 75 / 4.5%); margin-bottom: 21px;
-    /* overflow:hiddenは日付・候補・添付操作を切るため使わない */
-}
-.pcl-editor .pcl-summary { padding: 22px 27px; }
-.pcl-editor .pcl-card-head {
-    display: flex; align-items: center; gap: 14px; padding: 21px 28px;
-    border-bottom: 1px solid #eef1f5; background: #fcfcfd; border-radius: 14px 14px 0 0;
-}
-.pcl-editor .pcl-card-head::before { content: ''; width: 5px; height: 36px; border-radius: 4px; flex: none; background: var(--pcl-accent); }
-.pcl-editor .pcl-amber { --pcl-accent: #d4a24f; --pcl-pale: #fff8e9; --pcl-owner: #9a691a; }
-.pcl-editor .pcl-teal { --pcl-accent: #59a6ae; --pcl-pale: #eaf6f7; --pcl-owner: #286f7a; }
-.pcl-editor .pcl-titles { flex: 1; min-width: 0; }
-.pcl-editor .pcl-card-title { margin: 0; padding: 0; border: 0; background: none; font-size: 17px; font-weight: 700; line-height: 1.5; color: var(--pcl-ink); }
-.pcl-editor .pcl-note { margin: 4px 0 0; color: #718096; font-size: 11px; }
-.pcl-editor .pcl-owner { padding: 5px 10px; border-radius: 999px; background: var(--pcl-pale); color: var(--pcl-owner); font-size: 11px; white-space: nowrap; }
-.pcl-editor .pcl-card-body { padding: 23px 28px 29px; }
-.pcl-editor .pcl-section { margin: 0 0 28px; }
-.pcl-editor .pcl-section:last-child { margin-bottom: 0; }
-.pcl-editor .pcl-subheading { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; padding: 0; border: 0; background: none; color: #516075; font-size: 12px; font-weight: 700; line-height: 1.5; }
-.pcl-editor .pcl-subheading::after { content: ''; height: 1px; flex: 1; background: #edf0f4; }
-.pcl-editor .pcl-safety { padding: 19px 20px 20px; border: 1px solid #e6ebf1; border-left: 3px solid var(--pcl-accent); border-radius: 10px; background: #fcfdff; }
-.pcl-editor .pcl-safety > .pcl-subheading { color: #3f566e; font-size: 13px; }
-.pcl-editor .pcl-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 17px 20px; align-items: start; }
-.pcl-editor .pcl-paired { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.pcl-editor .pcl-summary-grid { grid-template-columns: minmax(0, 1fr); }
-.pcl-editor .pcl-summary-grid > .pcl-field:last-child { max-width: 360px; }
-/* 非表示・読取専用・入力制御用class/属性は残す。displayを上書きしない。 */
-.pcl-editor .pcl-grid > .pcl-field { float: none; clear: none; width: auto; min-width: 0; max-width: 100%; margin: 0; padding: 0; box-sizing: border-box; }
-.pcl-editor .pcl-field > .field-label { float: none; width: auto; max-width: 100%; margin: 0 0 7px; padding: 0; text-align: left; height: auto; line-height: 1.4; }
-.pcl-editor .pcl-field > .field-label > label { white-space: normal; color: #4f5c70; font-size: 12px; font-weight: 600; }
-.pcl-editor .pcl-field > .field-control { float: none; width: auto; margin: 0; padding: 0; min-width: 0; }
-.pcl-editor .pcl-field > .field-control > .container-normal { margin: 0; width: auto; max-width: 100%; min-width: 0; }
-.pcl-editor .pcl-field input.control-textbox,
-.pcl-editor .pcl-field select.control-dropdown,
-.pcl-editor .pcl-field textarea.control-textarea,
-.pcl-editor .pcl-field textarea.control-markdown {
-    box-sizing: border-box; max-width: 100%; width: 100%; min-height: 39px;
-    border: 1px solid #dce3eb; border-radius: 7px; background: #fbfcfe;
-    color: #354459; padding: 9px 12px; font: inherit;
-}
-.pcl-editor .pcl-paired textarea.control-textarea,
-.pcl-editor .pcl-paired textarea.control-markdown { min-height: 106px; resize: vertical; line-height: 1.7; }
-.pcl-editor .pcl-field input.control-textbox:focus,
-.pcl-editor .pcl-field select.control-dropdown:focus,
-.pcl-editor .pcl-field textarea.control-textarea:focus,
-.pcl-editor .pcl-field textarea.control-markdown:focus { outline: 2px solid #75a3c9; outline-offset: 1px; background: white; }
-/* 元のチェックボックスラベルはそのまま。上置きするための複製はしない。 */
-@container (max-width: 980px) {
-    .pcl-editor .pcl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .pcl-editor .pcl-summary-grid { grid-template-columns: minmax(0, 1fr); }
-    .pcl-editor .pcl-card-body { padding: 21px; }
-}
-@container (max-width: 600px) {
-    .pcl-editor .pcl-grid { grid-template-columns: minmax(0, 1fr); gap: 15px; }
-    .pcl-editor .pcl-card-head { padding: 16px; flex-wrap: wrap; }
-    .pcl-editor .pcl-card-body { padding: 18px 15px; }
-    .pcl-editor .pcl-safety { padding: 16px 13px; }
-    .pcl-editor .pcl-note { display: none; }
+    display: grid;
+    gap: 16px;
+    margin: 0 auto 16px;
+    max-width: 1244px;
 }
 
-/* 移動後に空になった標準セクションの見出しだけ隠す。Ajaxで項目が戻れば表示する。 */
-.pcl-editor > .pcl-empty-source:not(:has(> .section-fields > *)) { display: none; }
+.mado-editor > .mado-summary,
+.mado-editor > .mado-group {
+    border: 1px solid #dce3e8;
+    border-radius: 8px;
+    padding: clamp(14px, 2.4vw, 24px);
+}
+
+.mado-editor > .mado-gurisa { background: #faf8f2; }
+.mado-editor > .mado-haiden { background: #f3f8f7; }
+
+.mado-editor .mado-group > h2,
+.mado-editor .mado-grid > h3 {
+    background: none;
+    border: 0;
+    color: inherit;
+    font-weight: 700;
+    padding: 0;
+}
+
+.mado-editor .mado-group > h2 { font-size: 16px; margin: 0 0 16px; }
+.mado-editor .mado-grid > h3 { font-size: 13px; grid-column: 1 / -1; margin: 0; }
+.mado-editor .mado-group > .mado-grid + .mado-grid { margin-top: 18px; }
+.mado-editor .mado-anzen-sochi {
+    background: #fff;
+    border: 1px solid #e1e6e9;
+    border-radius: 6px;
+    padding: 14px;
+}
+
+.mado-editor .mado-grid {
+    align-items: start;
+    display: grid;
+    gap: 10px 16px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mado-editor .mado-renraku { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mado-editor .mado-summary { grid-template-columns: minmax(0, 1fr); }
+.mado-editor .mado-summary > [id$="Field"]:last-child { max-width: 360px; }
+
+/* 既存項目の非表示や入力制御を維持するため、displayは上書きしない。 */
+.mado-editor .mado-grid > [id$="Field"] {
+    box-sizing: border-box;
+    clear: none;
+    float: none;
+    margin: 0;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0;
+    width: auto;
+}
+
+.mado-editor .mado-grid > [id$="Field"] > .field-label {
+    float: none;
+    height: auto;
+    line-height: 1.4;
+    margin: 0 0 6px;
+    max-width: 100%;
+    padding: 0;
+    text-align: left;
+    width: auto;
+}
+
+.mado-editor .field-label > label {
+    color: #3e4a56;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: normal;
+}
+
+.mado-editor .mado-grid > [id$="Field"] > .field-control,
+.mado-editor .mado-grid > [id$="Field"] > .field-control > .container-normal {
+    float: none;
+    margin: 0;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0;
+    width: auto;
+}
+
+.mado-editor :is(input.control-textbox, select.control-dropdown, textarea.control-textarea, textarea.control-markdown) {
+    background: #fff;
+    border: 1px solid #cbd5df;
+    border-radius: 5px;
+    box-sizing: border-box;
+    color: inherit;
+    font: inherit;
+    max-width: 100%;
+    min-height: 36px;
+    padding: 7px 10px;
+    width: 100%;
+}
+
+.mado-editor :is(input.control-textbox, select.control-dropdown, textarea.control-textarea, textarea.control-markdown):focus {
+    outline: 2px solid #5586b1;
+    outline-offset: 1px;
+}
+
+.mado-editor .mado-renraku :is(textarea.control-textarea, textarea.control-markdown) {
+    line-height: 1.6;
+    min-height: 96px;
+    resize: vertical;
+}
+
+@container (max-width: 980px) {
+    .mado-editor .mado-grid:not(.mado-summary) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container (max-width: 600px) {
+    .mado-editor .mado-grid:not(.mado-summary) { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 項目をすべて移動した標準セクションだけ隠す。 */
+.tabs-panel-inner:has(> .mado-editor) > .mado-empty-section:not(:has(> .section-fields > *)) { display: none; }
