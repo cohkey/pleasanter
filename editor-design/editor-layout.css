@@ -240,8 +240,8 @@ body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) {
     }
 }
 
-/* 保存設定の値は保持し、このレイアウトで対象の表示だけを隠す。 */
-#FieldSetGeneral > .tabs-panel-inner:has(> .mado-editor) > .field-normal:has(#VerUp),
-#FieldSetGeneral > .tabs-panel-inner:has(> .mado-editor) > #LinkCreations {
+/* 保存設定の値とリンクのDOMを保持したまま、標準タブ内の表示だけを隠す。 */
+#FieldSetGeneral .field-normal:has(#VerUp),
+#FieldSetGeneral .links {
     display: none;
 }
