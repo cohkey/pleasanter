@@ -1,7 +1,11 @@
 /* 標準テーマのページ最小幅を、この編集画面だけ解除する。 */
-body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) { min-width: 0; }
+body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) {
+    min-width: 0;
+}
 
-.tabs-panel-inner:has(> .mado-editor) { background: #f5f7fa; }
+.tabs-panel-inner:has(> .mado-editor) {
+    background: #f5f7fa;
+}
 
 .mado-editor {
     --mado-card-padding: clamp(15px, 3vw, 28px);
@@ -23,8 +27,12 @@ body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) { min-wi
     padding: var(--mado-card-padding);
 }
 
-.mado-editor > .mado-summary { padding-block: 22px; }
-.mado-editor > .mado-group { padding-block: 0 28px; }
+.mado-editor > .mado-summary {
+    padding-block: 22px;
+}
+.mado-editor > .mado-group {
+    padding-block: 0 28px;
+}
 
 .mado-editor .mado-group > h2 {
     border: 0;
@@ -38,8 +46,12 @@ body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) { min-wi
     padding: 14px var(--mado-card-padding);
 }
 
-.mado-editor .mado-gurisa > h2 { background: #fff3df; }
-.mado-editor .mado-haiden > h2 { background: #eaf6f7; }
+.mado-editor .mado-gurisa > h2 {
+    background: #fff3df;
+}
+.mado-editor .mado-haiden > h2 {
+    background: #eaf6f7;
+}
 
 .mado-editor .mado-grid > h3 {
     align-items: center;
@@ -63,7 +75,9 @@ body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) { min-wi
     height: 1px;
 }
 
-.mado-editor .mado-group > .mado-grid + .mado-grid { margin-top: 28px; }
+.mado-editor .mado-group > .mado-grid + .mado-grid {
+    margin-top: 28px;
+}
 .mado-editor .mado-anzen-sochi {
     background: #fcfdff;
     border: 1px solid #e6ebf1;
@@ -72,9 +86,16 @@ body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) { min-wi
     padding: 19px 20px 20px;
 }
 
-.mado-editor .mado-gurisa { --mado-section-accent: #dfbd7e; }
-.mado-editor .mado-haiden { --mado-section-accent: #8dc0c7; }
-.mado-editor .mado-anzen-sochi > h3 { color: #3f566e; font-size: 13px; }
+.mado-editor .mado-gurisa {
+    --mado-section-accent: #dfbd7e;
+}
+.mado-editor .mado-haiden {
+    --mado-section-accent: #8dc0c7;
+}
+.mado-editor .mado-anzen-sochi > h3 {
+    color: #3f566e;
+    font-size: 13px;
+}
 
 .mado-editor .mado-grid {
     align-items: start;
@@ -83,9 +104,15 @@ body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) { min-wi
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.mado-editor .mado-renraku { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.mado-editor .mado-summary { grid-template-columns: minmax(0, 1fr); }
-.mado-editor .mado-summary > [id$="Field"]:last-child { max-width: 360px; }
+.mado-editor .mado-renraku {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.mado-editor .mado-summary {
+    grid-template-columns: minmax(0, 1fr);
+}
+.mado-editor .mado-summary > [id$="Field"]:last-child {
+    max-width: 360px;
+}
 
 /* 既存項目の非表示や入力制御を維持するため、displayは上書きしない。 */
 .mado-editor .mado-grid > [id$="Field"] {
@@ -170,32 +197,51 @@ body:has(#MainForm #FieldSetGeneral > .tabs-panel-inner > .mado-editor) { min-wi
     gap: 8px;
 }
 
-.mado-editor .input-field:has(> .mado-tenki) > input { min-width: 0; }
+.mado-editor .input-field:has(> .mado-tenki) > input {
+    min-width: 0;
+}
 
 .mado-editor .mado-tenki {
+    align-items: center;
     background: #eff6fb;
     border: 1px solid #cedfed;
     border-radius: 7px;
     color: #346c94;
     cursor: pointer;
+    display: inline-flex;
     flex: none;
     font: inherit;
     font-weight: 700;
+    gap: 6px;
     padding: 0 12px;
     white-space: nowrap;
 }
 
-.mado-editor .mado-tenki:hover { background: #e3eff8; }
-.mado-editor .mado-tenki:focus-visible { outline: 2px solid #75a3c9; outline-offset: 1px; }
+.mado-editor .mado-tenki:hover {
+    background: #e3eff8;
+}
+.mado-editor .mado-tenki:focus-visible {
+    outline: 2px solid #75a3c9;
+    outline-offset: 1px;
+}
 
 @container (max-width: 980px) {
-    .mado-editor .mado-grid:not(.mado-summary) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .mado-editor .mado-grid:not(.mado-summary) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 @container (max-width: 600px) {
-    .mado-editor .mado-grid:not(.mado-summary) { grid-template-columns: minmax(0, 1fr); }
-    .mado-editor .mado-anzen-sochi { padding: 14px; }
+    .mado-editor .mado-grid:not(.mado-summary) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .mado-editor .mado-anzen-sochi {
+        padding: 14px;
+    }
 }
 
-/* 項目をすべて移動した標準セクションだけ隠す。 */
-.tabs-panel-inner:has(> .mado-editor) > .mado-empty-section:not(:has(> .section-fields > *)) { display: none; }
+/* 保存設定の値は保持し、このレイアウトで対象の表示だけを隠す。 */
+#FieldSetGeneral > .tabs-panel-inner:has(> .mado-editor) > .field-normal:has(#VerUp),
+#FieldSetGeneral > .tabs-panel-inner:has(> .mado-editor) > #LinkCreations {
+    display: none;
+}

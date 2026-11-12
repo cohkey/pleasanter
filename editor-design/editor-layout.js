@@ -1,5 +1,7 @@
 /**
  * 変更履歴
+ * 2026/11/12
+ * ・転記ボタンを既存の転記処理に接続し、標準セクション向けの移動処理を削除
  * 2026/11/11
  * ・設計番号の入力欄の横に転記ボタンを追加
  * ・グループ表示を簡素化し、窓シスのCSSクラス名を mado- に統一
@@ -71,17 +73,38 @@
         return { status: level === 'info' ? 'applied' : 'skipped', message };
     }
 
-    function addTenkiButton(field) {
+    function createTransferButton(field) {
         const input = field.querySelector('.input-field > input.control-textbox');
-        if (!input || input.parentElement.querySelector('.mado-tenki')) return;
+        if (!input) return;
 
-        const button = createElement('button', 'mado-tenki', '転記');
+        // 先に旧CSが作成したボタンは、クリック処理を保持したまま移す。
+        const existingButton = field.querySelector('button#transferButton');
+        if (existingButton) {
+            existingButton.classList.add('mado-tenki');
+            if (input.nextElementSibling !== existingButton) input.after(existingButton);
+            return;
+        }
+
+        const button = createElement('button', 'mado-tenki');
+        button.id = 'transferButton';
         button.type = 'button';
-        // 転記先の処理は利用側のCSで受け取り、標準の保存には関与しない。
-        button.addEventListener('click', () => button.dispatchEvent(new CustomEvent('mado:tenki', {
-            bubbles: true,
-            detail: { designNumber: input.value }
-        })));
+        button.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" class="lucide lucide-copy preview-icon" aria-hidden="true">
+                <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+            </svg>
+            <span>転記</span>
+        `;
+        // 別CSの読み込み順に依存しないよう、クリック時に関数を参照する。
+        button.addEventListener('click', function (event) {
+            if (typeof fetchMadoSysData !== 'function') {
+                console.warn(logPrefix + ' fetchMadoSysData を参照できません');
+                return;
+            }
+            fetchMadoSysData.call(this, event);
+        });
         input.after(button);
     }
 
@@ -102,48 +125,36 @@
         const fields = new Map();
         const ids = new Set();
         const problems = [];
-        const sourceSections = new Set();
         for (const [key, column] of Object.entries(config.columns)) {
             const id = `${config.prefix}_${column}Field`;
             const matches = /^[a-zA-Z0-9_]+$/.test(id)
                 ? document.querySelectorAll(`[id="${id}"]`) : [];
             const field = matches[0];
-            const section = field?.parentElement;
-            const container = section?.parentElement;
-            // 標準タブ直下のPleasanter標準セクションだけを移動元にする。
-            const inNativeSection = section?.matches('.section-fields') &&
-                container?.matches('.section-fields-container') && container.parentElement === panel;
             let reason;
             if (ids.has(id)) reason = '項目設定が重複';
             else if (!matches.length) reason = 'DOMに見つかりません';
             else if (matches.length > 1) reason = 'DOMのIDが重複';
             else if (field.closest('form') !== form) reason = '対象フォームの外にあります';
-            else if (inNativeSection && (section.matches('.hidden, [hidden]') ||
-                container.matches('.hidden, [hidden]') || container.querySelector(':scope > div > .field-section.expand'))) {
-                reason = '移動元のセクションが非表示または折りたたみ可能です';
-            } else if (section !== panel && !inNativeSection && !previousShell?.contains(field)) {
-                reason = '標準タブ直下または標準セクション内にありません';
+            else if (field.parentElement !== panel && !previousShell?.contains(field)) {
+                reason = '標準タブ直下にありません';
             } else if (!field.querySelector(':scope > .field-control')) {
                 reason = '直下に .field-control がありません';
             }
             if (reason) problems.push(`${key} (${id}): ${reason}`);
-            if (inNativeSection) sourceSections.add(section);
             fields.set(key, field);
             ids.add(id);
         }
 
         if (problems.length) return report('適用を見送りました\n' + problems.join('\n'), 'warn');
 
-        addTenkiButton(fields.get('design'));
+        createTransferButton(fields.get('design'));
 
         if (previousShell && [...fields.values()].every(field => previousShell.contains(field))) {
             return applied(previousShell, fields.size);
         }
 
         const editor = createElement('div', 'mado-editor');
-        const titleField = fields.get('title');
-        const titleAnchor = titleField.closest('.section-fields-container') || titleField;
-        panel.insertBefore(editor, previousShell || titleAnchor);
+        panel.insertBefore(editor, previousShell || fields.get('title'));
 
         const summary = createElement('div', 'mado-grid mado-summary');
         summary.append(fields.get('title'), fields.get('status'));
@@ -160,11 +171,6 @@
             editor.append(groupElement);
         }
         previousShell?.remove();
-        for (const section of sourceSections) {
-            if (!section.children.length && !section.textContent.trim()) {
-                section.parentElement.classList.add('mado-empty-section');
-            }
-        }
         return applied(editor, fields.size);
     }
 
@@ -198,7 +204,7 @@
     // 項目単体の差し替えでは on_editor_load が発火しない。
     const observer = new MutationObserver(records => {
         if (!records.some(({ target }) => target === observedPanel ||
-            target.matches('.mado-editor, .mado-group, .mado-grid, .section-fields, .section-fields-container'))) return;
+            target.matches('.mado-editor, .mado-group, .mado-grid'))) return;
         if (!timer) timer = setTimeout(() => {
             timer = undefined;
             refresh('項目の再描画');

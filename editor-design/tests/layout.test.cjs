@@ -1,5 +1,7 @@
 /**
  * 変更履歴
+ * 2026/11/12
+ * ・転記関数の後読み込み、旧ボタンの再利用、Ajax後の再生成を確認
  * 2026/11/11
  * ・転記ボタンの配置、重複防止、入力値の受け渡しを確認
  * ・簡素化した編集レイアウトの構造と項目差し替えを確認
@@ -56,7 +58,8 @@ function setup(script = source) {
         assert.equal(result.status, 'applied');
         assert.equal(result.count, 25);
         assert.equal(result.cssApplied, false);
-        assert.equal(d.querySelectorAll('.mado-grid > [id$="Field"]').length,25);w.close();
+        assert.equal(d.querySelectorAll('.mado-grid > [id$="Field"]').length,25);
+        assert.equal(d.querySelectorAll('#transferButton').length,1);w.close();
     });
     await test('実HTMLの25項目を移動、ID/name/値/選択肢/子要素と直接イベントを保持', () => {
         const {w,d,originalHandler}=setup(null);
@@ -94,10 +97,16 @@ function setup(script = source) {
         const design = d.getElementById('Results_ClassA');
         const button = design.nextElementSibling;
         assert.equal(button.type, 'button');
-        assert.equal(button.textContent, '転記');
+        assert.equal(button.id, 'transferButton');
+        assert.equal(button.textContent.trim(), '転記');
+        assert(button.querySelector('svg.lucide-copy'));
         assert.equal(d.querySelectorAll('.mado-tenki').length, 1);
         let designNumber;
-        d.addEventListener('mado:tenki', event => { designNumber = event.detail.designNumber; });
+        w.fetchMadoSysData = function (event) {
+            assert.equal(this, button);
+            assert.equal(event.type, 'click');
+            designNumber = design.value;
+        };
         button.click();
         assert.equal(designNumber, '編集中');
         w.PleasanterConstructionLayout.stop();
@@ -110,58 +119,44 @@ function setup(script = source) {
         const section=d.createElement('section');field.replaceWith(section);section.append(field);
         w.eval(source);w.document.dispatchEvent(new w.Event('DOMContentLoaded'));assert.equal(d.querySelector('.mado-editor'),null);assert.equal(field.parentNode,section);w.close();
     });
-    await test('標準セクション2つから移動し、対象外項目と元の入力値を保持する', () => {
+    await test('旧CSの転記ボタンを移動し、既存のクリック処理を保持する', () => {
         const {w,d}=setup(null);
-        const panel=d.querySelector(rootSelector);
-        const columns=require('./lab-settings.json').EditorColumnHash.General
-            .filter(column => !['Title', 'Status', 'AttachmentsA'].includes(column));
-        const makeSection = (id, sectionColumns) => {
-            const container=d.createElement('div');
-            container.id='SectionFields' + id + 'Container';
-            container.className='section-fields-container';
-            container.innerHTML='<div><label class="field-section">入力欄</label></div><div class="section-fields"></div>';
-            const body=container.querySelector('.section-fields');
-            body.id='SectionFields' + id;
-            for(const column of sectionColumns) body.append(d.getElementById('Results_' + column + 'Field'));
-            panel.append(container);
-            return body;
-        };
-        const gridService=makeSection(1, columns.slice(0,14));
-        const construction=makeSection(2, columns.slice(14));
-        const attachment=d.getElementById('Results_AttachmentsAField');
-        construction.append(attachment);
-        const design=d.getElementById('Results_ClassA');
-        design.value='保存対象の値';
-        construction.classList.add('hidden');
-        w.eval(source); d.dispatchEvent(new w.Event('DOMContentLoaded'));
-        assert.equal(d.querySelector('.mado-editor'),null);
-        assert.match(w.PleasanterConstructionLayout.refresh().message,/セクションが非表示/);
-        construction.classList.remove('hidden');
-        w.PleasanterConstructionLayout.refresh();
-        assert.equal(d.querySelectorAll('.mado-grid > [id$="Field"]').length,25);
-        assert.equal(d.getElementById(design.id),design);
-        assert.equal(design.value,'保存対象の値');
-        assert.equal(design.form,panel.closest('form'));
-        assert(gridService.parentElement.classList.contains('mado-empty-section'));
-        assert(!construction.parentElement.classList.contains('mado-empty-section'));
-        assert.equal(attachment.parentElement,construction);
+        const design = d.getElementById('Results_ClassA');
+        const oldButton = d.createElement('button');
+        oldButton.id = 'transferButton';
+        oldButton.className = 'transfer-button';
+        oldButton.type = 'button';
+        let calls = 0;
+        oldButton.addEventListener('click', () => calls++);
+        design.closest('.container-normal').append(oldButton);
+        w.eval(source);
+        d.dispatchEvent(new w.Event('DOMContentLoaded'));
+        assert.equal(design.nextElementSibling, oldButton);
+        assert.equal(d.querySelectorAll('#transferButton').length, 1);
+        assert(oldButton.classList.contains('mado-tenki'));
+        oldButton.click();
+        assert.equal(calls, 1);
         w.close();
     });
     await test('項目単体の差し替えと標準イベントによる編集タブ再描画に追従', async () => {
         const {w,d}=setup();
         const field=d.getElementById('Results_ClassAField');
-        const replacement=field.cloneNode(true); replacement.querySelector('input').value='差し替え';
+        const replacement=field.cloneNode(true);
+        replacement.querySelector('#transferButton').remove();
+        replacement.querySelector('input').value='差し替え';
         field.remove();
         d.querySelector(rootSelector).append(replacement);
         await sleep(210);
         assert.equal(d.querySelectorAll('.mado-editor').length,1);
         assert.equal(d.getElementById('Results_ClassA').value,'差し替え');
         assert(replacement.parentElement.matches('.mado-grid'));
+        assert.equal(d.querySelectorAll('#transferButton').length,1);
         const fresh=new JSDOM(html).window.document.querySelector(rootSelector).cloneNode(true);
         d.querySelector(rootSelector).replaceWith(fresh);
         // 監視タイマーの実行前に標準イベントだけで適用できることを確認。
         assert.equal(w.$p.events.on_editor_load(), false);
-        assert.equal(d.querySelectorAll('.mado-grid > [id$="Field"]').length,25);w.close();
+        assert.equal(d.querySelectorAll('.mado-grid > [id$="Field"]').length,25);
+        assert.equal(d.querySelectorAll('#transferButton').length,1);w.close();
     });
     await test('非表示・読取専用・添付・画像ボタンの属性を保持',()=>{
         const {w,d}=setup(null);const f=d.getElementById('Results_ClassAField');
